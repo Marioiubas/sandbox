@@ -173,3 +173,7 @@ Missing or invalid token or proof, replayed `jti`, expired grant, unknown issuer
 - https://doc.biscuitsec.org/getting-started/introduction.html
 - https://vercel.com/docs/sandbox/concepts/firewall
 - Report: "The internal grant (Proposal)" JSON and paragraph (verbatim), repository layout `grant` crate, decisions table (grant representation); research note 03 Q1 inference "Recommended internal token design" and "Sender-constrain the sandbox→broker hop".
+
+## Build log
+
+- 2026-09-25 (M3): not built yet; `code/crates/grant` now holds the strict JWS parser and RS256 verification it will build on, used for CI identity tokens ([[ADR-031 CI Identity as Built]]).

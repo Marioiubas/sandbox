@@ -18,6 +18,8 @@ pub(super) struct Assembled {
     pub shadow: Option<(String, Result<EgressPolicy, String>)>,
     pub grants: Vec<String>,
     pub warnings: Vec<String>,
+    /// A verified identity token's identity (CI), if one was given.
+    pub identity: Option<grant::oidc::Identity>,
 }
 
 impl Daemon {
@@ -27,13 +29,16 @@ impl Daemon {
         params: &StartParams,
         cwd: &Path,
         username: &str,
+        identity: Option<grant::oidc::Identity>,
     ) -> Result<Assembled, StartFailure> {
         let profile = match &params.profile {
             Some(p) => profiles::by_name(p)?,
             None => profiles::detect(&params.argv[0])?,
         };
         let user_policy = load_user_policy(&self.dirs)?;
-        self.assemble_layers(id, params, cwd, username, profile, user_policy, true)
+        let mut a = self.assemble_layers(id, params, cwd, username, profile, user_policy, true, identity.as_ref())?;
+        a.identity = identity;
+        Ok(a)
     }
 
     /// The layers for a given profile and user policy. `agent` sessions
@@ -49,6 +54,7 @@ impl Daemon {
         profile: ProfileFile,
         user_policy: PolicyFile,
         agent: bool,
+        identity: Option<&grant::oidc::Identity>,
     ) -> Result<Assembled, StartFailure> {
         let scope = format!("profile:{}", profile.name);
         // `${repo_remote}` comes from the checkout's own config file, read
@@ -77,7 +83,8 @@ impl Daemon {
         let session_info = policy::cedar::SessionInfo {
             session_id: id.to_string(),
             task_id: format!("task-{id}"),
-            user: format!("local:{username}"),
+            user: identity.map(|i| i.subject.clone()).unwrap_or_else(|| format!("local:{username}")),
+            idp: identity.map(|i| i.issuer.clone()).unwrap_or_else(|| "local".into()),
             agent: agent_base,
             agent_sha256: agent_path.as_deref().and_then(|p| self.hash_binary(p)).unwrap_or_default(),
             repo: repo_remote.as_ref().map(|r| format!("{}/{}", r.owner(), r.name())).unwrap_or_default(),
@@ -150,6 +157,6 @@ impl Daemon {
         {
             warnings.push("no origin remote found: rules using ${repo_remote} grant nothing in this session".into());
         }
-        Ok(Assembled { profile, user_policy, egress, shadow, grants, warnings })
+        Ok(Assembled { profile, user_policy, egress, shadow, grants, warnings, identity: None })
     }
 }

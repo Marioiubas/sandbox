@@ -300,6 +300,7 @@ dependencies = [
  "creds",
  "flate2",
  "getrandom 0.3.4",
+ "grant",
  "hex",
  "http",
  "http-body",
@@ -315,6 +316,7 @@ dependencies = [
  "policy",
  "proptest",
  "rustls",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "sha2",
@@ -941,6 +943,14 @@ dependencies = [
 [[package]]
 name = "grant"
 version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "proptest",
+ "ring",
+ "rustls-pki-types",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "hashbrown"

@@ -50,15 +50,15 @@ The motivating incidents: a public issue drove an agent to read private repos wi
 
 **CI mode**
 
-- [ ] `integrations/github-action/action.yml`: install the broker, start `brokerd` outside the sandbox in the runner, request the runner's OIDC JWT, and run `broker run -- <agent>`.
-- [ ] `crates/brokerd/src/session.rs`: accept a runner OIDC JWT as the identity source for CI sessions; map claims to `User`/`Group`/`Task` entities.
-- [ ] `crates/grant/src/txn_token.rs` and `dpop.rs`: the Txn-Token-shaped grant JWT, sender-constrained with DPoP, used when the sandbox and broker are separated ([[Internal Grant JWT]], [[DPoP and mTLS-Bound Tokens]]).
-- [ ] `tests/e2e/ci_untrusted_issue/`: a workflow fixture whose trigger text is an attacker-authored issue; assert no long-lived secret is visible in the agent tree (reuse the M1 scanner).
+- [x] `integrations/github-action/action.yml`: install the broker, start `brokerd` outside the sandbox in the runner, request the runner's OIDC JWT, and run `broker run -- <agent>`. (built: requests the runner token and runs `broker run`; the binaries are installed by the workflow, outside the workspace: [[ADR-031 CI Identity as Built]])
+- [x] `crates/brokerd/src/session.rs`: accept a runner OIDC JWT as the identity source for CI sessions; map claims to `User`/`Group`/`Task` entities. (built with `brokerd::identity` and `grant::oidc`)
+- [ ] `crates/grant/src/txn_token.rs` and `dpop.rs`: the Txn-Token-shaped grant JWT, sender-constrained with DPoP, used when the sandbox and broker are separated ([[Internal Grant JWT]], [[DPoP and mTLS-Bound Tokens]]). — not built: only needed when sandbox and broker run on separate hosts ([[ADR-031 CI Identity as Built]]).
+- [x] `tests/e2e/ci_untrusted_issue/`: a workflow fixture whose trigger text is an attacker-authored issue; assert no long-lived secret is visible in the agent tree (reuse the M1 scanner). (runs in the `ci-mode` CI job)
 
 **Identity**
 
 - [ ] `crates/broker-cli/src/cmd/login.rs`: OIDC device-code login to Okta and Entra; cache tokens in `brokerd` memory and keychain; never forward the user's IdP token as-is to an upstream or MCP server ([[CLAUDE]] section 3).
-- [ ] Audit: populate `enduser.id` (IdP subject) and groups on every event ([[Audit Recorder and Event Schema]]).
+- [ ] Audit: populate `enduser.id` (IdP subject) and groups on every event ([[Audit Recorder and Event Schema]]). — partly: CI sessions carry the token subject on every row and its claims on `session.start`; Okta/Entra groups wait for device login.
 
 **MCP guard (crate `mcpguard`)**
 
@@ -163,3 +163,4 @@ Next milestone: [[M4 Harden and Ship]].
 
 - 2026-09-24: step 1 built: the GitHub API adapter and session trifecta labels ([[ADR-029 GitHub API Adapter and Session Labels as Built]]). D5 passes against a fake GitHub API: `m3_github::d5_toxic_flow_is_stopped_at_the_public_write` (public issue → private read → public PR denied by the Rule of Two, both labels logged); ADR-010's benign case passes (`a_public_issue_then_a_pr_on_that_public_repo_is_allowed`). Remaining: CI mode (D1), identity (D2, needs Okta/Entra dev tenants), MCP Guard (D3, D4), AWS STS (D6), and D7 across them.
 - 2026-09-25: step 2 built: MCP Guard for stdio servers ([[ADR-030 MCP Guard as Built]]). D3 and D4 pass against a fake server and API (`m3_mcp::d3_d4_pinned_server_is_approved_confined_and_revoked_on_change`), with I1 and I5 extended to the server principal. The real GitHub MCP server run needs a GitHub token (user). Remaining: CI mode (D1), identity (D2), AWS STS (D6).
+- 2026-09-25: step 3 built: CI identity ([[ADR-031 CI Identity as Built]]). D1 runs in the `ci-mode` CI job (untrusted-issue fixture under the GitHub Action with the real runner token); attribution and refusal are tested locally (`m3_identity::*`). D2 (Okta/Entra) needs the dev tenants; D6 (AWS) remains.

@@ -230,3 +230,22 @@ The server runs in its own sandbox, and its token reaches it only as a
 sentinel. Every tool call is authorized and logged. Resources, prompts and
 the server's own requests (such as sampling) are not relayed.
 Only your own or your org's policy can define servers; a repository cannot.
+
+## CI identity (M3)
+
+```toml
+[[identity.oidc]]                       # user or org policy only
+issuer = "https://token.actions.githubusercontent.com"
+audience = "broker"
+# jwks_url = "https://…"                # default: the issuer's discovery document
+# jwks_file = "gha-jwks.json"           # or a key set in the config directory
+```
+
+In CI, the GitHub Action (`code/integrations/github-action`) asks the
+runner for an OIDC token with this audience and passes it to `broker run`
+outside the agent's environment. The broker checks it against the issuers
+listed here (RS256 signature, exact issuer and audience, not expired). The
+session and every audit row are then attributed to the token's subject,
+for example `repo:acme/web:ref:refs/heads/main`. A token that does not
+check out stops the run. The token is never given to the agent or sent
+anywhere else.

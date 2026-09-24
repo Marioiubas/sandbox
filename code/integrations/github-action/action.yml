@@ -1,0 +1,57 @@
+name: broker run
+description: >-
+  Run a coding agent under the broker: sandboxed, all egress through the
+  broker, no job secret in the agent's tree, and the session attributed to
+  this workflow run's OIDC identity.
+inputs:
+  command:
+    description: The agent command line (run with /bin/sh -c inside the sandbox).
+    required: true
+  profile:
+    description: "A built-in profile (default: detected from the command)."
+    required: false
+    default: ''
+  identity:
+    description: >-
+      Attribute the session to the runner's OIDC token (the job needs
+      `permissions: id-token: write`, and broker.toml an [[identity.oidc]]
+      entry for https://token.actions.githubusercontent.com with this audience).
+    required: false
+    default: 'true'
+  audience:
+    description: The audience requested for the runner's OIDC token.
+    required: false
+    default: broker
+runs:
+  using: composite
+  steps:
+    - name: broker run
+      shell: bash
+      env:
+        BROKER_ACTION_COMMAND: ${{ inputs.command }}
+        BROKER_ACTION_PROFILE: ${{ inputs.profile }}
+        BROKER_ACTION_IDENTITY: ${{ inputs.identity }}
+        BROKER_ACTION_AUDIENCE: ${{ inputs.audience }}
+      run: |
+        set -euo pipefail
+        command -v broker >/dev/null || { echo "::error::broker is not on PATH"; exit 1; }
+        # actions/checkout persists the job token in .git/config, which the
+        # agent could read; the broker brokers git credentials itself.
+        if git rev-parse --git-dir >/dev/null 2>&1; then
+          git config --local --name-only --get-regexp '^http\..*\.extraheader$' 2>/dev/null |
+            while read -r k; do git config --local --unset-all "$k"; done
+        fi
+        tok=""
+        if [ "$BROKER_ACTION_IDENTITY" = "true" ]; then
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::identity requested, but the job lacks 'permissions: id-token: write'"
+            exit 1
+          fi
+          tok=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$BROKER_ACTION_AUDIENCE" |
+            python3 -c 'import json, sys; print(json.load(sys.stdin)["value"])')
+          echo "::add-mask::$tok"
+        fi
+        args=(run)
+        if [ -n "$BROKER_ACTION_PROFILE" ]; then args+=(--profile "$BROKER_ACTION_PROFILE"); fi
+        BROKER_IDENTITY_TOKEN="$tok" broker "${args[@]}" -- /bin/sh -c "$BROKER_ACTION_COMMAND"

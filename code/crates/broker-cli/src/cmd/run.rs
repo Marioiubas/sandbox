@@ -15,7 +15,13 @@ fn start_params(profile: Option<String>, command: Vec<OsString>, mode: Option<&s
     // Never send anything that looks like a credential, even to brokerd.
     let env: BTreeMap<String, String> =
         std::env::vars().filter(|(k, _)| !policy::config::env_name_is_secretish(k)).collect();
-    Ok(StartParams { argv, cwd, profile, env, mode: mode.map(str::to_string) })
+    // A CI runner's identity token (the GitHub Action sets it): verified by
+    // brokerd, never part of the environment the agent receives.
+    let identity_token =
+        std::env::var("BROKER_IDENTITY_TOKEN").ok().filter(|t| !t.is_empty()).map(brokerd::proto::Redacted);
+    let mut env = env;
+    env.remove("BROKER_IDENTITY_TOKEN");
+    Ok(StartParams { argv, cwd, profile, env, mode: mode.map(str::to_string), identity_token })
 }
 
 pub fn run(profile: Option<String>, command: Vec<OsString>) -> i32 {

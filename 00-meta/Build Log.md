@@ -187,3 +187,13 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Refactor, no behaviour change:** the six Rust files at or over 500 lines split into child modules: `netguard/src/canon.rs` (877 → 308; `canon/{addr,pattern,path,tests,props}.rs`), `policy/src/l7.rs` (746 → 344; `l7/{credential,secret,explain}.rs`), `policy/src/egress.rs` (716 → 410; `egress/{authorize,mcp,tests}.rs`), `tests/conformance/src/bin/conformance-probe.rs` (564 → 129; `conformance-probe/{proxy,net,fs,secrets}.rs`), `launcher/src/backends/linux/inner.rs` (541 → 473; `inner/bridge.rs`), `audit/src/reason.rs` (500 → 419; `reason/explain.rs`). Public paths unchanged (re-exports); one canonicaliser (I6) and its lint intact.
 - **Tests:** the full suite passes on macOS 26.5 with the same 249 tests as before; clippy clean for the host and, for the launcher, the Linux target; every shipped profile passes the formal gates.
 - **Notes updated:** [[Hostname Canonicaliser]], [[Registry and LLM API Adapters]], [[Policy Engine and Entity Builder]], [[Conformance Probe Matrix]], [[Sandbox Launcher]], [[Audit Recorder and Event Schema]].
+
+### 2026-09-25: M3 step 3, CI identity
+
+- **Milestone:** [[M3 CI Identity and MCP]] (in progress).
+- **Built:** the `grant` crate (strict JWS parsing, RS256 verification, OIDC identity checks); `[[identity.oidc]]` issuers in user/org policy; `brokerd` verifies a runner token before assembling a session (keys via discovery, `jwks_url` or `jwks_file`; public addresses only; cached, refetched once on key rotation) and attributes the session and every row to its subject; the GitHub Action (`code/integrations/github-action`) and the D1 untrusted-issue fixture, run by a new `ci-mode` CI job with the real runner token.
+- **Found:** running the fixture locally from the repository root was refused because the broker binaries sat inside the agent's writable working tree (I5, correct); the CI job and the action README install the binaries outside the workspace.
+- **Tests:** `grant` unit and property tests, `m3_identity` (attribution, token never in the agent, refusal on audience, expiry, signature, malformed token and unconfigured issuer), fuzz target `jwt` (5.7 M runs locally).
+- **Moved:** the launch step from `crates/brokerd/src/session.rs` to `crates/brokerd/src/session/launch.rs` (500-line rule; no behaviour change).
+- **ADRs:** [[ADR-031 CI Identity as Built]].
+- **Next step:** AWS STS minting and SigV4 re-signing against a fake STS/S3 (D6).

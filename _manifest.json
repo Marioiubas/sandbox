@@ -4374,5 +4374,26 @@
     "aliases": [
       "ADR-030"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-031 CI Identity as Built.md",
+    "title": "ADR-031 CI Identity as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "A CI runner's OIDC token, passed out of band and verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience, expiry), names the session's principal and every audit row; never reaches the agent or an upstream; unverifiable tokens refuse the launch. Grant JWT/DPoP and IdP device login not built.",
+    "links_to": [
+      "M3 CI Identity and MCP",
+      "Internal Grant JWT",
+      "Audit Recorder and Event Schema",
+      "Broker CLI and Daemon",
+      "I1 No Secrets in the Sandbox",
+      "I5 Config Outside Writable Mounts",
+      "Amazon Q Extension Compromise",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-25) from GitHub's OIDC documentation, the live discovery document and the CI identity tests.",
+    "aliases": [
+      "ADR-031"
+    ]
   }
 ]

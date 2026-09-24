@@ -82,6 +82,53 @@ jobs:
       - name: Tests (unit, pipeline, conformance, invariants)
         run: cargo test --workspace --no-fail-fast --locked
 
+  ci-mode:
+    # M3 D1: an attacker-authored issue drives a scripted agent through the
+    # GitHub Action; nothing the agent can reach holds a job secret, and the
+    # session is attributed to this run's OIDC identity.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CANARY_JOB_SECRET: ci-CANARY-job-secret-not-a-real-secret-7f3a
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          gate=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$gate" ] && [ "$(cat "$gate")" = "1" ]; then
+            sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Build
+        run: cargo build --workspace --bins --locked
+      - name: Trust this runner's OIDC issuer
+        run: |
+          mkdir -p "$RUNNER_TEMP/broker/config"
+          printf '%s\n' 'version = 1' '[[identity.oidc]]' \
+            'issuer = "https://token.actions.githubusercontent.com"' 'audience = "broker-ci"' \
+            > "$RUNNER_TEMP/broker/config/broker.toml"
+          echo "BROKER_HOME=$RUNNER_TEMP/broker" >> "$GITHUB_ENV"
+          # Installed outside the workspace: the agent may write its working
+          # tree, and the broker refuses binaries inside a writable mount (I5).
+          mkdir -p "$RUNNER_TEMP/bin"
+          cp target/debug/broker target/debug/brokerd target/debug/broker-sandbox-shim target/debug/conformance-probe "$RUNNER_TEMP/bin/"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          echo "CANARY_HEX=$(printf %s "$CANARY_JOB_SECRET" | od -An -tx1 | tr -d ' \n')" >> "$GITHUB_ENV"
+      - name: The agent reads an untrusted issue (D1)
+        uses: ./code/integrations/github-action
+        with:
+          audience: broker-ci
+          command: sh code/tests/e2e/ci_untrusted_issue/agent.sh ${{ env.CANARY_HEX }}
+      - name: The session is attributed to this run
+        run: |
+          broker audit query --kind session.start --json > "$RUNNER_TEMP/starts.jsonl"
+          grep -q "\"enduser\":\"repo:${GITHUB_REPOSITORY}:" "$RUNNER_TEMP/starts.jsonl"
+          grep -q "\"run_id\":\"${GITHUB_RUN_ID}\"" "$RUNNER_TEMP/starts.jsonl"
+
   fuzz-smoke:
     # 60 s per target on every push; the >=24 h runs are an M4 exit item.
     runs-on: ubuntu-24.04
@@ -93,6 +140,6 @@ jobs:
           cargo +nightly install cargo-fuzz --locked
       - name: Fuzz each parser for 60 s
         run: |
-          for t in canon connect socks5 sni jsonrpc pktline pack delta filter remote_url foreign github_route mcp_frame; do
+          for t in canon connect socks5 sni jsonrpc pktline pack delta filter remote_url foreign github_route mcp_frame jwt; do
             cargo +nightly fuzz run --fuzz-dir tests/fuzz "$t" -- -max_total_time=60 -rss_limit_mb=2048
           done

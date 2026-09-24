@@ -17,6 +17,7 @@ creds = { path = "../../crates/creds" }
 l7 = { path = "../../crates/l7" }
 policy = { path = "../../crates/policy" }
 mcpguard = { path = "../../crates/mcpguard" }
+grant = { path = "../../crates/grant" }
 http = "1"
 serde_json = "1"
 
@@ -110,6 +111,13 @@ bench = false
 [[bin]]
 name = "mcp_frame"
 path = "fuzz_targets/mcp_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jwt"
+path = "fuzz_targets/jwt.rs"
 test = false
 doc = false
 bench = false

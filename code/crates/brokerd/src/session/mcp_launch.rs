@@ -70,6 +70,7 @@ impl Daemon {
             profile: None,
             env: BTreeMap::from([("PATH".to_string(), "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin".to_string())]),
             mode: None,
+            identity_token: None,
         };
         let profile = ProfileFile { version: 1, name: format!("mcp:{name}"), ..Default::default() };
         let layer = PolicyFile {
@@ -79,7 +80,7 @@ impl Daemon {
             tls: user.tls.clone(),
             ..Default::default()
         };
-        let assembled = self.assemble_layers(id, &params, &dir, &u.name, profile, layer, false)?;
+        let assembled = self.assemble_layers(id, &params, &dir, &u.name, profile, layer, false, None)?;
         let running = self
             .start_assembled(id, params, dir.clone(), &u.dir, &u.name, assembled, [in_r.into(), out_w.into(), err])
             .await?;

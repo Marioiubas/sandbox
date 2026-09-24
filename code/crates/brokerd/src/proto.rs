@@ -76,6 +76,17 @@ pub mod codes {
     pub const BUSY: i64 = -32005;
 }
 
+/// A credential-bearing string that never prints (`Debug`) or logs.
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct Redacted(pub String);
+
+impl std::fmt::Debug for Redacted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<redacted>")
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StartParams {
     pub argv: Vec<String>,
@@ -90,6 +101,10 @@ pub struct StartParams {
     /// are unchanged (I8).
     #[serde(default)]
     pub mode: Option<String>,
+    /// An OIDC identity token (a CI runner's) that attributes the session;
+    /// verified by brokerd against `[[identity.oidc]]`, never forwarded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_token: Option<Redacted>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]

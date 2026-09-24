@@ -216,3 +216,4 @@ Exports feed [[Control Plane and Policy Bundles]]; traces feed [[Policy Learning
 - 2026-09-24 (M3): event kind `session.label` (label, cause, request ID); L7 decision rows carry `labels`; reasons `github_route_unknown`, `github_graphql_unsupported`, `github_verb_not_allowed`, `github_repo_not_allowed`.
 - 2026-09-25 (M3): MCP rows (`layer: mcp`: connect, each call, refusals, revocations with a tool diff) and reasons `mcp_server_unknown`, `mcp_manifest_unapproved`, `mcp_manifest_changed`, `mcp_tool_unknown`, `mcp_tool_not_allowed`, `mcp_method_not_allowed`, `mcp_malformed`, `mcp_launch_failed`.
 - 2026-09-25: `reason.rs` reached 500 lines with the M3 reasons; `Reason::explain` (the `broker why` text) moved to `reason/explain.rs`, no behaviour change.
+- 2026-09-25 (M3): `enduser` is the verified identity token's `sub` for CI sessions; `session.start` carries `identity` (issuer, subject, claims); the token is never logged ([[ADR-031 CI Identity as Built]]).

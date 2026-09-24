@@ -28,6 +28,7 @@ fn env() -> CompileEnv {
             session_id: "s1".into(),
             task_id: "task-1".into(),
             user: "local:dev".into(),
+            idp: "local".into(),
             agent: "claude".into(),
             agent_sha256: "00".into(),
             repo: "acme/web".into(),

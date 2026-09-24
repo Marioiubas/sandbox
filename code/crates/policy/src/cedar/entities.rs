@@ -14,8 +14,10 @@ pub const PATH_SEGMENTS: usize = 16;
 pub struct SessionInfo {
     pub session_id: String,
     pub task_id: String,
-    /// `local:<user>` until IdP identity lands (M3).
+    /// The subject: `local:<user>`, or a verified identity token's `sub`.
     pub user: String,
+    /// Who vouches for `user`: `local`, or the token issuer's URL.
+    pub idp: String,
     pub agent: String,
     pub agent_sha256: String,
     /// `owner/name` of the session repository, or empty.
@@ -53,6 +55,7 @@ impl Default for SessionInfo {
             session_id: "unset".into(),
             task_id: "task-unset".into(),
             user: "local:unknown".into(),
+            idp: "local".into(),
             agent: "unknown".into(),
             agent_sha256: String::new(),
             repo: String::new(),
@@ -78,7 +81,7 @@ pub fn task_uid(s: &SessionInfo) -> Value {
 /// Task, User and Agent entities for the session.
 pub fn principal_entities(s: &SessionInfo) -> Vec<Value> {
     vec![
-        json!({ "uid": uid("User", &s.user), "attrs": { "idp": "local", "subject": s.user }, "parents": [] }),
+        json!({ "uid": uid("User", &s.user), "attrs": { "idp": s.idp, "subject": s.user }, "parents": [] }),
         json!({ "uid": uid("Agent", &s.agent), "attrs": { "vendor": s.agent, "binary_sha256": s.agent_sha256 }, "parents": [] }),
         json!({
             "uid": task_uid(s),

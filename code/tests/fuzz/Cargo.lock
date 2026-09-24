@@ -212,6 +212,7 @@ version = "0.0.0"
 dependencies = [
  "brokerd",
  "creds",
+ "grant",
  "http",
  "l7",
  "libfuzzer-sys",
@@ -233,6 +234,7 @@ dependencies = [
  "creds",
  "flate2",
  "getrandom 0.3.4",
+ "grant",
  "hex",
  "http",
  "http-body",
@@ -247,6 +249,7 @@ dependencies = [
  "nix",
  "policy",
  "rustls",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "sha2",
@@ -762,6 +765,16 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi 6.0.0",
+]
+
+[[package]]
+name = "grant"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "ring",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

@@ -55,6 +55,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-028 M2 Plan Items Built Differently or Deferred]] | M2 task list reconciled: grants compile to policy text so gates can prove them; differential test instead of round-trip; per-file-op decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init, LLM explanations deferred. |
 | [[ADR-029 GitHub API Adapter and Session Labels as Built]] | GitHub REST requests map to verbs (verified routes; GraphQL denied); `protocol = "github"` grants verbs on repos; the broker looks up visibility with the bound credential and re-decides; raise-only session labels from API facts stop the toxic flow at the public write. |
 | [[ADR-030 MCP Guard as Built]] | Pinned stdio MCP servers: named in user/org policy, reached by an in-sandbox stub via the session proxy, started as their own sandboxed session with sentinel credentials, pinned by a digest of their whole tools list, approved on the host, every tools/call authorized; any change revokes. |
+| [[ADR-031 CI Identity as Built]] | A CI runner's OIDC token, verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience), names the session and every audit row; it never reaches the agent or an upstream; unverifiable tokens refuse the launch. |
 
 ## Where the value is
 
@@ -115,6 +116,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-028 M2 Plan Items Built Differently or Deferred]] — M2 task list reconciled: grants compile to policy text so gates can prove them; differential test instead of round-trip; per-file-op decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init, LLM explanations deferred.
 - [[ADR-029 GitHub API Adapter and Session Labels as Built]] — GitHub REST requests map to verbs (verified routes; GraphQL denied); `protocol = "github"` grants verbs on repos; the broker looks up visibility with the bound credential and re-decides; raise-only session labels from API facts stop the toxic flow at the public write.
 - [[ADR-030 MCP Guard as Built]] — Pinned stdio MCP servers: named in user/org policy, reached by an in-sandbox stub via the session proxy, started as their own sandboxed session with sentinel credentials, pinned by a digest of their whole tools list, approved on the host, every tools/call authorized; any change revokes.
+- [[ADR-031 CI Identity as Built]] — A CI runner's OIDC token, verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience), names the session and every audit row; it never reaches the agent or an upstream; unverifiable tokens refuse the launch.
 
 ## How this section connects
 

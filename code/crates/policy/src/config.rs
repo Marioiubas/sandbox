@@ -160,6 +160,48 @@ pub struct IssuersSection {
     pub github_app: BTreeMap<String, GitHubAppIssuerSpec>,
 }
 
+/// Identity sources (user or org scope): OIDC issuers whose identity
+/// tokens (a CI runner's, for example) may attribute a session.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct IdentitySection {
+    #[serde(default)]
+    pub oidc: Vec<OidcIssuerSpec>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct OidcIssuerSpec {
+    /// The exact `iss` value, an `https://` URL.
+    pub issuer: String,
+    /// The `aud` value tokens must carry for this broker.
+    pub audience: String,
+    /// The issuer's key set; default: its OIDC discovery document.
+    pub jwks_url: Option<String>,
+    /// A key set file in the broker config directory (air-gapped setups).
+    pub jwks_file: Option<String>,
+}
+
+impl IdentitySection {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        for o in &self.oidc {
+            if !o.issuer.starts_with("https://") || o.issuer.len() > 512 {
+                anyhow::bail!("identity.oidc issuer {:?} must be an https:// URL", o.issuer);
+            }
+            if o.audience.is_empty() || o.audience.len() > 256 {
+                anyhow::bail!("identity.oidc audience for {} must be 1-256 bytes", o.issuer);
+            }
+            if o.jwks_url.as_ref().is_some_and(|u| !u.starts_with("https://")) {
+                anyhow::bail!("identity.oidc jwks_url for {} must be https://", o.issuer);
+            }
+            if o.jwks_url.is_some() && o.jwks_file.is_some() {
+                anyhow::bail!("identity.oidc for {}: jwks_url and jwks_file are exclusive", o.issuer);
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TlsSection {
@@ -198,6 +240,9 @@ pub struct PolicyFile {
     /// User/org scope only: pinned MCP servers by name (MCP Guard).
     #[serde(default)]
     pub mcp: BTreeMap<String, crate::mcp::McpServerConfig>,
+    /// User/org scope only: identity token issuers (CI runners).
+    #[serde(default)]
+    pub identity: IdentitySection,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -253,6 +298,7 @@ pub fn parse_policy_str(text: &str) -> anyhow::Result<PolicyFile> {
     let p: PolicyFile = toml::from_str(text)?;
     check_version(p.version)?;
     crate::mcp::validate(&p.mcp).map_err(|e| anyhow::anyhow!(e))?;
+    p.identity.validate()?;
     Ok(p)
 }
 

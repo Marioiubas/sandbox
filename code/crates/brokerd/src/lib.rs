@@ -6,6 +6,8 @@
 
 pub mod audit_query;
 pub mod dirs;
+pub mod fetch;
+pub mod identity;
 pub mod l7_pipeline;
 pub mod mcp;
 pub mod pipeline;
