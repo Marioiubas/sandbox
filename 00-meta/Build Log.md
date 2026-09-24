@@ -181,3 +181,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found:** the launcher refused to make a working directory inside broker state writable, as I5 requires; server working directories now live in the temp area.
 - **CI:** M3 step 1 failed its test jobs because a policy-reference example named an undefined GitHub App issuer (the docs test compiles every example); fixed in this push.
 - **Next step:** CI mode (D1) with GitHub Actions OIDC; AWS STS minting against a fake STS endpoint (D6).
+
+### 2026-09-25: files under 500 lines
+
+- **Refactor, no behaviour change:** the six Rust files at or over 500 lines split into child modules: `netguard/src/canon.rs` (877 → 308; `canon/{addr,pattern,path,tests,props}.rs`), `policy/src/l7.rs` (746 → 344; `l7/{credential,secret,explain}.rs`), `policy/src/egress.rs` (716 → 410; `egress/{authorize,mcp,tests}.rs`), `tests/conformance/src/bin/conformance-probe.rs` (564 → 129; `conformance-probe/{proxy,net,fs,secrets}.rs`), `launcher/src/backends/linux/inner.rs` (541 → 473; `inner/bridge.rs`), `audit/src/reason.rs` (500 → 419; `reason/explain.rs`). Public paths unchanged (re-exports); one canonicaliser (I6) and its lint intact.
+- **Tests:** the full suite passes on macOS 26.5 with the same 249 tests as before; clippy clean for the host and, for the launcher, the Linux target; every shipped profile passes the formal gates.
+- **Notes updated:** [[Hostname Canonicaliser]], [[Registry and LLM API Adapters]], [[Policy Engine and Entity Builder]], [[Conformance Probe Matrix]], [[Sandbox Launcher]], [[Audit Recorder and Event Schema]].
