@@ -40,10 +40,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bubblewrap
           # Ubuntu 23.10+ gates unprivileged user namespaces behind AppArmor.
-          # Grant userns to the system bwrap only; never relax the global sysctl.
-          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+          # Grant userns to the system bwrap only (the installer's approach).
+          # AppArmor 3.x (Ubuntu 22.04) cannot express `userns`; there the
+          # runner-only fallback is to lift the gate for this CI VM.
+          gate=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$gate" ] && [ "$(cat "$gate")" = "1" ]; then
             sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
-            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
       - name: Canary SSH key (CI runners only)
         run: |

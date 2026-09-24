@@ -604,10 +604,10 @@ pub fn signal_target(root: u32) -> u32 {
                 if let Some(v) = line.strip_prefix("PPid:") {
                     parent_of.insert(pid, v.trim().parse::<u32>().unwrap_or(0));
                 }
-                if let Some(v) = line.strip_prefix("NSpid:") {
-                    if let Some(last) = v.split_whitespace().last() {
-                        inner_pid.insert(pid, last.parse::<u32>().unwrap_or(0));
-                    }
+                if let Some(v) = line.strip_prefix("NSpid:")
+                    && let Some(last) = v.split_whitespace().last()
+                {
+                    inner_pid.insert(pid, last.parse::<u32>().unwrap_or(0));
                 }
             }
         }
