@@ -16,6 +16,14 @@ learn.workspace = true
 anyhow.workspace = true
 audit.workspace = true
 brokerd = { path = "../brokerd" }
+bytes.workspace = true
+creds.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+netguard.workspace = true
+tls.workspace = true
+rustls-pki-types.workspace = true
 clap.workspace = true
 launcher.workspace = true
 libc.workspace = true

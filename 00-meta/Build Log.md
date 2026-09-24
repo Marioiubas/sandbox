@@ -117,3 +117,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Invariants touched:** I4 built (conjunction, repo-scope key restrictions, approval); I5 extended to repository policy; I8 covers `broker learn`; I3 holds (the miner is deterministic and writes a diff a human must merge).
 - **Next step:** OCSF export and a SIEM sink test (C4); SymCC gates in CI (C3); native config exporters; shadow mode.
 
+
+### 2026-09-24: M2 step 3, OCSF export and SIEM sink
+
+- **Milestone:** [[M2 Policy Audit and Learn]] (in progress).
+- **Built:** OCSF 1.9.0 mapping and validation of every decision (Network Activity 4001, HTTP Activity 4002, API Activity 6003; class IDs verified from schema.ocsf.io), OTLP/HTTP JSON logs body, `broker audit export --format ocsf|hec|otlp [--to URL] [--token REF] [--from-seq N]` exporting only the verified prefix, with the chain hash and sequence in every event.
+- **Tests:** C4 passes (`m2_ocsf::c4_events_validate_and_reach_the_sinks`): 100% of decisions validate, a HEC-style sink and an OTLP collector receive every event, the sink token is read from a secret reference, plain HTTP to a non-loopback sink is refused. 216 tests pass on macOS 26.5.
+- **ADRs:** [[ADR-023 OCSF and OTLP Export as Built]] (pull export without the OTel SDK instead of live `opentelemetry-otlp` spans).
+- **Open questions:** OCSF class names and IDs resolved; OTel GenAI conventions still open ([[Open Questions and Unverified Claims]]).
+- **Next step:** SymCC gates in CI (C3); native config exporters; shadow mode.

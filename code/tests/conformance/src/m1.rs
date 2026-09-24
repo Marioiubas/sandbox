@@ -426,3 +426,59 @@ pub fn wait_for<T>(timeout: Duration, mut f: impl FnMut() -> Option<T>) -> Optio
         std::thread::sleep(Duration::from_millis(50));
     }
 }
+
+/// Requests a [`PlainSink`] received: (head, body).
+pub type SinkLog = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+
+/// A plain-HTTP loopback sink (SIEM stand-in): records each request's
+/// headers and body and answers 200.
+pub struct PlainSink {
+    pub port: u16,
+    pub requests: SinkLog,
+}
+
+impl PlainSink {
+    pub fn start() -> PlainSink {
+        use std::io::Read;
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let requests: SinkLog = Arc::default();
+        let r2 = requests.clone();
+        std::thread::spawn(move || {
+            for s in l.incoming() {
+                let Ok(mut s) = s else { continue };
+                let mut buf = Vec::new();
+                let mut chunk = [0u8; 65536];
+                let head_end = loop {
+                    let Ok(n) = s.read(&mut chunk) else { break None };
+                    if n == 0 {
+                        break None;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                    if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                        break Some(i);
+                    }
+                };
+                let Some(i) = head_end else { continue };
+                let head = String::from_utf8_lossy(&buf[..i]).to_string();
+                let len: usize = head
+                    .lines()
+                    .find_map(|l| {
+                        l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse().unwrap_or(0))
+                    })
+                    .unwrap_or(0);
+                let mut body = buf[i + 4..].to_vec();
+                while body.len() < len {
+                    let Ok(n) = s.read(&mut chunk) else { break };
+                    if n == 0 {
+                        break;
+                    }
+                    body.extend_from_slice(&chunk[..n]);
+                }
+                r2.lock().unwrap().push((head, body));
+                let _ = s.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok");
+            }
+        });
+        PlainSink { port, requests }
+    }
+}

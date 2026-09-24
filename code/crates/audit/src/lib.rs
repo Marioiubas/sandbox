@@ -12,6 +12,8 @@
 pub mod canonical;
 pub mod event;
 pub mod ids;
+pub mod ocsf;
+pub mod otlp;
 pub mod reason;
 pub mod store;
 pub mod time;

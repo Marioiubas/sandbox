@@ -2,6 +2,7 @@ pub mod audit;
 pub mod ctl;
 pub mod daemon;
 pub mod doctor;
+pub mod export;
 pub mod policy;
 pub mod run;
 pub mod suggest;

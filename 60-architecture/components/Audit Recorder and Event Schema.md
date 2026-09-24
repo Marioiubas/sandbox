@@ -12,7 +12,7 @@ summary: "The audit crate: SQLite WAL hash-chained decision log (each hash cover
 related: ["[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Core Trait Contracts]]", "[[M2 Policy Audit and Learn]]", "[[Control Plane and Policy Bundles]]", "[[AWS STS Session Policies]]", "[[Open Questions and Unverified Claims]]", "[[Gap Analysis]]", "[[Policy Learning Loop]]", "[[Broker CLI and Daemon]]", "[[Policy Engine and Entity Builder]]", "[[Credential Injector and Issuers]]", "[[Request and Session Lifecycle]]", "[[I1 No Secrets in the Sandbox]]", "[[Replit Production Database Deletion]]", "[[Mythos Preview Evaluation Escape]]", "[[Policy Miner Safeguards]]", "[[M3 CI Identity and MCP]]", "[[Agent Identity Brokers]]", "[[L1 Conformance Suite]]", "[[Tech Stack]]", "[[Repository Layout]]"]
 sources: ["https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html", "https://incidentdatabase.ai/cite/1152/", "https://www.lesswrong.com/posts/xtnSzhA3TvExN4ZhG/claude-mythos-preview-system-card", "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-agent-governance-framework-gap-20260403/", "https://docs.aembit.io/get-started/use-cases/ai-agents/", "https://tailscale.com/docs/aperture/what-is-aperture"]
 milestone: M2
-code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/event.rs", "code/crates/audit/src/reason.rs", "code/crates/audit/src/canonical.rs"]
+code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/event.rs", "code/crates/audit/src/reason.rs", "code/crates/audit/src/canonical.rs", "code/crates/audit/src/ocsf.rs", "code/crates/audit/src/otlp.rs", "code/crates/broker-cli/src/cmd/export.rs"]
 ---
 
 # Audit Recorder and Event Schema
@@ -124,6 +124,8 @@ redact_query = true
 > [!warning] Conflict and unverified
 > The report maps events to "OCSF HTTP or API Activity records" and warns that "the exact OCSF class IDs and the current OTel GenAI conventions were not verified in the record and must be checked before implementation". Research note 03 suggests HTTP Activity, Authorization/Authentication events and API Activity, with example IDs (HTTP Activity 4002, API Activity 6003) marked unverified; research note 05 names "Network Activity" and "API Activity". **Proposal:** implement the mapping as data (one table from event kind to OCSF class and fields), verify class names and IDs against the published OCSF schema in M2, and record the result in [[Open Questions and Unverified Claims]].
 
+**Implementation notes (2026-09-24, M2):** verified against the published OCSF 1.9.0 schema: Network Activity is 4001 and HTTP Activity 4002 (category 4), API Activity 6003 (category 6, additionally requiring `actor`, `api`, `src_endpoint`). As built, L4 admissions map to Network Activity, terminated requests to HTTP Activity and git operations to API Activity; allow/deny uses the `security_control` profile; broker fields go in `unmapped.broker`; each event carries its chain hash and sequence as the anchor. Export is a pull from the verified chain by `broker audit export` (NDJSON, HEC-style or OTLP/HTTP JSON), not live spans via the OTel SDK ([[ADR-023 OCSF and OTLP Export as Built]]). OTel GenAI conventions are not used.
+
 Market reference points for audit content: Aembit logs user, agent, resource, policy and call count ([Aembit docs](https://docs.aembit.io/get-started/use-cases/ai-agents/)); Tailscale Aperture logs full request and response bodies with SIEM export ([Tailscale](https://tailscale.com/docs/aperture/what-is-aperture)). This design logs metadata, not bodies ([[Agent Identity Brokers]]).
 
 ## State
@@ -191,7 +193,7 @@ Exports feed [[Control Plane and Policy Bundles]]; traces feed [[Policy Learning
 
 ## Open questions
 
-- OCSF class names and IDs; OTel GenAI semantic conventions (conflict above).
+- ~~OCSF class names and IDs~~ (verified, [[ADR-023 OCSF and OTLP Export as Built]]); OTel GenAI semantic conventions (not used yet).
 - Batch signing with a device key in addition to chaining.
 - Local retention defaults and ring size (the tech stack calls it an "audit ring").
 
@@ -209,3 +211,4 @@ Exports feed [[Control Plane and Policy Bundles]]; traces feed [[Policy Learning
 
 - 2026-09-24: M0 slice built in `code/crates/audit/`: `Recorder` trait, `SqliteRecorder` (WAL, `synchronous=FULL`, busy timeout), hash `SHA-256(prev || canonical_json(event + seq))` with a random per-database genesis in `meta`, `verify` returning the first bad sequence number, `open` refusing a broken chain, read-only readers for `broker why` and `broker audit`. Canonical JSON: sorted keys, no whitespace, floats rejected. The enumerated deny `Reason` (36 codes with stage, trust boundary and explanation) lives here and is shared by every deciding crate. Tests: tamper one byte, delete, swap, re-hash an edited row (breaks the next link), property test over random single-byte mutations, `audit_failure_denies_before_connecting`, `i9_every_decision_is_chained_and_explainable`. Truncating the tail is only detectable against an exported anchor (tested and documented).
 - 2026-09-24: not built (M2): OCSF and OTLP export, anchoring, rotation. Added event kind `session.ready`.
+- 2026-09-24 (M2): OCSF 1.9.0 mapping and validation (`ocsf.rs`), OTLP/HTTP JSON logs body (`otlp.rs`), `broker audit export --format ocsf|hec|otlp [--to URL] [--token REF] [--from-seq N]` exporting only the verified prefix (`SqliteRecorder::range`), chain hash and sequence in every event as the anchor ([[ADR-023 OCSF and OTLP Export as Built]]). Tests: `ocsf::tests::classes_map_and_validate`, `otlp::tests::wraps_each_event`, `m2_ocsf::c4_events_validate_and_reach_the_sinks`. Still not built: segment rotation, batch signing, live streaming.

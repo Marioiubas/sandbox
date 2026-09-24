@@ -4209,5 +4209,24 @@
     "aliases": [
       "ADR-022"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-023 OCSF and OTLP Export as Built.md",
+    "title": "ADR-023 OCSF and OTLP Export as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Decisions export as OCSF 1.9.0 events (Network Activity 4001, HTTP Activity 4002, API Activity 6003) from the verified chain by broker audit export, as NDJSON, HEC-style batches or OTLP/HTTP JSON logs built without the OTel SDK; chain hash in every event.",
+    "links_to": [
+      "Audit Recorder and Event Schema",
+      "M2 Policy Audit and Learn",
+      "I9 Hash-Chained Audit Outside the Sandbox",
+      "I1 No Secrets in the Sandbox",
+      "Open Questions and Unverified Claims",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M2 build (2026-09-24) from schema.ocsf.io 1.9.0 class pages and the OTLP specification.",
+    "aliases": [
+      "ADR-023"
+    ]
   }
 ]

@@ -151,6 +151,11 @@ impl SqliteRecorder {
         Ok(v)
     }
 
+    /// Rows with `after < seq <= upto`, oldest first (a verified prefix).
+    pub fn range(&self, after: i64, upto: i64) -> anyhow::Result<Vec<StoredEvent>> {
+        self.query("WHERE seq > ?1 AND seq <= ?2 ORDER BY seq", params![after, upto])
+    }
+
     fn query(&self, clause: &str, p: impl rusqlite::Params) -> anyhow::Result<Vec<StoredEvent>> {
         let inner = self.inner.lock().map_err(|_| anyhow::anyhow!("audit lock poisoned"))?;
         let sql = format!("SELECT seq, body, hash FROM events {clause}");

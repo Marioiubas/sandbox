@@ -47,6 +47,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] | Agents' own credentials are held by brokerd behind sentinels; agent token files are deny-read; the macOS keychain switch of ADR-016 is removed. |
 | [[ADR-021 L7 Path Choices for M1]] | Per-session CA only, HTTP/1.1 only, no broker-followed redirects, no cookies on terminated hosts, rule-driven attachment, buffered push inspection, fail-closed force detection. |
 | [[ADR-022 Cedar Schema and Engine as Built]] | Compiled schema (Domain/HostCategory, Repo in Host, segmented Path record, net.* admission), Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies. |
+| [[ADR-023 OCSF and OTLP Export as Built]] | OCSF 1.9.0 classes verified (4001/4002/6003); pull export from the verified chain as NDJSON, HEC or OTLP/HTTP JSON without the OTel SDK; chain hash in every event. |
 
 ## Where the value is
 
@@ -99,6 +100,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 ## Built during M2
 
 - [[ADR-022 Cedar Schema and Engine as Built]] — Compiled schema (Domain/HostCategory, Repo in Host, segmented Path record, net.* admission), Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies.
+- [[ADR-023 OCSF and OTLP Export as Built]] — OCSF 1.9.0 classes verified (4001/4002/6003); pull export from the verified chain as NDJSON, HEC or OTLP/HTTP JSON without the OTel SDK; chain hash in every event.
 
 ## How this section connects
 

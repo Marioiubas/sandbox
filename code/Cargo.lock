@@ -176,6 +176,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror",
+ "time",
 ]
 
 [[package]]
@@ -258,13 +259,21 @@ dependencies = [
  "anyhow",
  "audit",
  "brokerd",
+ "bytes",
  "clap",
+ "creds",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "launcher",
  "learn",
  "libc",
+ "netguard",
  "policy",
+ "rustls-pki-types",
  "serde_json",
  "tempfile",
+ "tls",
  "tokio",
 ]
 

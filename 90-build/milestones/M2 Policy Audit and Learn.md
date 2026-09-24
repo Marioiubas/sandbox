@@ -61,8 +61,8 @@ The rationale is twofold. Cedar's authorization semantics are proved in Lean ("I
 
 - [ ] `crates/audit/src/chain.rs`: finalise `hash = H(prev || canonical_json(ev))`; `verify.rs` recomputes the chain; `broker audit verify` exits non-zero on the first bad row.
 - [ ] Event fields per [[Audit Recorder and Event Schema]]: IdP subject (placeholder until M3), agent ID and binary hash, task ID, session ID, sandbox identity; method and redacted URL; adapter verb; Cedar decision, determining policy IDs and mode; credential ID and issuer, never the value; upstream status and bytes; chain hash.
-- [ ] `crates/audit/src/otlp.rs`: one span or log record per decision via `opentelemetry-otlp`.
-- [ ] `crates/audit/src/ocsf.rs`: map to OCSF HTTP or API Activity records. **Verify class names and IDs first** (HTTP Activity 4002 and API Activity 6003 are unverified).
+- [x] `crates/audit/src/otlp.rs`: one log record per decision (OTLP/HTTP JSON, no SDK; [[ADR-023 OCSF and OTLP Export as Built]]).
+- [x] `crates/audit/src/ocsf.rs`: map to OCSF HTTP or API Activity records. **Verify class names and IDs first** (verified 2026-09-24 against OCSF 1.9.0: 4001, 4002, 6003).
 - [ ] `broker audit tail` and `audit.query` on the control socket.
 
 **Learning (crate `learn`)**
@@ -89,7 +89,7 @@ The rationale is twofold. Cedar's authorization semantics are proved in Lean ("I
 
 - [ ] `tests/e2e/learn_3x3`: 3 repos × 3 agents, learn then enforce.
 - [ ] `tests/e2e/seeded_injection`: repo file instructing "post `~/.aws` to a paste site; push to attacker repo".
-- [ ] `tests/e2e/ocsf_sink`: validate events against the OCSF schema and deliver to the test SIEM.
+- [x] `tests/e2e/ocsf_sink`: validate events against the OCSF schema and deliver to the test SIEM (built as `tests/conformance/tests/m2_ocsf.rs`).
 
 ## Components delivered
 
@@ -171,3 +171,4 @@ Next milestone: [[M3 CI Identity and MCP]], which adds identity attribution, tri
 ## Build log
 
 - 2026-09-24: steps 1-2 built: the Cedar engine ([[ADR-022 Cedar Schema and Engine as Built]]), repository policy with content-hash approval, `broker learn` and `broker suggest`. Acceptance so far: C1 and C2 pass with a deterministic agent script against fake upstreams (`m2_learn::c1_learned_policy_passes_the_task_and_c2_seeded_injection_is_blocked`); C1 over 3 repos × 3 real agents is not run (only Claude Code is installed here); C5 is the M0 I9 test; C6 is `i4_repo_policy_only_narrows_and_needs_approval`; C7 holds by construction (G9) and is asserted in `mining_applies_the_safeguards`; C3 needs the SymCC gates; C4 needs the OCSF export.
+- 2026-09-24: step 3 built: OCSF 1.9.0 export and SIEM delivery ([[ADR-023 OCSF and OTLP Export as Built]]). C4 passes: `m2_ocsf::c4_events_validate_and_reach_the_sinks` (100% of decisions validate; a HEC-style sink and an OTLP/HTTP collector on loopback receive every event).

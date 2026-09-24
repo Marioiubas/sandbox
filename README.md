@@ -32,6 +32,11 @@ apply, attaches real credentials after authorization (including Claude
 Code's own login), rejects credentials it did not issue, and scopes git
 pushes per repository, branch and force.
 
+**M2 (policy, audit and learn)** is in progress: every decision goes
+through Cedar, repository policy only narrows and needs approval,
+`broker learn` records and `broker suggest` proposes a least-privilege
+diff (never applied automatically), and decisions export as OCSF events.
+
 ## Quick start
 
 ```sh
@@ -41,6 +46,10 @@ cargo build --release --workspace --bins
 ./target/release/broker run -- claude   # built-in claude-code profile
 ./target/release/broker why <request-id>
 ./target/release/broker audit verify
+./target/release/broker learn -- claude        # record mode, bounded by the ceiling
+./target/release/broker suggest --out learned.toml
+./target/release/broker policy status          # repository policy approval
+./target/release/broker audit export --format ocsf
 ```
 
 On Ubuntu 23.10 or newer, install `code/packaging/apparmor/broker-bwrap` so

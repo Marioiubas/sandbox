@@ -87,6 +87,22 @@ pub enum Command {
 pub enum AuditCmd {
     /// Verify the hash chain; exits non-zero at the first broken row.
     Verify,
+    /// Export decisions as OCSF 1.9.0 events: NDJSON to stdout, or to a SIEM
+    /// (`--format hec` for a Splunk HEC-style collector, `--format otlp` for
+    /// an OTLP/HTTP logs endpoint). Every event is validated first.
+    Export {
+        #[arg(long, default_value = "ocsf")]
+        format: String,
+        /// Sink URL (https://, or http:// on loopback only).
+        #[arg(long)]
+        to: Option<String>,
+        /// Sink token as a secret reference (keychain:, env:, file:).
+        #[arg(long)]
+        token: Option<String>,
+        /// Only events after this chain sequence number.
+        #[arg(long, default_value_t = 0)]
+        from_seq: i64,
+    },
     /// Show the most recent events.
     Tail {
         #[arg(short = 'n', default_value_t = 20)]
@@ -118,6 +134,9 @@ fn main() {
         Command::Why { request_id } => cmd::why::why(&request_id),
         Command::Audit { action: AuditCmd::Verify } => cmd::audit::verify(),
         Command::Audit { action: AuditCmd::Tail { n } } => cmd::audit::tail(n),
+        Command::Audit { action: AuditCmd::Export { format, to, token, from_seq } } => {
+            cmd::export::export(cmd::export::Args { format, to, token, from_seq })
+        }
         Command::Policy { action: PolicyCmd::Status } => cmd::policy::status(),
         Command::Policy { action: PolicyCmd::Approve } => cmd::policy::approve(),
         Command::Daemon { action: DaemonCmd::Status } => cmd::daemon::status(),
