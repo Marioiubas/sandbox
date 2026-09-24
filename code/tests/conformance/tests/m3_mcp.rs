@@ -36,7 +36,10 @@ fn setup() -> Fx {
     let api = HttpsServer::start(&ca, "api.test", fake);
     let h = Harness::new("version = 1\n");
     h.write_secret("mcp-token", MCP_TOKEN.as_bytes());
-    let desc = h.home.path().join("read_issue.txt");
+    // The server's own sandbox must see this file: on Linux it gets a
+    // private /tmp, so it lives under the target directory (like the binary).
+    let desc = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("mcp-desc-{}.txt", h.home.path().file_name().unwrap().to_string_lossy()));
     std::fs::write(&desc, "Read an issue from the tracker.").unwrap();
     let server = h.bins.broker.parent().unwrap().join("fake-mcp-server");
     h.set_config(&format!(
