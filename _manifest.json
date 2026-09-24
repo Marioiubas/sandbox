@@ -4078,5 +4078,79 @@
     ],
     "source_hints": "Written in the skeleton step from R 'Eight research problems the product can own'.",
     "aliases": []
+  },
+  {
+    "file": "95-decisions/ADR-016 macOS M0 Compatibility Exceptions.md",
+    "title": "ADR-016 macOS M0 Compatibility Exceptions",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "On macOS in M0, keep the per-user temp dir writable (Apple toolchain shims reset TMPDIR to it) and let only profiles that declare it (claude-code) read the login keychain until M1; announced, audited and time-boxed.",
+    "links_to": [
+      "Seatbelt",
+      "Sandbox Launcher",
+      "I1 No Secrets in the Sandbox",
+      "I5 Config Outside Writable Mounts",
+      "M0 Contained Run",
+      "M1 Secrets Outside",
+      "Risk Register",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M0 build (2026-09-24) from measurements and tests recorded in the Build Log.",
+    "aliases": [
+      "ADR-016"
+    ]
+  },
+  {
+    "file": "95-decisions/ADR-017 Landlock Filesystem Layer Required.md",
+    "title": "ADR-017 Landlock Filesystem Layer Required",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "The Landlock filesystem layer (ABI 1+) is a required Linux layer and its absence refuses launch; only TCP rules degrade below ABI 4; no flag or repo policy can change this.",
+    "links_to": [
+      "Landlock",
+      "I2 Fail-Closed Launch",
+      "I8 No Flag Disables Isolation",
+      "Sandbox Launcher",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M0 build (2026-09-24) from measurements and tests recorded in the Build Log.",
+    "aliases": [
+      "ADR-017"
+    ]
+  },
+  {
+    "file": "95-decisions/ADR-018 seccomp Filter Shape for M0.md",
+    "title": "ADR-018 seccomp Filter Shape for M0",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Deny new AF_UNIX, packet and raw sockets, ptrace, bpf, keyctl, mount and namespace calls, plus io_uring, clone3 (ENOSYS), x32 syscalls and TIOCSTI; allow socketpair(AF_UNIX) and AF_NETLINK.",
+    "links_to": [
+      "seccomp-bpf",
+      "Sandbox Launcher",
+      "I2 Fail-Closed Launch",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M0 build (2026-09-24) from measurements and tests recorded in the Build Log.",
+    "aliases": [
+      "ADR-018"
+    ]
+  },
+  {
+    "file": "95-decisions/ADR-019 Mandatory Deny-Write List Additions.md",
+    "title": "ADR-019 Mandatory Deny-Write List Additions",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Extend the mandatory deny-write list with the .git entry itself (rename-and-replant escape), .mcp.json, .envrc, .gemini, .broker and PATH dirs in writable roots; read-only placeholders for missing names on Linux.",
+    "links_to": [
+      "I5 Config Outside Writable Mounts",
+      "Filesystem Control and Rollback",
+      "Sandbox Launcher",
+      "Conformance Probe Matrix",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M0 build (2026-09-24) from measurements and tests recorded in the Build Log.",
+    "aliases": [
+      "ADR-019"
+    ]
   }
 ]

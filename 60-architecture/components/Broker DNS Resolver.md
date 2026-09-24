@@ -4,7 +4,7 @@ aliases: ["DNS Policy Resolver"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/dns, topic/egress, control/egress, boundary/tb3, invariant/i6, milestone/m0]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "Broker-owned name resolution: no UDP/53 or ICMP from the sandbox, name
 related: ["[[ADR-009 Broker-Only DNS Resolution]]", "[[Claude Code DNS Exfiltration CVE-2025-55284]]", "[[July 2026 Artifactory Egress Incident]]", "[[Hostname Canonicaliser]]", "[[Netguard Ingress]]", "[[Conformance Probe Matrix]]", "[[Vercel Sandbox]]", "[[OpenAI Codex CLI]]", "[[I6 Single Canonicaliser]]", "[[Topology-Forced Egress]]", "[[Policy Engine and Entity Builder]]", "[[Audit Recorder and Event Schema]]", "[[L1 Conformance Suite]]", "[[M0 Contained Run]]", "[[Open Questions and Unverified Claims]]"]
 sources: ["https://embracethered.com/blog/posts/2025/claude-code-exfiltration-via-dns-requests/", "https://axeploit.com/blog/the-hugging-face-sandbox-escape-everyone-watched-the-proxy-nobody-watched-port-53", "https://vercel.com/docs/sandbox/concepts/firewall", "https://github.com/openai/codex/issues/22387", "https://github.com/anthropic-experimental/sandbox-runtime", "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices"]
 milestone: M0
+code: ["code/crates/netguard/src/resolver.rs", "code/crates/policy/src/doh.rs"]
 ---
 
 # Broker DNS Resolver
@@ -149,3 +150,13 @@ An async DNS resolver crate and a DNS message parser (not selected in the record
 - https://github.com/anthropic-experimental/sandbox-runtime
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices
 - Report: "DNS belongs to the broker"; research notes 01 Q5 item 4, 03 Q4 and 05 section 1A.
+
+## Implementation notes
+
+- 2026-09-24: in-proxy mode does not re-check CNAME targets against policy: the sandbox never sees the CNAME chain, and every final address is classified (a CNAME to an internal host is denied by address class). CNAME re-checking remains required for the future stub mode.
+- 2026-09-24: DoH endpoints are a built-in deny list in the policy crate (`DOH_NAMES`, 28 names and their subdomains) that wins over any grant.
+
+## Build log
+
+- 2026-09-24: built in-proxy resolution in `code/crates/netguard/src/resolver.rs`: `PolicyResolver` trait, `SystemResolver` (getaddrinfo on the canonical name with a trailing dot so no search domain is appended, 5 s timeout, cache clamped to 60 s) and `StaticResolver` (counts every query, for tests). Grants may pin addresses (`addrs`), in which case no query is made. Resolution happens only after host admission, and every returned address is checked against the grant's address classes. Tests: `names_not_admitted_are_never_resolved` (zero queries for non-admitted names, including a base64 query-name exfil probe and DoH names), `resolved_address_is_checked_after_the_name`, `cat03_name_resolution` (getaddrinfo, UDP/53 TXT, TCP/53, DoT and DoH all denied inside real sessions on macOS and Linux).
+- 2026-09-24: not built: the namespace DNS stub and synthetic answers (only needed with the transparent listener, optional in M0).

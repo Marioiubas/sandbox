@@ -96,3 +96,7 @@ Arguments are checked with argument comparators on the `domain`/`type` registers
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-24: filter built with `seccompiler` 0.5.0 ([[ADR-018 seccomp Filter Shape for M0]]); `Seccomp: 2` and `socket(AF_UNIX)` = EPERM verified from inside the sandbox on Linux 6.12 aarch64.

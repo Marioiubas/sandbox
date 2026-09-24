@@ -48,6 +48,10 @@ state_write = [
     "~/.claude/debug",
     "~/.claude/plans",
     "~/.claude/ide",
+    # The Bash tool's per-project scratch directory (hard-coded under /tmp,
+    # independent of TMPDIR). Only this project's directory, not its parent,
+    # which other Claude Code sessions share.
+    "/tmp/claude-${uid}/${cwd_slug}",
 ]
 # Until M1 swaps credentials for sentinels, Claude Code reads its own OAuth
 # credentials from the login keychain on macOS (ADR-016).

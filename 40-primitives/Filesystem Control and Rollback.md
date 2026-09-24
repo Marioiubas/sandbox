@@ -113,3 +113,11 @@ Precedent: Docker Sandboxes' clone mode mounts the host source read-only at `/ru
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Implementation notes
+
+- 2026-09-24: the default deny-read list was extended with other common credential stores: `~/.gnupg`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.config/gcloud`, `~/.azure`, `~/.kube`, cargo credentials, `~/.config/hub`, `~/.password-store`, Terraform credentials, `~/.local/share/keyrings`, Firefox/Chrome/Brave/Edge/Arc profiles and `~/Library/Cookies`.
+
+## Build log
+
+- 2026-09-24: M0 slice built (deny-read of credential stores, writable repository and session temp, mandatory deny-write compiled to SBPL, bwrap re-binds and Landlock allowlists); rollback deferred. See [[ADR-019 Mandatory Deny-Write List Additions]] for the `.git` rename-and-replant escape found and closed while building.

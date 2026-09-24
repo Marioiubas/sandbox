@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: code
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    # M0 matrix from the milestone note: macOS 15/26, Ubuntu 22.04/24.04.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bubblewrap
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          # Ubuntu 23.10+ gates unprivileged user namespaces behind AppArmor.
+          # Grant userns to the system bwrap only; never relax the global sysctl.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap
+          fi
+      - name: Canary SSH key (CI runners only)
+        run: |
+          mkdir -p ~/.ssh
+          [ -e ~/.ssh/id_ed25519 ] || echo "CANARY-CI-NOT-A-KEY" > ~/.ssh/id_ed25519
+      - name: Build
+        run: cargo build --workspace --bins --locked
+      - name: broker doctor
+        run: ./target/debug/broker doctor
+      - name: Tests (unit, pipeline, conformance, invariants)
+        run: cargo test --workspace --no-fail-fast --locked
+
+  fuzz-smoke:
+    # 60 s per target on every push; the >=24 h runs are an M4 exit item.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nightly and cargo-fuzz
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo +nightly install cargo-fuzz --locked
+      - name: Fuzz each parser for 60 s
+        run: |
+          for t in canon connect socks5 sni jsonrpc; do
+            cargo +nightly fuzz run --fuzz-dir tests/fuzz "$t" -- -max_total_time=60 -rss_limit_mb=2048
+          done

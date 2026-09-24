@@ -46,7 +46,8 @@ mod tests {
             assert_eq!(&p.name, n);
             policy::EgressPolicy::compile([("profile", p.egress.as_slice())]).unwrap();
             for c in p.agent.config_readonly.iter().chain(&p.agent.state_write) {
-                assert!(c.starts_with("~/"), "{n}: {c} must be home-relative");
+                assert!(c.starts_with("~/") || c.starts_with('/'), "{n}: {c} must be home-relative or absolute");
+                assert!(!c.contains(".."), "{n}: {c}");
             }
         }
     }

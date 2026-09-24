@@ -210,3 +210,7 @@ Implemented by (each of these notes carries `implements:: [[Core Trait Contracts
 - https://crates.io/crates/landlock
 - https://github.com/craigbalding/safeyolo/issues/620
 - Report: "Interfaces" Rust block (verbatim), "Implementation choice", "Tech stack"; research note 05 section 4.
+
+## Build log
+
+- 2026-09-24: `SandboxBackend` (`code/crates/launcher/src/lib.rs`) and `Recorder` (`code/crates/audit/src/lib.rs`) implemented with the documented contracts. `launch` takes the spec by value (it owns the stdio descriptors). `ProtocolAdapter` and `CredentialIssuer` arrive with their first implementations in M1. `CanonicalHost` has private fields and only `netguard::canon` constructs it.

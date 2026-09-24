@@ -148,3 +148,7 @@ SQLite holds the audit ring buffer, learned traces, token-cache metadata (never 
 - Report: tech-stack table, "Implementation choice" paragraph, crate-verification caveat.
 - Research note 05 section 4 (crate list, Go alternative, packaging, local state, observability, testing).
 - Research note 03 Q4 (self-reported proxy performance claims).
+
+## Build log
+
+- 2026-09-24: M0 pins (resolved in `code/Cargo.lock`, toolchain `rust-toolchain.toml` 1.96.0, edition 2024): tokio 1.53.1, anyhow 1.0.104, async-trait 0.1.92, base64 0.22.1, clap 4.6.7, hex 0.4.3, idna 1.1.0, landlock 0.4.7, libc 0.2.189, nix 0.31.3, psl 2.1.237, rusqlite 0.40.2 (bundled SQLite), seccompiler 0.5.0, serde 1.0.229, serde_json 1.0.151, sha2 0.10.9, thiserror 2.0.21, toml 1.1.6, getrandom 0.3.4, proptest 1.11.0, tempfile 3.27.0, libfuzzer-sys 0.4.13 (fuzz crate). Not yet dependencies: hyper, rustls, rcgen (M1), cedar-policy (M2), opentelemetry (M2). Direct bwrap invocation was kept over hakoniwa.

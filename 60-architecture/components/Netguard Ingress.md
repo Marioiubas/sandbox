@@ -4,7 +4,7 @@ aliases: ["netguard", "Sandbox-Broker Channel", "TB3 Channel", "Ingress Modes"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/egress, control/egress, boundary/tb3, platform/macos, platform/linux, invariant/i6, invariant/i2, milestone/m0]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "The only route out and its listeners: the sandbox-broker channel (UDS 
 related: ["[[Topology-Forced Egress]]", "[[Hostname Canonicaliser]]", "[[Broker DNS Resolver]]", "[[TLS Termination and Per-Session CA]]", "[[Trust Boundaries]]", "[[M0 Contained Run]]", "[[ADR-003 Topology-Enforced Egress]]", "[[Core Trait Contracts]]", "[[Open Questions and Unverified Claims]]", "[[Sandbox Launcher]]", "[[I6 Single Canonicaliser]]", "[[I2 Fail-Closed Launch]]", "[[I7 Reject Foreign Credentials]]", "[[Policy Engine and Entity Builder]]", "[[Audit Recorder and Event Schema]]", "[[Conformance Probe Matrix]]", "[[L4 Product Metrics]]", "[[MCP Gateways]]", "[[Vercel Sandbox]]", "[[ADR-013 Seatbelt for macOS MVP with VZ Hedge]]", "[[Broker CLI and Daemon]]"]
 sources: ["https://dev.to/skwuwu/controlling-ai-agent-outbound-traffic-at-the-kernel-level14ms-overhead-2p8o", "https://www.langchain.com/blog/how-auth-proxy-secures-network-access-for-langsmith-agent-sandboxes", "https://docs.stacklok.com/toolhive/guides-cli/network-isolation", "https://github.com/anthropic-experimental/sandbox-runtime", "https://vercel.com/blog/a-sandbox-without-a-network-boundary-is-only-half-a-sandbox", "https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md", "https://docs.e2b.dev/network/internet-access.md", "https://vercel.com/docs/sandbox/concepts/firewall", "https://blog.cloudflare.com/sandbox-auth/"]
 milestone: M0
+code: ["code/crates/netguard/src/ingress/mod.rs", "code/crates/netguard/src/ingress/connect.rs", "code/crates/netguard/src/ingress/socks5.rs", "code/crates/netguard/src/splice.rs", "code/crates/brokerd/src/pipeline.rs", "code/crates/tls/src/sni_peek.rs"]
 ---
 
 # Netguard Ingress
@@ -182,3 +183,8 @@ Added latency on a warm connection p50 ≤5 ms and p95 ≤25 ms; new terminated 
 - https://vercel.com/docs/sandbox/concepts/firewall
 - https://blog.cloudflare.com/sandbox-auth/
 - Report: "Topology forces traffic through the broker", ingress-mode Proposal, Interfaces (macOS sentinel), `SandboxSpec.egress`; research notes 01 Q5, 03 Q4 and 05 section 3.2.
+
+## Build log
+
+- 2026-09-24: built HTTP CONNECT and SOCKS5 (RFC 1928 with RFC 1929 auth) on one listener per session, protocol detected from the first byte (SOCKS4/4a refused), in `code/crates/netguard/src/ingress/`. Linux: per-session Unix socket reached through the in-namespace bridge on 127.0.0.1:3128. macOS: per-session loopback port; every CONNECT (`Proxy-Authorization: Basic`) and SOCKS5 (username/password) connection must carry the session sentinel, compared in constant time and never forwarded. Denies return `403`/`407`/`502`/`503` with `X-Broker-Request-Id` and `X-Broker-Reason` (CONNECT) or the SOCKS5 reply code. Tests: parser unit tests, `connect_and_socks5_agree` (same bytes, same decision), `loopback_channel_requires_the_session_sentinel`, `port_and_protocol_denials`, conformance categories 3, 4, 5 and 9; fuzz targets `connect` and `socks5` (60 s each, no crash).
+- 2026-09-24: not built: the transparent listener (optional in M0). The L4 path additionally requires a TLS ClientHello whose SNI canonicalises to the admitted host (category 7, planned for M1) via `code/crates/tls/src/sni_peek.rs`.

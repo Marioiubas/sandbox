@@ -40,6 +40,10 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-013 Seatbelt for macOS MVP with VZ Hedge]] | Use generated Seatbelt profiles on macOS for the MVP with a Virtualization.framework backend as hedge; reject a Network Extension and VM-only. |
 | [[ADR-014 Apache-2.0 Endpoint with Commercial ee]] | License everything on the endpoint Apache-2.0 and keep the fleet control plane in a commercial ee/ directory; reject AGPL and closed source. |
 | [[ADR-015 Rust for the Endpoint and Custom Proxy]] | Write the whole endpoint in Rust as one static binary and build a custom tokio/hyper/rustls/rcgen proxy (hudsucker as reference); reject Go and Envoy/mitmproxy for the product path. |
+| [[ADR-016 macOS M0 Compatibility Exceptions]] | On macOS in M0, keep the per-user temp dir writable and let only profiles that declare it read the login keychain until M1; both announced, audited and time-boxed. |
+| [[ADR-017 Landlock Filesystem Layer Required]] | The Landlock filesystem layer is a required Linux layer; only its TCP rules degrade below ABI 4, where the empty netns remains the boundary. |
+| [[ADR-018 seccomp Filter Shape for M0]] | Keep the proposed seccomp denials, add io_uring, clone3, x32 and TIOCSTI, and allow socketpair(AF_UNIX) and AF_NETLINK. |
+| [[ADR-019 Mandatory Deny-Write List Additions]] | Protect the .git entry itself (rename-and-replant escape), .mcp.json, .envrc, .gemini, .broker and PATH dirs; placeholders for missing names on Linux. |
 
 ## Where the value is
 
@@ -76,6 +80,13 @@ Architecture decision records for the fourteen decisions in the report's decisio
 ## Implementation
 
 - [[ADR-015 Rust for the Endpoint and Custom Proxy]] — Write the whole endpoint in Rust as one static binary and build a custom tokio/hyper/rustls/rcgen proxy (hudsucker as reference); reject Go and Envoy/mitmproxy for the product path.
+
+## Built during M0
+
+- [[ADR-016 macOS M0 Compatibility Exceptions]] — On macOS in M0, keep the per-user temp dir writable and let only profiles that declare it read the login keychain until M1; both announced, audited and time-boxed.
+- [[ADR-017 Landlock Filesystem Layer Required]] — The Landlock filesystem layer is a required Linux layer; only its TCP rules degrade below ABI 4, where the empty netns remains the boundary.
+- [[ADR-018 seccomp Filter Shape for M0]] — Keep the proposed seccomp denials, add io_uring, clone3, x32 and TIOCSTI, and allow socketpair(AF_UNIX) and AF_NETLINK.
+- [[ADR-019 Mandatory Deny-Write List Additions]] — Protect the .git entry itself (rename-and-replant escape), .mcp.json, .envrc, .gemini, .broker and PATH dirs; placeholders for missing names on Linux.
 
 ## How this section connects
 

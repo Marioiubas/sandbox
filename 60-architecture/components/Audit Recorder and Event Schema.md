@@ -12,6 +12,7 @@ summary: "The audit crate: SQLite WAL hash-chained decision log (each hash cover
 related: ["[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Core Trait Contracts]]", "[[M2 Policy Audit and Learn]]", "[[Control Plane and Policy Bundles]]", "[[AWS STS Session Policies]]", "[[Open Questions and Unverified Claims]]", "[[Gap Analysis]]", "[[Policy Learning Loop]]", "[[Broker CLI and Daemon]]", "[[Policy Engine and Entity Builder]]", "[[Credential Injector and Issuers]]", "[[Request and Session Lifecycle]]", "[[I1 No Secrets in the Sandbox]]", "[[Replit Production Database Deletion]]", "[[Mythos Preview Evaluation Escape]]", "[[Policy Miner Safeguards]]", "[[M3 CI Identity and MCP]]", "[[Agent Identity Brokers]]", "[[L1 Conformance Suite]]", "[[Tech Stack]]", "[[Repository Layout]]"]
 sources: ["https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html", "https://incidentdatabase.ai/cite/1152/", "https://www.lesswrong.com/posts/xtnSzhA3TvExN4ZhG/claude-mythos-preview-system-card", "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-agent-governance-framework-gap-20260403/", "https://docs.aembit.io/get-started/use-cases/ai-agents/", "https://tailscale.com/docs/aperture/what-is-aperture"]
 milestone: M2
+code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/event.rs", "code/crates/audit/src/reason.rs", "code/crates/audit/src/canonical.rs"]
 ---
 
 # Audit Recorder and Event Schema
@@ -203,3 +204,8 @@ Exports feed [[Control Plane and Policy Bundles]]; traces feed [[Policy Learning
 - https://docs.aembit.io/get-started/use-cases/ai-agents/
 - https://tailscale.com/docs/aperture/what-is-aperture
 - Report: `Recorder` trait, audit-event list and OCSF/OTel caveat, request-life step 5, tech-stack telemetry and local-state rows, assets paragraph, "The gap to own"; research notes 03 Q5 and 05 §3.3.
+
+## Build log
+
+- 2026-09-24: M0 slice built in `code/crates/audit/`: `Recorder` trait, `SqliteRecorder` (WAL, `synchronous=FULL`, busy timeout), hash `SHA-256(prev || canonical_json(event + seq))` with a random per-database genesis in `meta`, `verify` returning the first bad sequence number, `open` refusing a broken chain, read-only readers for `broker why` and `broker audit`. Canonical JSON: sorted keys, no whitespace, floats rejected. The enumerated deny `Reason` (36 codes with stage, trust boundary and explanation) lives here and is shared by every deciding crate. Tests: tamper one byte, delete, swap, re-hash an edited row (breaks the next link), property test over random single-byte mutations, `audit_failure_denies_before_connecting`, `i9_every_decision_is_chained_and_explainable`. Truncating the tail is only detectable against an exported anchor (tested and documented).
+- 2026-09-24: not built (M2): OCSF and OTLP export, anchoring, rotation. Added event kind `session.ready`.

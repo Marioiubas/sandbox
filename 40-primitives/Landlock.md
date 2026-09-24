@@ -105,3 +105,11 @@ The last row is the reason Landlock is valuable beyond defence in depth: srt and
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Implementation notes
+
+- 2026-09-24: measured ABI 6 on Linux 6.12 (Docker Desktop LinuxKit kernel); ruleset fully enforced. The ABI is probed with `landlock_create_ruleset(NULL, 0, LANDLOCK_CREATE_RULESET_VERSION)`. ABI 10/11 remain unverified on any released kernel.
+
+## Build log
+
+- 2026-09-24: applied by the shim inside bwrap with the `landlock` 0.4.7 crate in best-effort mode; filesystem layer required and TCP rules optional below ABI 4 ([[ADR-017 Landlock Filesystem Layer Required]]).

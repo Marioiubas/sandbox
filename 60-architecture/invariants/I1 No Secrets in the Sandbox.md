@@ -113,3 +113,7 @@ This is the [[M1 Secrets Outside]] acceptance criterion ("automated scan finds o
 - https://williamzujkowski.github.io/posts/2026-07-02-agentic-ai-sandbox-secret-proxying-gap/
 - https://modelcontextprotocol.io/specification/latest/basic/authorization
 - Report: "Invariants every component must preserve" (I1), "Interfaces", L7 step 8, M1 acceptance; research notes 03 Q3 and 05 section 3.2.
+
+## Build log
+
+- 2026-09-24: M0 partial test `i1_host_secrets_in_the_client_environment_never_reach_the_sandbox`: canary values in `GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY`, `ANTHROPIC_API_KEY` and an unlisted variable are absent from env, argv and every visible `/proc/*/environ|cmdline` inside the sandbox (probe `env-scan`). The environment is an allowlist; secret-looking names are refused even in profiles. The full canary scan, sentinel swap and response filter are M1. Weakened on macOS for `claude-code` sessions in M0 by [[ADR-016 macOS M0 Compatibility Exceptions]] (keychain readable) until M1.

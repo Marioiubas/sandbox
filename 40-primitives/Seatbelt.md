@@ -107,3 +107,13 @@ Without a Network Extension, transparent interception on macOS is unvalidated; t
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Implementation notes
+
+- 2026-09-24: verified on macOS 26.5 (25F84) with `/usr/bin/sandbox-exec`: `(deny default)` plus `(allow process-exec process-fork)` runs tools; a later `(deny file-write* …)` wins over an earlier `(allow file-write* …)`; `(allow network-outbound (remote ip "localhost:PORT"))` admits exactly that port (another loopback port, UDP, ICMP and AF_UNIX connects fail with EPERM); denying `com.apple.dnssd.service` removes name resolution; `com.apple.bsd.dirhelper` is needed for `confstr(DARWIN_USER_TEMP_DIR)`; `(extension "com.apple.sandbox.pty")` covers ptys created inside. A literal deny on the `.git` entry blocks rename while commits keep working. Nested `sandbox-exec` works.
+- 2026-09-24: Apple toolchain shims (`/usr/bin/python3`, `/usr/bin/git`) reset `TMPDIR` to the per-user temp dir; see [[ADR-016 macOS M0 Compatibility Exceptions]].
+- 2026-09-24: Claude Code 2.1.268 runs under the generated profile; its Bash tool needs `/tmp/claude-<uid>/<cwd-slug>` (profile variable `${cwd_slug}`), and it reads its OAuth token from the login keychain (ADR-016).
+
+## Build log
+
+- 2026-09-24: the `macos-seatbelt` backend is built ([[Sandbox Launcher]]).

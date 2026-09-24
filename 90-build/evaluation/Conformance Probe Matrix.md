@@ -103,3 +103,7 @@ This note describes categories and pass criteria only. It deliberately contains 
 
 - Report: "The conformance probe matrix" table and note.
 - Research note 04a Q4 (allowed-domain abuse lesson, sandbox-runtime limits, category inferences, TA0010 suggestion) and Q5 (limits of proofs).
+
+## Build log
+
+- 2026-09-24: M0 categories implemented with deterministic probes (`code/tests/conformance/src/bin/conformance-probe.rs`) run inside real sessions: 3 (`cat03_name_resolution`), 4 (`cat04_ip_literals_and_encodings`), 5 (`cat05_alternate_protocols`), 9 (`cat09_proxy_bypass`), 10 (`cat10_filesystem`, `cat10_git_commit_still_works`, `cat10_non_repo_directory_cannot_grow_git_hooks`); category 7 (CONNECT/SNI mismatch) is already enforced on the L4 path and probed in category 5. Every out-of-policy probe is denied, every in-policy control succeeds, network denies are asserted in the audit log, and host-side listeners assert that nothing reached them. Passing on macOS 26 and Linux 6.12.

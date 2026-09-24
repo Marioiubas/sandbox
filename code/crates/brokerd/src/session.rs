@@ -113,6 +113,20 @@ fn expand_home(p: &str, home: &Path) -> PathBuf {
     }
 }
 
+/// `cwd` with every non-alphanumeric byte replaced by `-` (the per-project
+/// directory naming some agents use for scratch space).
+pub fn cwd_slug(cwd: &Path) -> String {
+    cwd.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
+/// Profile path variables: `~/`, `${uid}` and `${cwd_slug}`. The result must
+/// be absolute; the filesystem compiler rejects anything else.
+pub fn expand_profile_path(p: &str, home: &Path, cwd: &Path) -> PathBuf {
+    let uid = nix::unistd::getuid().as_raw().to_string();
+    let s = p.replace("${uid}", &uid).replace("${cwd_slug}", &cwd_slug(cwd));
+    expand_home(&s, home)
+}
+
 /// The nearest ancestor of `cwd` containing `.git`, else `cwd`. Never runs
 /// git on the host: repo config can execute code (core.fsmonitor).
 pub fn repo_root(cwd: &Path) -> PathBuf {
@@ -257,6 +271,12 @@ impl Daemon {
         if egress.is_empty() {
             warnings.push("no egress grants: every network request will be denied (empty lists deny)".into());
         }
+        if cfg!(target_os = "macos") && profile.agent.macos_keychain {
+            warnings.push(format!(
+                "profile {} can read the login keychain so the agent can use its own credentials; this M0 exception ends when M1 moves credentials out of the sandbox (ADR-016)",
+                profile.name
+            ));
+        }
 
         // Session directories.
         let session_dir = self.dirs.sessions_dir().join(id.as_str());
@@ -324,7 +344,7 @@ impl Daemon {
         // Filesystem policy.
         let mut extra_write = Vec::new();
         for s in &profile.agent.state_write {
-            let p = expand_home(s, home);
+            let p = expand_profile_path(s, home, cwd);
             if !p.exists() {
                 use std::os::unix::fs::DirBuilderExt;
                 std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&p)?;
@@ -346,6 +366,7 @@ impl Daemon {
             path_dirs: path_var.as_deref().unwrap_or("").split(':').map(PathBuf::from).collect(),
             broker_dirs: self.dirs.all(),
             install_dir: self.shim.parent().map(Path::to_path_buf),
+            allow_keychain: cfg!(target_os = "macos") && profile.agent.macos_keychain,
         })?;
 
         let faults = launcher::injected_faults();
@@ -675,6 +696,22 @@ mod tests {
         std::fs::create_dir_all(r.join("proj/src/deep")).unwrap();
         assert_eq!(repo_root(&r.join("proj/src/deep")), r.join("proj"));
         assert_eq!(repo_root(&r), r);
+    }
+
+    #[test]
+    fn profile_path_variables() {
+        // Matches the directory Claude Code 2.1.268 created for this cwd.
+        assert_eq!(
+            cwd_slug(Path::new("/private/tmp/claude-501/-Users-x/repo1")),
+            "-private-tmp-claude-501--Users-x-repo1"
+        );
+        let p = expand_profile_path("/tmp/claude-${uid}/${cwd_slug}", Path::new("/home/u"), Path::new("/src/a.b"));
+        let uid = nix::unistd::getuid().as_raw();
+        assert_eq!(p, PathBuf::from(format!("/tmp/claude-{uid}/-src-a-b")));
+        assert_eq!(
+            expand_profile_path("~/.claude/projects", Path::new("/home/u"), Path::new("/x")),
+            PathBuf::from("/home/u/.claude/projects")
+        );
     }
 
     #[test]

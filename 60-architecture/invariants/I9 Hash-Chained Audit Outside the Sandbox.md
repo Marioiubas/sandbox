@@ -88,3 +88,7 @@ milestone: M2
 - https://metr.org/blog/2026-05-19-frontier-risk-report/
 - https://www-cdn.anthropic.com/d7dd50dd1185f59be051b307150d877f2b82bd2c.pdf
 - Report: invariant I9, assets paragraph, `Recorder` trait, audit event list; research notes 04b Q4 and 03 Q5.
+
+## Build log
+
+- 2026-09-24: minimal M0 tests: chain tamper tests in `code/crates/audit/src/store.rs`, `audit_failure_denies_before_connecting`, `i9_every_decision_is_chained_and_explainable` (`broker why`, `broker audit verify`, the sandbox can neither read nor write the log). `session.start` is written ahead of the launch.

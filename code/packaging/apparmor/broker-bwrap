@@ -1,0 +1,18 @@
+# AppArmor profile for the broker's linux-native backend on Ubuntu 23.10+.
+#
+# Ubuntu restricts unprivileged user namespaces through AppArmor
+# (kernel.apparmor_restrict_unprivileged_userns = 1). bubblewrap needs a user
+# namespace to build the sandbox. This profile grants `userns` to the system
+# bubblewrap binary only; it does not relax the global sysctl, and it adds no
+# other permission. `broker doctor` reports whether the gate is in the way.
+#
+# Install: sudo install -m 0644 broker-bwrap /etc/apparmor.d/broker-bwrap
+#          sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap
+abi <abi/4.0>,
+include <tunables/global>
+
+profile broker-bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  include if exists <local/broker-bwrap>
+}

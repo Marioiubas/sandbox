@@ -114,3 +114,11 @@ Protect `.git/hooks` and `.git/config` rather than all of `.git`: hooks, `core.f
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Implementation notes
+
+- 2026-09-24: measured on Linux 6.12 (Docker Desktop, Ubuntu 24.04 userland, aarch64): bwrap 0.9 builds the sandbox; inside unprivileged containers a fresh procfs cannot be mounted unless Docker's `/proc` masks are removed (`systempaths=unconfined`).
+
+## Build log
+
+- 2026-09-24: the `linux-native` backend is built on bwrap ([[Sandbox Launcher]]); recipe as proposed plus `--unshare-ipc --unshare-uts --unshare-cgroup-try --cap-drop ALL`, a private tmpfs `/tmp`, a masked `$XDG_RUNTIME_DIR`, and `.git` bound onto itself. The installer AppArmor profile is `code/packaging/apparmor/broker-bwrap` (grants `userns` to `/usr/bin/bwrap` only).

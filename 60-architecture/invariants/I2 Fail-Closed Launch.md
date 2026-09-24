@@ -103,3 +103,7 @@ Landlock is the inner layer on Linux; its ABI must be probed at runtime ([Landlo
 - https://github.com/advisories/GHSA-9gqj-5w7c-vx47
 - https://docs.kernel.org/userspace-api/landlock.html
 - Report: invariant I2, "Fail closed" Proposal, Linux platform row, risk "Linux platform variance"; research note 05 section 3.2.
+
+## Build log
+
+- 2026-09-24: tests `i2_launch_refuses_when_any_layer_is_missing` (each required layer faulted in turn: Seatbelt, sandbox-exec, loopback egress, bwrap, userns+netns, seccomp, no_new_privs, landlock_fs, bridge, the shim's three verifications, proxy listener, audit), `i2_missing_shim_refuses_launch`, `i2_empty_policy_denies_everything`: `broker run` exits 125, the agent never runs, `launch_refused` is logged. The Landlock question is settled by [[ADR-017 Landlock Filesystem Layer Required]].

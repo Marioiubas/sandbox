@@ -91,3 +91,7 @@ The report: "never let a prompt-disabling flag weaken isolation, egress or broke
 - https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/
 - https://adversa.ai/blog/openclaw-security-101-vulnerabilities-hardening-2026/
 - Report: invariant I8, approval-fatigue paragraph, Interfaces (control socket unreachable); research note 04b Q2 design requirement.
+
+## Build log
+
+- 2026-09-24: tests `no_flag_disables_isolation` (every clap flag enumerated; `run` accepts only `--profile`), `i8_no_profile_flag_or_env_disables_isolation` (6 profiles × 5 agent bypass flags, plus cleared or hostile client proxy variables: direct egress and DNS still denied, every session has all required layers), `i8_unknown_profile_is_refused_not_ignored`, `i8_invalid_user_policy_refuses_launch`. Fault injection can only cause refusals.

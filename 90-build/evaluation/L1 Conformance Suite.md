@@ -96,3 +96,7 @@ Any single failure blocks release. Category 11 (covert channels) is the exceptio
 
 - Report: L1 row of the six-layer table; conformance probe matrix note; tech-stack testing row; M4 fuzzing.
 - Research note 04a Q4 and Q6 L1; research note 05 section 4 testing corpus.
+
+## Build log
+
+- 2026-09-24: L1 started: category probes (M0 set), public bypass corpus (36 cases, both ingress modes), five `cargo-fuzz` targets (`canon`, `connect`, `socks5`, `sni`, `jsonrpc`; 60 s smoke each in CI, no crashes locally), proptest suites in every parser, invariant tests. Differential fuzzing against curl/requests/undici is not built yet (M4).

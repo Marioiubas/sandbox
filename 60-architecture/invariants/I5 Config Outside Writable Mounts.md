@@ -102,3 +102,7 @@ Precedents: Codex re-binds `.git`, the resolved gitdir and `.codex` read-only ([
 - https://github.com/anthropic-experimental/sandbox-runtime
 - https://zenity.io/blog/current-events/zenity-labs-and-mitre-atlas-collaborate-to-advances-ai-agent-security-with-the-first-release-of
 - Report: invariant I5, `.git/hooks` Proposal, MCP guard section; research notes 04b Q1-Q3 and 01 Q6.
+
+## Build log
+
+- 2026-09-24: tests `cat10_filesystem` (writes to `.git/hooks`, `.git/config`, `.claude/`, `.mcp.json`, `.vscode/`, `.envrc`, `.codex/`, `.broker/`, `.cursor/`, rename of `.git`, rename over `.git/config`, hardlink and symlink tricks all denied), `cat10_non_repo_directory_cannot_grow_git_hooks`, `i5_repository_policy_is_never_loaded_in_m0`. The mandatory list was extended by [[ADR-019 Mandatory Deny-Write List Additions]]. Broker state, config, runtime and binaries are outside every writable root and masked; the content-hash approval store arrives with repo policy in M2.

@@ -103,3 +103,7 @@ Allowed destinations remain exfiltration channels: a gist or issue on an allowed
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-24: built for both standard backends: empty network namespace plus TCP-to-UDS bridge on Linux; Seatbelt loopback-only to the session port plus sentinel on macOS. Conformance category 9 asserts that host TCP, UDP and Unix-socket services receive nothing, including when the client clears its proxy variables.

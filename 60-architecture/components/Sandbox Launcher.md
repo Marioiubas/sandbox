@@ -4,7 +4,7 @@ aliases: ["launcher", "SandboxBackend implementations"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/isolation, topic/filesystem, control/iso, control/fs, platform/macos, platform/linux, boundary/tb2, invariant/i1, invariant/i2, invariant/i5, milestone/m0]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "The launcher crate: SandboxBackend implementations (macos-seatbelt, li
 related: ["[[Core Trait Contracts]]", "[[Seatbelt]]", "[[bubblewrap]]", "[[Landlock]]", "[[seccomp-bpf]]", "[[Filesystem Control and Rollback]]", "[[I2 Fail-Closed Launch]]", "[[Two-Tier Isolation Design]]", "[[M0 Contained Run]]", "[[Apple Virtualization Framework]]", "[[I1 No Secrets in the Sandbox]]", "[[I5 Config Outside Writable Mounts]]", "[[I8 No Flag Disables Isolation]]", "[[Topology-Forced Egress]]", "[[Netguard Ingress]]", "[[TLS Termination and Per-Session CA]]", "[[Broker CLI and Daemon]]", "[[MCP Guard]]", "[[Broker Cedar Schema]]", "[[Firecracker]]", "[[Cloud Hypervisor]]", "[[gVisor]]", "[[Container Runtimes and Escape History]]", "[[Claude Code and sandbox-runtime]]", "[[OpenAI Codex CLI]]", "[[Conformance Probe Matrix]]", "[[L4 Product Metrics]]", "[[SandboxEscapeBench]]", "[[ADR-002 OS Process Sandbox by Default with VM Hard Tier]]", "[[ADR-013 Seatbelt for macOS MVP with VZ Hedge]]", "[[Open Questions and Unverified Claims]]"]
 sources: ["https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md", "https://github.com/anthropic-experimental/sandbox-runtime", "https://landlock.io/rust-landlock/landlock/enum.ABI.html", "https://docs.kernel.org/userspace-api/landlock.html", "https://github.com/openai/codex/issues/215", "https://github.com/apple/containerization/issues/737", "https://learn.chatgpt.com/codex/sandboxing", "https://docs.docker.com/ai/sandboxes/architecture/", "https://github.com/apple/containerization"]
 milestone: M0
+code: ["code/crates/launcher/src/lib.rs", "code/crates/launcher/src/fs_compile.rs", "code/crates/launcher/src/shim.rs", "code/crates/launcher/src/backends/seatbelt/sbpl.rs", "code/crates/launcher/src/backends/linux/bwrap.rs", "code/crates/launcher/src/backends/linux/inner.rs"]
 ---
 
 # Sandbox Launcher
@@ -168,3 +169,14 @@ Sandbox start ≤150 ms on native backends ([[L4 Product Metrics]]). Apple conta
 - https://docs.docker.com/ai/sandboxes/architecture/
 - https://github.com/apple/containerization
 - Report: component diagram, `SandboxBackend` trait, platform table, `.git` and rollback Proposals, "Fail closed"; research notes 01 Q3, Q6, Q7 and 05 section 3.2.
+
+## Implementation notes
+
+- 2026-09-24: `SandboxSpec` gained `stdio` (the agent's fds, passed from the CLI), `tty_path`, `session_dir`, `shim` and `macos_keychain`; `SandboxHandle` carries the verified layer list and Linux placeholders. `CompiledFsPolicy` gained `deny_entry` (entries that may not be renamed) and `missing_protected`.
+- 2026-09-24: Linux uses a private tmpfs `/tmp` and masks `$XDG_RUNTIME_DIR` (dbus, podman and other user sockets); secret directories are masked with read-only tmpfs and secret files with `/dev/null`. The Landlock read rules are an allowlist computed at start (every path except the denied subtrees), so a secret created later next to a denied path is unreadable.
+- 2026-09-24: inside unprivileged Docker containers bwrap cannot mount a fresh procfs (`Can't mount proc on /newroot/proc`) because Docker masks `/proc` paths; the probe now runs bwrap with the same mounts as a launch so `broker doctor` reports this instead of `broker run` failing later. Tests ran with `--security-opt systempaths=unconfined`.
+
+## Build log
+
+- 2026-09-24: built `SandboxBackend` with `macos-seatbelt` and `linux-native`, the filesystem compiler, and the in-sandbox shim `broker-sandbox-shim` (`code/crates/launcher/`). Container and VM backends are phase-2 stubs that always refuse. The shim applies the inner layers (Linux: `PR_SET_NO_NEW_PRIVS`, bridge, Landlock, seccomp), verifies from inside that a canary read, protected-directory writes and direct connects fail (EPERM/EACCES/ENETUNREACH count, a refused connection from a peer does not), writes a status line to brokerd on fd 3 and only then execs the agent. Every fd above 3 is closed before exec. Tests: SBPL and bwrap golden tests, `mandatory_never_writable` property test, `i2_launch_refuses_when_any_layer_is_missing` (fault injection for every layer, `BROKER_FAULT_INJECT`, which can only cause refusals), `i2_missing_shim_refuses_launch`, conformance categories 5, 9 and 10 on macOS 26 and Linux 6.12.
+- 2026-09-24: deviations recorded in [[ADR-016 macOS M0 Compatibility Exceptions]], [[ADR-017 Landlock Filesystem Layer Required]], [[ADR-018 seccomp Filter Shape for M0]] and [[ADR-019 Mandatory Deny-Write List Additions]].

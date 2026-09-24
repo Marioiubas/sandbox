@@ -12,6 +12,7 @@ summary: AUTO
 related: AUTO
 sources: AUTO
 milestone: M0
+code: ["code/"]
 ---
 
 # M0 Contained Run
@@ -183,3 +184,17 @@ Next milestone: [[M1 Secrets Outside]], which adds TLS termination and credentia
 
 - Report: milestone table row "Weeks 1-2 M0 Contained run"; recommended layered design per platform; topology and canonicaliser sections.
 - Research note 05 section 5.2 M0 row (curl to a non-allowlisted host fails).
+
+## Build log
+
+- 2026-09-24: implementation complete for the M0 scope; **milestone not yet `built`** because A1 is verified in 1 of 8 agent × OS cells.
+- A1 (agents finish a "fix failing test" task): scripted as `code/tests/e2e/fix_failing_test.sh <claude|codex>`. **PASS on macOS 26.5 with Claude Code 2.1.268** (Haiku; the agent edited `calc.py` and ran the test inside the sandbox; host-side checks: test passes, test file unchanged, git hooks and config untouched, audit chain verifies). Not run: Codex (not installed on the build machine), macOS 15, Ubuntu 22.04/24.04 (need agent CLIs and credentials on runners).
+- A2 (categories 3, 4, 5, 9, 10 fully denied, controls succeed): PASS on macOS 26.5 (Seatbelt) and Linux 6.12 (bwrap + Landlock ABI 6 + seccomp, Docker, Ubuntu 24.04 userland). Tests: `cat03_name_resolution`, `cat04_ip_literals_and_encodings`, `cat05_alternate_protocols`, `cat09_proxy_bypass`, `cat10_filesystem`, `cat10_git_commit_still_works`, `cat10_non_repo_directory_cannot_grow_git_hooks`. The CI matrix (macOS 15/26, Ubuntu 22.04/24.04 runners) is configured in `.github/workflows/ci.yml`.
+- A3 (NUL-byte, CRLF, IDNA, IP-literal, 169.254.169.254, DNS TXT): PASS: `bypass_corpus_denied_with_reason_through_every_ingress_mode`, `i6_bypass_corpus_end_to_end`, `cat03_name_resolution`, `cat04_ip_literals_and_encodings`.
+- A4 (`~/.ssh/id_ed25519` unreadable): PASS on macOS 26.5 against the real key path (`cat10_filesystem`); CI plants a canary key on runners.
+- A5 (launch refuses when any layer is missing): PASS: `i2_launch_refuses_when_any_layer_is_missing`, `i2_missing_shim_refuses_launch`.
+- A6 (curl to a non-allowlisted host fails and is logged): PASS (manual `curl` in a session; probe `proxy connect evil.example` in `i9_every_decision_is_chained_and_explainable`).
+- A7 (every deny logged with a reason): PASS: every network deny in the pipeline and conformance tests is asserted in the audit log with its reason.
+- Totals at this entry: 109 tests pass on macOS and on Linux; clippy clean with `-D warnings` on both; five fuzz targets ran 60 s each without a crash.
+- ADRs: [[ADR-016 macOS M0 Compatibility Exceptions]], [[ADR-017 Landlock Filesystem Layer Required]], [[ADR-018 seccomp Filter Shape for M0]], [[ADR-019 Mandatory Deny-Write List Additions]].
+- Remaining to mark M0 `built`: A1 for Codex and for macOS 15, Ubuntu 22.04 and 24.04; a green CI run on all four runners.

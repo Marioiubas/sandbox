@@ -158,3 +158,7 @@ code/
 - Report: "Repository layout" tree and licence line.
 - Research note 05 section 5.1 (variant tree).
 - [[CLAUDE]] section 7 (code/ is the repository root).
+
+## Build log
+
+- 2026-09-24: created `code/` with the twelve crates (`tls` holds only the SNI peek, and `l7`, `creds`, `grant`, `learn`, `mcpguard` are placeholders until their milestones), `profiles/*.toml` (embedded into brokerd), `tests/conformance` (a workspace crate with the `conformance-probe` binary and the harness), `tests/conformance/NN-*/` category directories, `tests/bypass-corpus/hosts.toml`, `tests/fuzz` (cargo-fuzz, outside the workspace), `tests/e2e/fix_failing_test.sh`, `packaging/apparmor/broker-bwrap`, `docs/threat-model.md`, `docs/policy-reference.md`. CI lives at the repository root (`.github/workflows/ci.yml`) because the vault and `code/` share one git repository.

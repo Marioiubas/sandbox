@@ -4,7 +4,7 @@ aliases: ["brokerd", "broker-cli", "Control API", "ctl.sock"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/isolation, topic/approval, platform/macos, platform/linux, boundary/tb1, boundary/tb3, invariant/i2, invariant/i8, milestone/m0]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "broker-cli (run, init, learn, suggest, why, audit, login, mcp wrap/con
 related: ["[[Request and Session Lifecycle]]", "[[Sandbox Launcher]]", "[[Control Plane and Policy Bundles]]", "[[seccomp-bpf]]", "[[Seatbelt]]", "[[M0 Contained Run]]", "[[Policy Learning Loop]]", "[[Repository Layout]]", "[[I8 No Flag Disables Isolation]]", "[[I2 Fail-Closed Launch]]", "[[I5 Config Outside Writable Mounts]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Netguard Ingress]]", "[[MCP Guard]]", "[[Credential Injector and Issuers]]", "[[Audit Recorder and Event Schema]]", "[[Policy Engine and Entity Builder]]", "[[broker.toml Human Policy Layer]]", "[[Okta Cross App Access]]", "[[Entra Agent ID]]", "[[Fatigue-Resistant Approval Interfaces]]", "[[Core Trait Contracts]]", "[[Architecture Overview]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[Tech Stack]]", "[[L4 Product Metrics]]"]
 sources: ["https://github.com/anthropic-experimental/sandbox-runtime", "https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md", "https://adversa.ai/blog/openclaw-security-101-vulnerabilities-hardening-2026/"]
 milestone: M0
+code: ["code/crates/broker-cli/src/main.rs", "code/crates/broker-cli/src/cmd/", "code/crates/brokerd/src/server.rs", "code/crates/brokerd/src/session.rs", "code/crates/brokerd/src/proto.rs", "code/crates/brokerd/src/profiles.rs"]
 ---
 
 # Broker CLI and Daemon
@@ -182,3 +183,14 @@ Sandbox start ≤150 ms on native backends and session-start overhead within the
 - https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md
 - https://adversa.ai/blog/openclaw-security-101-vulnerabilities-hardening-2026/
 - Report: "Interfaces" (control API), component diagram, deployment modes, repository layout, risk "Broker becomes the credential honeypot"; research note 05 sections 3.5 and 3.6.
+
+## Implementation notes
+
+- 2026-09-24: the session record is write-ahead: `session.start` is appended before the sandbox is launched (the agent never starts if the audit log cannot take it), and a new event kind `session.ready` records the layers the shim verified from inside. `session.exited` is sent to the CLI only after teardown and `session.stop` are durable.
+- 2026-09-24: brokerd never runs git on the host (repository config can execute code); the repository root is found by walking up to a `.git` entry. The Task owner is `local:<user>` until M3 identity.
+- 2026-09-24: `BROKER_HOME` roots config, state and runtime in one directory (tests, CI). It chooses where policy is read from, never whether isolation applies.
+
+## Build log
+
+- 2026-09-24: built `broker` (`run`, `doctor`, `why`, `audit verify|tail`, `daemon status|stop`) and `brokerd` (`code/crates/broker-cli/`, `code/crates/brokerd/`). `ctl.sock` is newline-delimited JSON-RPC 2.0 in a 0700 directory, mode 0600, peer UID checked with `peer_cred`; `session.start` carries the CLI's stdin/stdout/stderr as `SCM_RIGHTS` descriptors so brokerd is the parent of the sandbox while the agent keeps the user's terminal; the CLI forwards INT/TERM/HUP/WINCH/QUIT and exits with the agent's status (125 when the broker refuses). `broker run` starts brokerd on demand; brokerd exits when idle. Methods: `session.start/signal/stop`, `decision.explain`, `audit.verify`, `doctor`, `daemon.status/shutdown`. Tests: `no_flag_disables_isolation` (every clap flag enumerated), `agent_flags_after_dashdash_are_passed_verbatim`, `fds_travel_with_the_line`, `i8_*`, `i9_every_decision_is_chained_and_explainable`.
+- 2026-09-24: not built (later milestones): `init`, `learn`, `suggest`, `login`, `mcp`, bundle sync, keychain roots.

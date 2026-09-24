@@ -1,0 +1,54 @@
+[package]
+name = "broker-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+netguard = { path = "../../crates/netguard" }
+tls = { path = "../../crates/tls" }
+brokerd = { path = "../../crates/brokerd" }
+serde_json = "1"
+
+# Not part of the main workspace: built with `cargo +nightly fuzz`.
+[workspace]
+
+[[bin]]
+name = "canon"
+path = "fuzz_targets/canon.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "connect"
+path = "fuzz_targets/connect.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "socks5"
+path = "fuzz_targets/socks5.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sni"
+path = "fuzz_targets/sni.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jsonrpc"
+path = "fuzz_targets/jsonrpc.rs"
+test = false
+doc = false
+bench = false

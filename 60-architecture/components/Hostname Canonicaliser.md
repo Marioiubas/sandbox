@@ -4,7 +4,7 @@ aliases: ["Canonicaliser"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/egress, topic/dns, control/egress, invariant/i6, boundary/tb3, milestone/m0]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "The single canonicaliser: reject NUL, CR/LF and % in hostnames, traili
 related: ["[[I6 Single Canonicaliser]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]", "[[Broker DNS Resolver]]", "[[Netguard Ingress]]", "[[L1 Conformance Suite]]", "[[Conformance Probe Matrix]]", "[[Policy Engine and Entity Builder]]", "[[Cedar]]", "[[Broker Cedar Schema]]", "[[Core Trait Contracts]]", "[[TLS Termination and Per-Session CA]]", "[[Git Smart-HTTP Adapter]]", "[[MCP Guard]]", "[[Risk Register]]", "[[Red-Team Plan]]", "[[M0 Contained Run]]", "[[M4 Harden and Ship]]", "[[Gemini CLI Prefix Allowlist Bypass]]", "[[Claude Code Path and Command Injection CVEs]]", "[[ADR-009 Broker-Only DNS Resolution]]"]
 sources: ["https://oddguan.com/blog/second-time-same-sandbox-anthropic-claude-code-network-allowlist-bypass-data-exfiltration/", "https://www.penligent.ai/hackinglabs/claude-code-sandbox-bypass/", "https://arxiv.org/abs/2405.17737", "https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices", "https://www.anthropic.com/engineering/how-we-contain-claude"]
 milestone: M0
+code: ["code/crates/netguard/src/canon.rs", "code/crates/netguard/tests/lint_single_canonicaliser.rs", "code/tests/bypass-corpus/hosts.toml", "code/tests/fuzz/fuzz_targets/canon.rs"]
 ---
 
 # Hostname Canonicaliser
@@ -145,3 +146,13 @@ A UTS 46 IDNA implementation and a public-suffix data set (crates not selected i
 - https://modelcontextprotocol.io/specification/2025-06-18/basic/security_best_practices
 - https://www.anthropic.com/engineering/how-we-contain-claude
 - Report: canonicaliser rejection list and matching rule, tech-stack testing row, L1 thresholds; research notes 01 Q5, 04b Q1 and 05 sections 3.2 and 4.
+
+## Implementation notes
+
+- 2026-09-24: IDNA uses UTS 46 non-transitional mapping with STD3 rules and `Hyphens::CheckFirstLast` (idna 1.1.0), because `Hyphens::Check` rejects real-world names with `--` in positions 3-4 (for example CDN nodes). Non-ASCII label separators (U+3002, U+FF0E, U+FF61) are rejected rather than mapped, since parsers disagree on them.
+- 2026-09-24: beyond the report's list, the canonicaliser also rejects `*`, `:` outside IPv6 brackets, bare brackets, and any control byte or DEL; single-label names (`localhost`) canonicalise and are left to policy.
+- 2026-09-24: metadata addresses recognised by `classify_addr`: 169.254.169.254, 169.254.170.2 (ECS), 100.100.100.200 (Alibaba), 192.0.0.192 (Oracle), fd00:ec2::254 (AWS IPv6); NAT64 `64:ff9b::/96` and IPv4-mapped addresses are classified by their embedded IPv4.
+
+## Build log
+
+- 2026-09-24: built `netguard::canon` (`canon_host`, `canon_path`, `classify_addr`, `HostPattern`) in `code/crates/netguard/src/canon.rs`. Private fields on `CanonicalHost`/`CanonicalPath`; `CanonicalHost::from_ip` covers SOCKS5 binary addresses with the same mapped-IPv6 rule. Tests: unit tests plus proptest properties (idempotence on arbitrary bytes, LDH-only output, spliced forbidden bytes rejected, label-boundary wildcards, pattern/runtime agreement, safe paths); the public corpus `code/tests/bypass-corpus/hosts.toml` (36 cases) at canonicaliser level (`corpus_matches_the_canonicaliser`) and through CONNECT and SOCKS5 (`bypass_corpus_denied_with_reason_through_every_ingress_mode`, `i6_bypass_corpus_end_to_end`); the I6 lint `crates/netguard/tests/lint_single_canonicaliser.rs`; `cargo-fuzz` target `canon` (60 s smoke, 2.2M runs, no crash). Registrable domain from the compiled-in `psl` crate.

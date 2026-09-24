@@ -92,3 +92,7 @@ Every allow decision on a destination requires **both** the canonical name and t
 - https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md
 - https://arxiv.org/abs/2405.17737
 - Report: invariant I6, canonicaliser paragraph, Cedar limits, L1 thresholds; research notes 04b Q1 and 05 section 4.
+
+## Build log
+
+- 2026-09-24: tests: canonicaliser unit and property tests, `bypass_corpus_denied_with_reason_through_every_ingress_mode`, `i6_bypass_corpus_end_to_end`, `connect_and_socks5_agree`, `cat04_ip_literals_and_encodings`, the lint `lint_single_canonicaliser.rs`, and the `canon` fuzz target. Name and resolved address are both matched; SNI is compared as `CanonicalHost`.
