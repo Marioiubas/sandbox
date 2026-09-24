@@ -43,6 +43,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
 
+mod github;
 mod respond;
 
 use respond::{OutcomeBody, collect, decode_body};
@@ -63,6 +64,8 @@ pub struct L7Ctx {
     /// client repeats it inside the tunnel.
     pub channel_sentinel: Option<Vec<u8>>,
     pub max_body: usize,
+    /// GitHub repository visibility learned this session (repo → visibility).
+    pub visibility: std::sync::Mutex<std::collections::HashMap<String, policy::github::Visibility>>,
 }
 
 struct Upstream {
@@ -225,16 +228,17 @@ impl Conn {
         } else {
             None
         };
-        let (actions, push) = match l7::classify::actions(&plan, decoded.as_deref()) {
+        let (mut actions, push) = match l7::classify::actions(&plan, decoded.as_deref()) {
             Ok(a) => a,
             Err(r) => return self.deny(&rid, r, vec![], &[], None, None),
         };
         drop(decoded);
+        self.fill_visibility(&mut actions);
         let verbs: Vec<String> = actions.iter().map(|a| a.verb()).collect();
         let actions_json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
 
         // 4. Authorize: every action must be allowed.
-        let dec = self.ctx.policy.authorize_l7(&self.adm, &actions);
+        let mut dec = self.ctx.policy.authorize_l7(&self.adm, &actions);
         let shadow = self.shadow_note(&actions, dec.result.is_ok());
         if let Err(reason) = dec.result {
             let per: Vec<String> = dec
@@ -265,11 +269,40 @@ impl Conn {
             },
         };
 
+        // 4b. GitHub: learn unknown repository visibility with the bound
+        // credential, then decide again with it; that decision is final.
+        let unknown = self.unknown_repos(&actions);
+        if !unknown.is_empty() {
+            self.resolve_visibility(&unknown, issued.as_ref().map(|(i, _, spec, _)| (i.as_ref(), spec))).await;
+            self.fill_visibility(&mut actions);
+            let again = self.ctx.policy.authorize_l7(&self.adm, &actions);
+            let cred = |d: &policy::L7Decision| d.binding.as_ref().map(|b| b.credential().id.clone());
+            if let Err(reason) = again.result {
+                let json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
+                return self.deny_with(
+                    &rid,
+                    reason,
+                    again.policy_ids,
+                    &verbs,
+                    vec![("actions", json.into())],
+                    push.as_ref(),
+                );
+            }
+            if cred(&again) != cred(&dec) {
+                return self.deny(&rid, Reason::AmbiguousCredential, again.policy_ids, &verbs, None, push.as_ref());
+            }
+            dec = again;
+        }
+        let actions_json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
+        let shadow = self.shadow_note(&actions, true);
+        let high_risk = dec.binding.as_ref().is_some_and(|b| b.credential().high_risk);
+
         // Write-ahead audit of the allow (I9): no row, no request.
         let mut ev = self
             .base_event(EventKind::RequestDecision, &rid, &verbs)
             .allow(dec.policy_ids.clone())
-            .detail("actions", actions_json.clone());
+            .detail("actions", actions_json.clone())
+            .detail("labels", self.labels_detail());
         if let Some(w) = dec.would_deny {
             // Record mode: the enforce-mode decision, for the learner.
             ev = ev.audit_mode().detail("would_deny", w.as_str());
@@ -294,6 +327,7 @@ impl Conn {
             return self.deny(&rid, Reason::AuditUnavailable, dec.policy_ids, &verbs, None, push.as_ref());
         }
         self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
+        self.raise_labels(&rid, &actions, high_risk);
 
         // 5b. Strip client credentials and hop-by-hop headers; attach ours.
         let query = creds::strip(&mut parts.headers, path.query());

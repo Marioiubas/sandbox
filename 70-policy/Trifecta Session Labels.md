@@ -4,7 +4,7 @@ aliases: ["Trifecta Context", "Sequence Rules", "Invariant Guardrails", "Session
 type: concept
 section: policy
 tags: [sandbox/policy, concept, topic/ifc, topic/policy, control/hitl, control/task-tok, milestone/m3, evidence/conflict]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -119,3 +119,7 @@ A CI job fixes a bug reported in a public issue on the private repo `acme/web`:
 - [General Analysis: Supabase MCP](https://generalanalysis.com/blog/supabase-mcp-blog)
 - [FlowSeal](https://arxiv.org/html/2609.14003); [SkillGuard](https://arxiv.org/abs/2608.30041); [FIDES](https://arxiv.org/html/2505.23643); [AgentDyn](https://arxiv.org/html/2602.03117v1)
 - [AWS Security Blog: AgentCore Policy](https://aws.amazon.com/blogs/security/why-policy-in-amazon-bedrock-agentcore-chose-cedar-for-securing-agentic-workflows/)
+
+## Build log
+
+- 2026-09-24 (M3): built for GitHub API facts ([[ADR-029 GitHub API Adapter and Session Labels as Built]]): raise-only labels (property test), raised before forwarding, shared with a shadow candidate, on every L7 decision row and as `session.label` events; `risk = "high"` credentials raise `sensitive_read`; the Rule-of-Two forbid is now live. Not built: web pages as untrusted input, the public-sink org option, author-association filtering, sequence automata, step-up approval; git clones of private repositories do not raise `sensitive_read` yet. Tests: `m3_github::d5_toxic_flow_is_stopped_at_the_public_write`, `a_public_issue_then_a_pr_on_that_public_repo_is_allowed`.

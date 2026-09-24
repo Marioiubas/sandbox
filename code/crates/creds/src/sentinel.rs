@@ -134,6 +134,7 @@ mod tests {
             swap_body: false,
             hosts: vec![HostPattern::parse(host).unwrap()],
             ttl: None,
+            high_risk: false,
         })
     }
 

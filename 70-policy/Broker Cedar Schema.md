@@ -194,3 +194,4 @@ The paper audit's inference that argument provenance, reader sets and trifecta s
 
 - 2026-09-24: compiled and validated (strict) with `cedar-policy` 4.13.0 as `code/crates/policy/src/cedar/schema.cedarschema`; the default and ceiling policies and every compiler-emitted policy shape validate against it (`schema_and_default_policies_validate`). Changes from the sketch are listed in [[ADR-022 Cedar Schema and Engine as Built]].
 - 2026-09-24: `context.session.mode` gains `"shadow"` (enforce semantics for the applied decision; no policy tests for it) ([[ADR-026 Shadow Mode as Built]]).
+- 2026-09-24 (M3): `GitHubCtx { session, port, method, path_str }`; `repo.read`, `pr.create`, `pr.merge`, `issue.comment`, `contents.write` on `Repo`; `github.read`, `gist.create` on `Host`; `Repo.visibility` from the broker's lookup; `Credential.risk` from config ([[ADR-029 GitHub API Adapter and Session Labels as Built]]).

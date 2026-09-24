@@ -39,6 +39,12 @@ pub struct EgressEntry {
     pub paths: Option<Vec<String>>,
     /// `protocol = "git"`: fetch and push rules.
     pub allow: Option<GitAllow>,
+    /// `protocol = "github"`: granted verbs (`repo.read`, `pr.create`, …);
+    /// empty means none.
+    pub verbs: Option<Vec<String>>,
+    /// `protocol = "github"`: repositories the repository verbs apply to;
+    /// absent means `["${repo_remote}"]` (the task repository only).
+    pub repos: Option<Vec<String>>,
     /// A credential the broker attaches to requests this entry allows.
     pub credential: Option<CredentialSpec>,
     /// Certificate-pinning clients: never terminate TLS for this host, and
@@ -54,6 +60,8 @@ impl EgressEntry {
             || self.methods.is_some()
             || self.paths.is_some()
             || self.allow.is_some()
+            || self.verbs.is_some()
+            || self.repos.is_some()
             || self.credential.is_some()
     }
 }
@@ -126,6 +134,9 @@ pub struct CredentialSpec {
     pub repos: Option<Vec<String>>,
     /// Upper bound on reuse of a minted token (`30m`, `1h`, `900s`).
     pub ttl: Option<String>,
+    /// `high`: using this credential raises the session's `sensitive_read`
+    /// label (Trifecta Session Labels). Default `standard`.
+    pub risk: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]

@@ -49,6 +49,9 @@ pub struct EgressPolicy {
     repo_grants: Vec<Grant>,
     engine: Engine,
     session: SessionInfo,
+    /// The session's trifecta labels, raised by the broker (shared with a
+    /// shadow candidate so both see the same session).
+    labels: Arc<crate::github::Labels>,
 }
 
 impl Default for EgressPolicy {
@@ -179,7 +182,7 @@ impl EgressPolicy {
     ) -> Result<Self, CompileError> {
         let grants = build_grants(layers, env)?;
         let engine = Engine::new(&compile_all(&grants)?).map_err(CompileError::Cedar)?;
-        Ok(EgressPolicy { grants, repo_grants: vec![], engine, session: env.session.clone() })
+        Ok(EgressPolicy { grants, repo_grants: vec![], engine, session: env.session.clone(), labels: Arc::default() })
     }
 
     /// Conjoin an approved repository layer: it can only narrow (I4). Keys
@@ -233,6 +236,17 @@ impl EgressPolicy {
         &self.session
     }
 
+    /// The session's labels (raise-only).
+    pub fn labels(&self) -> &Arc<crate::github::Labels> {
+        &self.labels
+    }
+
+    /// Share another policy's labels (a shadow candidate of the same session).
+    pub fn with_labels(mut self, labels: Arc<crate::github::Labels>) -> Self {
+        self.labels = labels;
+        self
+    }
+
     pub fn mode(&self) -> Mode {
         self.session.mode
     }
@@ -260,13 +274,22 @@ impl EgressPolicy {
     }
 
     /// A Cedar deny's reason: a forbid's `@reason`, the repo layer, an
-    /// evaluation error, or else the explainer's most specific reason.
+    /// evaluation error, or else the explainer's most specific reason. An
+    /// approval-conditional forbid (`needs_approval`, `rule_of_two`) yields
+    /// to a "not granted" explanation: approval would not help there.
     fn deny_reason(&self, v: &Verdict, explain: impl FnOnce() -> Reason) -> Reason {
         if !v.errors.is_empty() {
             return Reason::PolicyError;
         }
         if let Some(r) = v.determining.iter().find_map(|id| self.engine.reason_of(id)) {
-            return reason_from(r);
+            let r = reason_from(r);
+            if matches!(r, Reason::NeedsApproval | Reason::RuleOfTwo) {
+                let e = explain();
+                if e != Reason::PolicyDenied {
+                    return e;
+                }
+            }
+            return r;
         }
         if v.repo_denied {
             return Reason::RepoPolicyDenied;
@@ -275,7 +298,7 @@ impl EgressPolicy {
     }
 
     fn session_ctx(&self, mode: Mode) -> Value {
-        ent::session_record(&self.session, mode, ent::now_epoch())
+        ent::session_record_with(&self.session, mode, ent::now_epoch(), self.labels.snapshot())
     }
 
     fn explain_host(&self, host: &CanonicalHost, port: u16) -> (Reason, Vec<String>) {
@@ -406,6 +429,20 @@ impl EgressPolicy {
                 ents.push(ent::repo_entity(&repo, &adm.host));
                 let ctx = move |m: Mode| json!({ "session": self.session_ctx(m), "port": port, "ref": refname, "force": force });
                 (name.to_string(), ent::repo_uid(&repo), ents, Box::new(ctx))
+            }
+            Action::GitHub { verb, repo, visibility, method, path, .. } => {
+                let ctx = move |m: Mode| json!({ "session": self.session_ctx(m), "port": port, "method": method, "path_str": path });
+                // A repository verb without a repository cannot be granted.
+                let res = match (&repo, crate::github::is_repo_verb(&verb)) {
+                    (Some(r), true) => {
+                        ents.push(ent::repo_entity_with(r, &adm.host, visibility));
+                        ent::repo_uid(r)
+                    }
+                    // No entity for it: every permit fails and the request denies.
+                    (None, true) => json!({ "type": "Broker::Repo", "id": "" }),
+                    _ => ent::host_uid(&adm.host),
+                };
+                (verb, res, ents, Box::new(ctx))
             }
         }
     }

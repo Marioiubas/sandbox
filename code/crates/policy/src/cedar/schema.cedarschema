@@ -33,6 +33,7 @@ namespace Broker {
   type CredCtx = { session: Session, dest_host: String, dest_domains: Set<String>, port: Long, method: String,
                    path_str: String, verb: String };
   type McpCtx  = { session: Session, tool: String, args_integrity: String };
+  type GitHubCtx = { session: Session, port: Long, method: String, path_str: String };
 
   // L4 admission: may the broker resolve the name (before any DNS query),
   // and connect to the resolved addresses.
@@ -50,9 +51,12 @@ namespace Broker {
 
   action "git.fetch", "git.advertise", "git.push"
     appliesTo { principal: [Task], resource: [Repo], context: GitCtx };
-  // GitHub semantic verbs (emitted by the GitHub API adapter from M3).
-  action "pr.create", "pr.merge", "issue.comment", "contents.write"
-    appliesTo { principal: [Task], resource: [Repo], context: GitCtx };
+  // GitHub API verbs (the GitHub API adapter, M3): on a repository (whose
+  // `visibility` the broker looked up), or on the API host itself.
+  action "repo.read", "pr.create", "pr.merge", "issue.comment", "contents.write"
+    appliesTo { principal: [Task], resource: [Repo], context: GitHubCtx };
+  action "github.read", "gist.create"
+    appliesTo { principal: [Task], resource: [Host], context: GitHubCtx };
 
   action "credential.use"
     appliesTo { principal: [Task], resource: [Credential], context: CredCtx };

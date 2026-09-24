@@ -125,13 +125,18 @@ pub fn host_uid(host: &CanonicalHost) -> Value {
 /// The `Repo` entity (child of its host). Visibility is unknown until the
 /// GitHub API adapter reports it (M3).
 pub fn repo_entity(repo: &RepoId, host: &CanonicalHost) -> Value {
+    repo_entity_with(repo, host, crate::github::Visibility::Unknown)
+}
+
+/// The `Repo` entity with the visibility the broker looked up.
+pub fn repo_entity_with(repo: &RepoId, host: &CanonicalHost, visibility: crate::github::Visibility) -> Value {
     json!({
         "uid": uid("Repo", &repo.to_string()),
         "attrs": {
             "authority": repo.authority(),
             "owner": repo.owner(),
             "full_name": format!("{}/{}", repo.owner(), repo.name()),
-            "visibility": "unknown",
+            "visibility": visibility.as_str(),
         },
         "parents": [host_uid(host)],
     })
@@ -166,11 +171,20 @@ pub fn path_record(path: &str) -> Value {
 }
 
 pub fn session_record(s: &SessionInfo, mode: Mode, now: i64) -> Value {
+    session_record_with(s, mode, now, crate::github::Trifecta::default())
+}
+
+/// The session record with the broker's current trifecta labels.
+pub fn session_record_with(s: &SessionInfo, mode: Mode, now: i64, t: crate::github::Trifecta) -> Value {
     json!({
         "id": s.session_id,
         "now": now,
         "approved": false,
-        "trifecta": { "untrusted_input": false, "sensitive_read": false, "external_effect": false },
+        "trifecta": {
+            "untrusted_input": t.untrusted_input,
+            "sensitive_read": t.sensitive_read,
+            "external_effect": t.external_effect,
+        },
         "mode": mode.as_str(),
     })
 }

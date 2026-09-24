@@ -255,6 +255,20 @@ fn l7_policies(
                 }
             }
         }
+        Protocol::GitHub => {
+            // The verb decides; the request's Http action rides along.
+            out.push(permit(&id("http"), idx, &["http.read".into(), "http.write".into()], &[h.into(), p.into()]));
+            let (repo_verbs, host_verbs): (Vec<String>, Vec<String>) =
+                rules.verbs().iter().cloned().partition(|v| crate::github::is_repo_verb(v));
+            if !repo_verbs.is_empty() {
+                let any: Vec<String> = rules.repos().iter().map(repo_cond).collect();
+                let rc = if any.is_empty() { "false".to_string() } else { format!("({})", any.join(" || ")) };
+                out.push(permit(&id("verbs"), idx, &repo_verbs, &[h.into(), p.into(), rc]));
+            }
+            if !host_verbs.is_empty() {
+                out.push(permit(&id("host-verbs"), idx, &host_verbs, &[h.into(), p.into()]));
+            }
+        }
         Protocol::Git => {
             let fetch = rules.fetch();
             if !fetch.is_empty() {
@@ -303,10 +317,15 @@ pub fn record_policies() -> Vec<Compiled> {
     // A forced push is never recorded: only a grant with `force = true` allows one.
     let push = "@id(\"record#push\")\npermit (principal, action == Broker::Action::\"git.push\", resource)\n\
                 when { context.session.mode == \"record\" && !context.force };";
+    // GitHub verbs on a GitHub API grant's host (the default forbids,
+    // including merge-needs-approval, still apply).
+    let github = "@id(\"record#github\")\npermit (principal, action in [Broker::Action::\"repo.read\", Broker::Action::\"pr.create\", Broker::Action::\"pr.merge\", Broker::Action::\"issue.comment\", Broker::Action::\"contents.write\", Broker::Action::\"github.read\", Broker::Action::\"gist.create\"], resource)\n\
+                  when { context.session.mode == \"record\" };";
     vec![
         Compiled { id: "record#net".into(), grant: None, src: net.into() },
         Compiled { id: "record#l7".into(), grant: None, src: l7.into() },
         Compiled { id: "record#push".into(), grant: None, src: push.into() },
+        Compiled { id: "record#github".into(), grant: None, src: github.into() },
     ]
 }
 

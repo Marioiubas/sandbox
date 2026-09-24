@@ -176,3 +176,26 @@ it. `broker policy shadow --report` lists the requests the candidate would
 deny that your policy allowed, and those it would allow that your policy
 denied. `broker policy shadow --off` ends it. `broker learn` sessions are
 never shadowed. To enforce a candidate, make it your `broker.toml`.
+
+## The GitHub API (M3)
+
+```toml
+[[egress]]
+host = "api.github.com"
+protocol = "github"
+verbs = ["repo.read", "pr.create", "issue.comment"]   # never pr.merge by default
+repos = ["${repo_remote}"]                           # absent = the task repository only
+credential = { kind = "github_app", issuer = "acme", permissions = { contents = "read", pull_requests = "write" }, repos = ["${repo_remote}"] }
+```
+
+Every request on a GitHub grant is a verb, or it is denied: `repo.read`
+(`GET` under `/repos/{owner}/{repo}`), `pr.create`, `pr.merge`,
+`issue.comment`, `contents.write`, `gist.create`, and `github.read` (other
+reads). Unmapped routes are denied, and so is GraphQL for now. `pr.merge`
+also needs approval. The broker looks up each repository's visibility
+itself and tracks two session labels: reading a private repository sets
+**sensitive read**, and reading issue or PR text (or search results) from a
+public repository sets **untrusted input**. Once both are set, every write
+in that session is denied (the Rule of Two). A new `broker run` starts a
+new session. Mark a credential `risk = "high"` to treat any use of it as a
+sensitive read.

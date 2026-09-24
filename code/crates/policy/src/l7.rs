@@ -23,6 +23,8 @@ pub enum Protocol {
     Http,
     Git,
     Registry,
+    /// The GitHub REST API: every request maps to a verb (GitHub API Adapter).
+    GitHub,
 }
 
 impl Protocol {
@@ -31,6 +33,7 @@ impl Protocol {
             Protocol::Http => "http",
             Protocol::Git => "git",
             Protocol::Registry => "registry",
+            Protocol::GitHub => "github",
         }
     }
 }
@@ -55,6 +58,18 @@ pub enum Action {
         force: bool,
         update: &'static str,
     },
+    /// A GitHub API verb (`pr.create`, `repo.read`, …) on a repository or
+    /// on the API host; emitted beside the request's `Http` action.
+    GitHub {
+        verb: String,
+        repo: Option<RepoId>,
+        /// Filled by the broker from its session cache before authorizing.
+        visibility: crate::github::Visibility,
+        /// The response carries issue, PR or comment bodies (label input).
+        bodies: bool,
+        method: String,
+        path: String,
+    },
 }
 
 impl Action {
@@ -66,6 +81,10 @@ impl Action {
             Action::GitPushAdvertise { repo } => {
                 serde_json::json!({ "kind": "git.advertise", "repo": repo.to_string() })
             }
+            Action::GitHub { verb, repo, visibility, .. } => serde_json::json!({
+                "kind": "github", "verb": verb, "repo": repo.as_ref().map(|r| r.to_string()),
+                "visibility": visibility.as_str(),
+            }),
             Action::GitPush { repo, refname, force, update } => serde_json::json!({
                 "kind": "git.push", "repo": repo.to_string(), "ref": refname, "force": force, "update": update,
             }),
@@ -80,6 +99,14 @@ impl Action {
             "http" => Action::Http { method: s("method")?, path: s("path")? },
             "git.fetch" => Action::GitFetch { repo: repo()? },
             "git.advertise" => Action::GitPushAdvertise { repo: repo()? },
+            "github" => Action::GitHub {
+                verb: s("verb").filter(|v| crate::github::is_verb(v))?,
+                repo: s("repo").and_then(|r| RepoId::parse(&r)),
+                visibility: crate::github::Visibility::Unknown,
+                bodies: false,
+                method: String::new(),
+                path: String::new(),
+            },
             "git.push" => Action::GitPush {
                 repo: repo()?,
                 refname: s("ref")?,
@@ -106,6 +133,8 @@ impl Action {
             Action::GitPush { repo, refname, force, update } => {
                 format!("git.push {repo} {refname} force={force} ({update})")
             }
+            Action::GitHub { verb, repo: Some(r), .. } => format!("github {verb} {r}"),
+            Action::GitHub { verb, repo: None, .. } => format!("github {verb}"),
         }
     }
 }
@@ -256,6 +285,8 @@ pub struct CredentialDef {
     /// Hosts the credential (and its sentinel) is bound to.
     pub hosts: Vec<HostPattern>,
     pub ttl: Option<Duration>,
+    /// `risk = "high"`: using it raises the session's `sensitive_read`.
+    pub high_risk: bool,
 }
 
 /// Proof that a policy decision allowed attaching this credential. Only
@@ -295,6 +326,9 @@ pub struct L7Rules {
     paths: Option<Vec<PathPattern>>,
     fetch: Vec<RepoPattern>,
     push: Vec<PushRuleC>,
+    /// `protocol = "github"`: granted verbs and the repositories they apply to.
+    verbs: BTreeSet<String>,
+    repos: Vec<RepoPattern>,
     pub credential: Option<Arc<CredentialDef>>,
 }
 
@@ -443,6 +477,11 @@ fn compile_credential(
         swap_body: c.swap_body,
         hosts: vec![pattern.clone()],
         ttl,
+        high_risk: match c.risk.as_deref() {
+            None | Some("standard") => false,
+            Some("high") => true,
+            Some(r) => return Err(format!("credential {grant_id}: risk {r:?} must be standard or high")),
+        },
     })
 }
 
@@ -466,8 +505,10 @@ pub fn compile_rules(
         None | Some("http") => Protocol::Http,
         Some("git") => Protocol::Git,
         Some("registry") => Protocol::Registry,
-        Some(p) => return Err(format!("{grant_id}: unknown protocol {p:?} (http, git, registry)")),
+        Some("github") => Protocol::GitHub,
+        Some(p) => return Err(format!("{grant_id}: unknown protocol {p:?} (http, git, registry, github)")),
     };
+    let (verbs, repos) = crate::github::compile_verbs(grant_id, e, protocol, env)?;
     let methods = match &e.methods {
         None if protocol == Protocol::Registry => Some(["GET", "HEAD"].iter().map(|s| s.to_string()).collect()),
         None => None,
@@ -490,7 +531,7 @@ pub fn compile_rules(
         .map_err(|m| format!("{grant_id}: {m}"))?;
     let (mut fetch, mut push) = (Vec::new(), Vec::new());
     match (&e.allow, protocol) {
-        (Some(_), Protocol::Http | Protocol::Registry) => {
+        (Some(_), Protocol::Http | Protocol::Registry | Protocol::GitHub) => {
             return Err(format!("{grant_id}: allow = {{ fetch, push }} needs protocol = \"git\""));
         }
         (_, Protocol::Git) if e.methods.is_some() || e.paths.is_some() => {
@@ -526,7 +567,7 @@ pub fn compile_rules(
         .map(|c| compile_credential(grant_id, c, protocol, pattern, env))
         .transpose()?
         .map(Arc::new);
-    Ok(Some(L7Rules { protocol, methods, paths, fetch, push, credential }))
+    Ok(Some(L7Rules { protocol, methods, paths, fetch, push, verbs, repos, credential }))
 }
 
 /// Deny reasons ranked from least to most specific, for reporting.
@@ -535,6 +576,8 @@ fn rank(r: Reason) -> u8 {
         Reason::GitForcePush => 3,
         Reason::GitRefNotAllowed => 2,
         Reason::GitRepoNotAllowed => 1,
+        Reason::GithubRepoNotAllowed => 2,
+        Reason::GithubVerbNotAllowed => 1,
         _ => 0,
     }
 }
@@ -552,6 +595,12 @@ impl L7Rules {
     pub fn push_rules(&self) -> &[PushRuleC] {
         &self.push
     }
+    pub fn verbs(&self) -> &BTreeSet<String> {
+        &self.verbs
+    }
+    pub fn repos(&self) -> &[RepoPattern] {
+        &self.repos
+    }
 
     /// The reference (explainer) evaluation of one action against this
     /// grant: Cedar decides; this names the most specific unmet condition.
@@ -561,6 +610,11 @@ impl L7Rules {
                 let m_ok = self.methods.as_ref().is_none_or(|ms| ms.contains(method));
                 let p_ok = self.paths.as_ref().is_none_or(|ps| ps.iter().any(|p| p.matches(path)));
                 if m_ok && p_ok { Ok(()) } else { Err(Reason::L7NoRuleMatched) }
+            }
+            // On a GitHub API grant the verb decides; its Http action rides along.
+            (Action::Http { .. }, Protocol::GitHub) => Ok(()),
+            (Action::GitHub { verb, repo, .. }, Protocol::GitHub) => {
+                crate::github::rule_allows(&self.verbs, &self.repos, verb, repo.as_ref())
             }
             (Action::GitFetch { repo }, Protocol::Git) => {
                 if self.fetch.iter().any(|p| p.matches(repo)) {

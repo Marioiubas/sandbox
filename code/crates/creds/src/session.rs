@@ -269,6 +269,7 @@ mod tests {
             swap_body: false,
             hosts: vec![HostPattern::parse("api.anthropic.com").unwrap()],
             ttl: None,
+            high_risk: false,
         });
         let text = "version = 1\n[[egress]]\nhost = \"api.anthropic.com\"\n\
                     credential = { kind = \"static\", ref = \"env:KEY_SRC\", header = \"x-api-key\" }\n";

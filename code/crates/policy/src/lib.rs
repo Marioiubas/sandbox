@@ -15,6 +15,7 @@ pub mod egress;
 pub mod exporters;
 #[cfg(feature = "gates")]
 pub mod gates;
+pub mod github;
 pub mod glob;
 pub mod l7;
 pub mod repo;

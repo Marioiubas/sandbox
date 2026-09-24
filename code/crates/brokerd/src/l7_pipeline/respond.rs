@@ -89,7 +89,10 @@ impl Conn {
         push: Option<&PushInfo>,
     ) -> Response<RespBody> {
         self.ctx.stats.denied.fetch_add(1, Ordering::Relaxed);
-        let mut ev = self.base_event(EventKind::RequestDecision, rid, verbs).deny(reason, policy_ids);
+        let mut ev = self
+            .base_event(EventKind::RequestDecision, rid, verbs)
+            .deny(reason, policy_ids)
+            .detail("labels", self.labels_detail());
         for (k, v) in extra {
             ev = ev.detail(k, v);
         }

@@ -75,8 +75,8 @@ The motivating incidents: a public issue drove an agent to read private repos wi
 
 **Trifecta and GitHub verbs**
 
-- [ ] `crates/policy/src/trifecta.rs`: `sensitive_read` flips on a private-repo read (visibility known from the proxied API) or a high-risk credential; `untrusted_input` flips on public issues/PRs, arbitrary web pages or designated ticket sources; `external_effect` is any write-class action.
-- [ ] `crates/l7/src/adapters/github_api.rs`: map REST method/path and GraphQL operations to verbs (`pr.create`, `pr.merge`, `issue.comment`, `contents.write`) so "open a PR but never merge" is one rule ([[GitHub API Adapter]]).
+- [x] `crates/policy/src/trifecta.rs`: `sensitive_read` flips on a private-repo read (visibility known from the proxied API) or a high-risk credential; `untrusted_input` flips on public issues/PRs, arbitrary web pages or designated ticket sources; `external_effect` is any write-class action. (built as `crates/policy/src/github.rs` and `crates/brokerd/src/l7_pipeline/github.rs`; git clones do not raise `sensitive_read` yet: [[ADR-029 GitHub API Adapter and Session Labels as Built]])
+- [x] `crates/l7/src/adapters/github_api.rs`: map REST method/path and GraphQL operations to verbs (`pr.create`, `pr.merge`, `issue.comment`, `contents.write`) so "open a PR but never merge" is one rule ([[GitHub API Adapter]]). (built as `crates/l7/src/github.rs`, REST only; GraphQL denied: [[ADR-029 GitHub API Adapter and Session Labels as Built]])
 - [ ] Org policy option: forbid public-sink writes whenever `untrusted_input` is set (Willison's "[A]+[C] without [B]" critique).
 
 **Probes**
@@ -158,3 +158,7 @@ Next milestone: [[M4 Harden and Ship]].
 
 - Report: milestone row "Weeks 7-8 M3 CI, identity, MCP"; TB7; deployment modes; MCP guard; trifecta context; enterprise identity.
 - Research note 05 sections 5.2 M3 and 3.6 CI mode (`broker/setup@v1`).
+
+## Build log
+
+- 2026-09-24: step 1 built: the GitHub API adapter and session trifecta labels ([[ADR-029 GitHub API Adapter and Session Labels as Built]]). D5 passes against a fake GitHub API: `m3_github::d5_toxic_flow_is_stopped_at_the_public_write` (public issue → private read → public PR denied by the Rule of Two, both labels logged); ADR-010's benign case passes (`a_public_issue_then_a_pr_on_that_public_repo_is_allowed`). Remaining: CI mode (D1), identity (D2, needs Okta/Entra dev tenants), MCP Guard (D3, D4), AWS STS (D6), and D7 across them.

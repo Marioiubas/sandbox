@@ -4,7 +4,7 @@ aliases: ["github_api adapter", "API Verb Mapping"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/git, topic/policy, topic/ifc, control/task-tok, boundary/tb4, milestone/m3, evidence/conflict]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -157,3 +157,7 @@ A GraphQL parser crate and GitHub's OpenAPI description (neither selected in the
 - https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/
 - https://ai.meta.com/blog/practical-ai-agent-security/
 - Report: adapters (GitHub REST and GraphQL), trifecta Proposal, SymCC gates, risk "Misuse within granted scope", learning stage 1; research note 05 sections 3.2 and 5.3.
+
+## Build log
+
+- 2026-09-24 (M3): built for the REST API ([[ADR-029 GitHub API Adapter and Session Labels as Built]]): route table checked against GitHub's REST reference; `protocol = "github"` with `verbs` and `repos`; broker-side visibility lookup with the bound credential and re-decision; labels raised before forwarding. GraphQL is denied until a strict parser maps mutations; the table is hand-written from verified routes (OpenAPI generation arrives with G1). Tests: `l7::github::tests::*`, `policy::cedar::github_tests::*`, `m3_github::*`; fuzz target `github_route`.

@@ -148,6 +148,8 @@ pub fn mine(c: &Corpus, o: &Options) -> Mined {
                             fetch.entry((ob.host.clone(), ob.port, repo.to_string())).or_default().add(ob, a.verb())
                         }
                         Action::GitPushAdvertise { .. } => {} // implied by the push itself
+                        // GitHub verb proposals arrive with the OpenAPI mapping (G1, ADR-028).
+                        Action::GitHub { .. } => {}
                         Action::GitPush { repo, refname, force, .. } => push
                             .entry((ob.host.clone(), ob.port, repo.to_string(), refname.clone(), *force))
                             .or_default()

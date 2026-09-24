@@ -67,6 +67,13 @@ pub fn setup(
     let creds = Arc::new(SessionCreds::new(id.as_str(), &defs, issuers, reader, transport));
     let mut env = tls::trust_bundle::env_vars(&bundle);
     env.extend(creds.sentinels.env());
-    let ctx = Arc::new(L7Ctx { ca, upstream_tls, creds, channel_sentinel, max_body: MAX_INSPECTED_BODY });
+    let ctx = Arc::new(L7Ctx {
+        ca,
+        upstream_tls,
+        creds,
+        channel_sentinel,
+        max_body: MAX_INSPECTED_BODY,
+        visibility: Default::default(),
+    });
     Ok(L7Setup { ctx, env, bundle, credentials })
 }

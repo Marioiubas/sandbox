@@ -99,7 +99,9 @@ impl Daemon {
                     p.with_repo_layer(&entries, cedar.as_deref(), &compile_env).map_err(|e| e.to_string())
                 }
                 _ => Ok(p),
-            });
+            })
+            // One session, one set of labels: the candidate sees what the policy sees.
+            .map(|p| p.with_labels(egress.labels().clone()));
             (sha, compiled)
         });
         let mut grants: Vec<String> =

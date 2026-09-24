@@ -53,6 +53,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-026 Shadow Mode as Built]] | `broker policy shadow <file>` evaluates a candidate broker.toml beside the enforced policy in every enforce session (mode `shadow`), logs its verdict per decision and reports what it would change; it never decides. |
 | [[ADR-027 Plain Host Grants Carry No L7 Authority]] | A plain [[egress]] entry is L4 admission only (no `#any` permit); on a host another rule terminates it allows nothing. Fixes a same-host over-grant. |
 | [[ADR-028 M2 Plan Items Built Differently or Deferred]] | M2 task list reconciled: grants compile to policy text so gates can prove them; differential test instead of round-trip; per-file-op decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init, LLM explanations deferred. |
+| [[ADR-029 GitHub API Adapter and Session Labels as Built]] | GitHub REST requests map to verbs (verified routes; GraphQL denied); `protocol = "github"` grants verbs on repos; the broker looks up visibility with the bound credential and re-decides; raise-only session labels from API facts stop the toxic flow at the public write. |
 
 ## Where the value is
 
@@ -111,6 +112,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-026 Shadow Mode as Built]] — `broker policy shadow <file>` evaluates a candidate broker.toml beside the enforced policy in every enforce session (mode `shadow`), logs its verdict per decision and reports what it would change; it never decides.
 - [[ADR-027 Plain Host Grants Carry No L7 Authority]] — A plain [[egress]] entry is L4 admission only (no `#any` permit); on a host another rule terminates it allows nothing. Fixes a same-host over-grant.
 - [[ADR-028 M2 Plan Items Built Differently or Deferred]] — M2 task list reconciled: grants compile to policy text so gates can prove them; differential test instead of round-trip; per-file-op decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init, LLM explanations deferred.
+- [[ADR-029 GitHub API Adapter and Session Labels as Built]] — GitHub REST requests map to verbs (verified routes; GraphQL denied); `protocol = "github"` grants verbs on repos; the broker looks up visibility with the bound credential and re-decides; raise-only session labels from API facts stop the toxic flow at the public write.
 
 ## How this section connects
 

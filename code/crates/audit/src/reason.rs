@@ -94,6 +94,14 @@ pub enum Reason {
     GitRefNotAllowed,
     /// git: a force update (non-fast-forward, delete or undeterminable).
     GitForcePush,
+    /// GitHub API: a route the adapter does not map to a verb.
+    GithubRouteUnknown,
+    /// GitHub API: GraphQL is not mapped yet (mutations could hide).
+    GithubGraphqlUnsupported,
+    /// GitHub API: the verb is not granted.
+    GithubVerbNotAllowed,
+    /// GitHub API: the verb is granted, but not on this repository.
+    GithubRepoNotAllowed,
 
     // ---- credentials (M1, I1/I7) ----
     /// A credential the broker did not issue (I7).
@@ -188,6 +196,10 @@ impl Reason {
         Reason::GitRepoNotAllowed,
         Reason::GitRefNotAllowed,
         Reason::GitForcePush,
+        Reason::GithubRouteUnknown,
+        Reason::GithubGraphqlUnsupported,
+        Reason::GithubVerbNotAllowed,
+        Reason::GithubRepoNotAllowed,
         Reason::ForeignCredential,
         Reason::SentinelWrongHost,
         Reason::AmbiguousCredential,
@@ -254,6 +266,10 @@ impl Reason {
             Reason::GitRepoNotAllowed => "git_repo_not_allowed",
             Reason::GitRefNotAllowed => "git_ref_not_allowed",
             Reason::GitForcePush => "git_force_push",
+            Reason::GithubRouteUnknown => "github_route_unknown",
+            Reason::GithubGraphqlUnsupported => "github_graphql_unsupported",
+            Reason::GithubVerbNotAllowed => "github_verb_not_allowed",
+            Reason::GithubRepoNotAllowed => "github_repo_not_allowed",
             Reason::ForeignCredential => "foreign_credential",
             Reason::SentinelWrongHost => "sentinel_wrong_host",
             Reason::AmbiguousCredential => "ambiguous_credential",
@@ -294,8 +310,20 @@ impl Reason {
             | ProxyAuthRequired
             | BadSentinel => "ingress",
             SniLess | ConnectSniMismatch => "tls",
-            HostHeaderMismatch | L7NoRuleMatched | UpgradeNotAllowed | HeadTooLarge | BodyTooLarge
-            | UnsupportedEncoding | GitParseError | GitRepoNotAllowed | GitRefNotAllowed | GitForcePush => "l7",
+            HostHeaderMismatch
+            | L7NoRuleMatched
+            | UpgradeNotAllowed
+            | HeadTooLarge
+            | BodyTooLarge
+            | UnsupportedEncoding
+            | GitParseError
+            | GitRepoNotAllowed
+            | GitRefNotAllowed
+            | GitForcePush
+            | GithubRouteUnknown
+            | GithubGraphqlUnsupported
+            | GithubVerbNotAllowed
+            | GithubRepoNotAllowed => "l7",
             ForeignCredential | SentinelWrongHost | AmbiguousCredential | MintFailed | SecretReflected => "credentials",
             PolicyDenied
             | RepoPolicyDenied
@@ -375,6 +403,10 @@ impl Reason {
             GitForcePush => {
                 "the update is a force push (non-fast-forward, delete or undeterminable) and force is not granted"
             }
+            GithubRouteUnknown => "the GitHub API route is not mapped to a verb, so it is denied",
+            GithubGraphqlUnsupported => "GitHub GraphQL requests are denied until they can be mapped to verbs",
+            GithubVerbNotAllowed => "the GitHub verb (for example pr.merge) is not granted",
+            GithubRepoNotAllowed => "the GitHub verb is granted, but not on this repository",
             ForeignCredential => "the request carried a credential the broker did not issue",
             SentinelWrongHost => "a broker sentinel was sent to a host it is not bound to",
             AmbiguousCredential => "more than one credential rule allowed the request",

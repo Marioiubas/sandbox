@@ -29,6 +29,9 @@ pub enum EventKind {
     FsDenied,
     #[serde(rename = "policy.reload")]
     PolicyReload,
+    /// A session trifecta label was raised, and by which request.
+    #[serde(rename = "session.label")]
+    SessionLabel,
 }
 
 impl EventKind {
@@ -36,6 +39,7 @@ impl EventKind {
         match self {
             EventKind::SessionStart => "session.start",
             EventKind::SessionReady => "session.ready",
+            EventKind::SessionLabel => "session.label",
             EventKind::SessionStop => "session.stop",
             EventKind::SessionAborted => "session_aborted",
             EventKind::LaunchRefused => "launch_refused",

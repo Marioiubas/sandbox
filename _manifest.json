@@ -4332,5 +4332,26 @@
     "aliases": [
       "ADR-028"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-029 GitHub API Adapter and Session Labels as Built.md",
+    "title": "ADR-029 GitHub API Adapter and Session Labels as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "GitHub REST requests map to verbs from a verified route table (GraphQL denied); protocol github grants verbs on repos; the broker looks up repository visibility with the bound credential and re-decides; raise-only session labels from API facts, logged per decision and as session.label events; credential risk from config.",
+    "links_to": [
+      "GitHub API Adapter",
+      "Trifecta Session Labels",
+      "ADR-010 Session-Level Trifecta Labels in the MVP",
+      "Broker Cedar Schema",
+      "Example Cedar Policies",
+      "GitHub MCP Toxic Flow",
+      "M3 CI Identity and MCP",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-24) from GitHub's REST reference and the toxic-flow replay test.",
+    "aliases": [
+      "ADR-029"
+    ]
   }
 ]

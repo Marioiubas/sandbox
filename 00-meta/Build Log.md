@@ -163,3 +163,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **CI:** steps 1-6 green on macOS 15/26 and Ubuntu 22.04/24.04 (lint, tests, fuzz smoke).
 - **Open for M2:** C1 over 3 repositories × 3 real agents (needs Codex and Gemini CLI signed in).
 - **Next step:** M3 work that needs no external accounts (MCP Guard with pinned tool descriptions against local MCP servers; the GitHub MCP toxic-flow replay against a fake GitHub).
+
+### 2026-09-24: M3 step 1, GitHub API adapter and session labels
+
+- **Milestone:** [[M3 CI Identity and MCP]] (in progress).
+- **Built:** GitHub REST requests map to verbs (`repo.read`, `pr.create`, `pr.merge`, `issue.comment`, `contents.write`, `github.read`, `gist.create`) or deny; `protocol = "github"` grants verbs on repositories; the broker learns repository visibility with the bound credential and decides again; raise-only session labels from API facts drive the Rule-of-Two forbid.
+- **Tests:** D5, the toxic-flow replay, passes against a fake GitHub API; the benign public-issue-then-PR case is allowed; route property test and fuzz target (634k runs locally); Cedar agrees with the explainer on verbs; 241 tests pass on macOS 26.5; all shipped profiles pass the formal gates.
+- **Found:** every credential entity carried `risk: "high"`, which under the label rules would have blocked every write after any public-issue read; risk now comes from config.
+- **ADRs:** [[ADR-029 GitHub API Adapter and Session Labels as Built]].
+- **Next step:** MCP Guard (D3, D4) with local stdio MCP servers.

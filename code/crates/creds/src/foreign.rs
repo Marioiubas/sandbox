@@ -207,6 +207,7 @@ mod tests {
             swap_body: false,
             hosts: vec![HostPattern::parse("api.anthropic.com").unwrap()],
             ttl: None,
+            high_risk: false,
         });
         let s = Sentinels::issue(&[c]);
         let v = s.value_for("anthropic").unwrap().to_string();

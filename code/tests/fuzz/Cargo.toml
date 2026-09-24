@@ -98,3 +98,10 @@ path = "fuzz_targets/foreign.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "github_route"
+path = "fuzz_targets/github_route.rs"
+test = false
+doc = false
+bench = false
