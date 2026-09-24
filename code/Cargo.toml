@@ -1,0 +1,77 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/broker-cli",
+    "crates/brokerd",
+    "crates/launcher",
+    "crates/netguard",
+    "crates/tls",
+    "crates/l7",
+    "crates/creds",
+    "crates/policy",
+    "crates/grant",
+    "crates/audit",
+    "crates/learn",
+    "crates/mcpguard",
+    "tests/conformance",
+]
+# The fuzz crate needs nightly and cargo-fuzz; it is built on its own.
+exclude = ["tests/fuzz", "ee"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "Apache-2.0"
+repository = "https://github.com/Marioiubas/sandbox"
+publish = false
+
+# Versions pinned at M0 (2026-09-24) from crates.io; recorded in the Tech Stack note.
+[workspace.dependencies]
+anyhow = "1.0.104"
+async-trait = "0.1.92"
+base64 = "0.22"
+clap = { version = "4.6.7", features = ["derive"] }
+hex = "0.4.3"
+idna = "1.1.0"
+landlock = "0.4.7"
+libc = "0.2"
+nix = { version = "0.31.3", features = ["socket", "uio", "process", "signal", "user", "fs", "term", "ioctl", "poll"] }
+psl = "2.1.237"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+seccompiler = "0.5.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.10"
+thiserror = "2.0.21"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "macros", "signal", "process", "fs"] }
+toml = "1"
+getrandom = "0.3"
+zeroize = "1.9.0"
+
+# dev
+proptest = "1.11.0"
+tempfile = "3.27.0"
+
+# workspace crates
+audit = { path = "crates/audit" }
+launcher = { path = "crates/launcher" }
+netguard = { path = "crates/netguard" }
+policy = { path = "crates/policy" }
+tls = { path = "crates/tls" }
+l7 = { path = "crates/l7" }
+creds = { path = "crates/creds" }
+grant = { path = "crates/grant" }
+learn = { path = "crates/learn" }
+mcpguard = { path = "crates/mcpguard" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

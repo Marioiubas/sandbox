@@ -1,0 +1,20 @@
+# Gemini CLI. Egress: the Gemini API and Google OAuth token endpoint.
+version = 1
+name = "gemini-cli"
+binaries = ["gemini"]
+
+[[egress]]
+id = "gemini-api"
+host = "generativelanguage.googleapis.com"
+
+[[egress]]
+id = "code-assist"
+host = "cloudcode-pa.googleapis.com"
+
+[[egress]]
+id = "google-oauth"
+host = "oauth2.googleapis.com"
+
+[agent]
+config_readonly = ["~/.gemini/settings.json", "~/.gemini/GEMINI.md", "~/.gemini/extensions"]
+state_write = ["~/.gemini/tmp"]

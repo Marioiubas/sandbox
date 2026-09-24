@@ -1,0 +1,28 @@
+# OpenAI Codex CLI. Egress: the OpenAI API and ChatGPT sign-in hosts.
+version = 1
+name = "codex"
+binaries = ["codex"]
+
+[[egress]]
+id = "openai-api"
+host = "api.openai.com"
+
+[[egress]]
+id = "chatgpt"
+host = "chatgpt.com"
+
+[[egress]]
+id = "openai-auth"
+host = "auth.openai.com"
+
+[agent]
+config_readonly = [
+    "~/.codex/config.toml",
+    "~/.codex/AGENTS.md",
+    "~/.codex/prompts",
+    "~/.codex/rules",
+]
+state_write = [
+    "~/.codex/sessions",
+    "~/.codex/log",
+]

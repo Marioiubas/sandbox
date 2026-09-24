@@ -1,0 +1,26 @@
+[package]
+name = "netguard"
+description = "Single canonicaliser, broker DNS resolver and CONNECT/SOCKS5 ingress"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+audit.workspace = true
+base64.workspace = true
+idna.workspace = true
+psl.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+serde.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

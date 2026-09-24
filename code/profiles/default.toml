@@ -1,0 +1,4 @@
+# Default profile: no egress at all (empty lists deny). Add grants in
+# ~/.config/broker/broker.toml.
+version = 1
+name = "default"

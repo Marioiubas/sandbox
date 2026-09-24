@@ -1,0 +1,16 @@
+# Cursor CLI agent. Egress: Cursor's API hosts.
+version = 1
+name = "cursor-agent"
+binaries = ["cursor-agent"]
+
+[[egress]]
+id = "cursor-api"
+host = "api2.cursor.sh"
+
+[[egress]]
+id = "cursor-api-alt"
+host = "api.cursor.com"
+
+[agent]
+config_readonly = ["~/.cursor/mcp.json", "~/.cursor/cli-config.json", "~/.cursor/rules"]
+state_write = ["~/.cursor/chats"]

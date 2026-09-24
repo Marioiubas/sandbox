@@ -1,0 +1,26 @@
+[package]
+name = "conformance"
+description = "L1 conformance harness: deterministic probes run inside real broker sessions"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "conformance-probe"
+path = "src/bin/conformance-probe.rs"
+
+[dependencies]
+audit.workspace = true
+base64.workspace = true
+hex.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tls.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

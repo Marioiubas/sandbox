@@ -1,0 +1,54 @@
+# Claude Code. Egress: the Anthropic API and its auth and telemetry hosts.
+# Agent configuration (settings, hooks, commands, MCP definitions) is
+# read-only (I5); session transcripts and caches are writable agent state.
+# Validate against each Claude Code release: paths are version-dependent.
+version = 1
+name = "claude-code"
+binaries = ["claude"]
+
+[[egress]]
+id = "anthropic-api"
+host = "api.anthropic.com"
+
+[[egress]]
+id = "anthropic-telemetry"
+host = "statsig.anthropic.com"
+
+[[egress]]
+id = "anthropic-console"
+host = "console.anthropic.com"
+
+[[egress]]
+id = "claude-ai"
+host = "claude.ai"
+
+[[egress]]
+id = "claude-platform"
+host = "platform.claude.com"
+
+[agent]
+config_readonly = [
+    "~/.claude/settings.json",
+    "~/.claude/settings.local.json",
+    "~/.claude/CLAUDE.md",
+    "~/.claude/commands",
+    "~/.claude/agents",
+    "~/.claude/hooks",
+    "~/.claude/plugins",
+    "~/.claude/skills",
+    "~/.claude/output-styles",
+]
+state_write = [
+    "~/.claude/projects",
+    "~/.claude/todos",
+    "~/.claude/statsig",
+    "~/.claude/shell-snapshots",
+    "~/.claude/session-env",
+    "~/.claude/file-history",
+    "~/.claude/debug",
+    "~/.claude/plans",
+    "~/.claude/ide",
+]
+# Until M1 swaps credentials for sentinels, Claude Code reads its own OAuth
+# credentials from the login keychain on macOS (ADR-016).
+macos_keychain = true

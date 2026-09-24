@@ -1,0 +1,233 @@
+# Public bypass corpus: destination host inputs that must be denied, with
+# the reason the broker must log. Data only, so it can be published and run
+# by other implementations. Each entry runs through every ingress mode
+# (HTTP CONNECT and SOCKS5 domain form) and through the canonicaliser.
+#
+# `input` is a TOML basic string (escapes such as \u0000 allowed);
+# `input_hex` gives raw bytes that are not valid UTF-8.
+# `reason` is the broker's audit reason code. `category` is the conformance
+# probe category (Conformance Probe Matrix). `via` restricts an entry to
+# ingress modes where the bytes can be carried ("connect", "socks5").
+
+[[case]]
+id = "nul-suffix"
+input = "attacker.example\u0000.google.com"
+reason = "forbidden_byte"
+category = 8
+note = "sandbox-runtime SOCKS5 NUL-byte bypass: suffix check vs libc truncation"
+
+[[case]]
+id = "nul-leading"
+input = "\u0000api.github.com"
+reason = "forbidden_byte"
+category = 8
+
+[[case]]
+id = "crlf-injection"
+input = "example.com\r\nX-Injected: 1"
+reason = "forbidden_byte"
+category = 8
+via = ["socks5"]
+note = "CRLF inside CONNECT framing is rejected earlier as malformed_request"
+
+[[case]]
+id = "percent-encoded"
+input = "exa%6dple.com"
+reason = "forbidden_byte"
+category = 8
+
+[[case]]
+id = "userinfo"
+input = "api.github.com@evil.example"
+reason = "forbidden_byte"
+category = 8
+
+[[case]]
+id = "backslash"
+input = "evil.example\\.github.com"
+reason = "forbidden_byte"
+category = 8
+
+[[case]]
+id = "slash"
+input = "evil.example/.github.com"
+reason = "forbidden_byte"
+category = 8
+
+[[case]]
+id = "space"
+input = "evil.example .github.com"
+reason = "forbidden_byte"
+category = 8
+via = ["socks5"]
+
+[[case]]
+id = "trailing-dot"
+input = "api.github.com."
+reason = "trailing_dot"
+category = 8
+
+[[case]]
+id = "empty-label"
+input = "api..github.com"
+reason = "bad_label"
+category = 8
+
+[[case]]
+id = "underscore"
+input = "evil_host.example"
+reason = "bad_label"
+category = 8
+
+[[case]]
+id = "mixed-idna"
+input = "bücher.xn--bcher-kva.example"
+reason = "mixed_idna"
+category = 8
+
+[[case]]
+id = "bad-punycode"
+input = "xn--zz.example"
+reason = "idna_round_trip"
+category = 8
+
+[[case]]
+id = "fullwidth-dot"
+input = "evil。example"
+reason = "bad_label"
+category = 8
+
+[[case]]
+id = "invalid-utf8"
+input_hex = "6576696cff2e6578616d706c65"
+reason = "bad_label"
+category = 8
+
+[[case]]
+id = "decimal-ipv4"
+input = "2130706433"
+reason = "ambiguous_ip_literal"
+category = 4
+
+[[case]]
+id = "hex-ipv4"
+input = "0x7f000001"
+reason = "ambiguous_ip_literal"
+category = 4
+
+[[case]]
+id = "hex-dotted-ipv4"
+input = "0x7f.0.0.1"
+reason = "ambiguous_ip_literal"
+category = 4
+
+[[case]]
+id = "octal-ipv4"
+input = "0177.0.0.1"
+reason = "ambiguous_ip_literal"
+category = 4
+
+[[case]]
+id = "short-ipv4"
+input = "127.1"
+reason = "ambiguous_ip_literal"
+category = 4
+
+[[case]]
+id = "metadata-hex"
+input = "0xa9fea9fe"
+reason = "ambiguous_ip_literal"
+category = 4
+
+[[case]]
+id = "metadata-decimal"
+input = "2852039166"
+reason = "ambiguous_ip_literal"
+category = 4
+
+[[case]]
+id = "metadata-literal"
+input = "169.254.169.254"
+reason = "ip_literal"
+category = 4
+note = "IP-literal CONNECTs are denied unless a grant names the literal"
+
+[[case]]
+id = "public-ip-literal"
+input = "8.8.8.8"
+reason = "ip_literal"
+category = 4
+
+[[case]]
+id = "private-ip-literal"
+input = "10.0.0.1"
+reason = "ip_literal"
+category = 4
+
+[[case]]
+id = "ipv4-mapped-ipv6"
+input = "[::ffff:169.254.169.254]"
+reason = "mapped_v6"
+category = 4
+
+[[case]]
+id = "ipv4-mapped-ipv6-hex"
+input = "[::ffff:a9fe:a9fe]"
+reason = "mapped_v6"
+category = 4
+
+[[case]]
+id = "ipv4-compatible-ipv6"
+input = "[::127.0.0.1]"
+reason = "mapped_v6"
+category = 4
+
+[[case]]
+id = "ipv6-zone"
+input = "[fe80::1%25en0]"
+reason = "forbidden_byte"
+category = 4
+
+[[case]]
+id = "ipv6-loopback-literal"
+input = "[::1]"
+reason = "ip_literal"
+category = 4
+
+[[case]]
+id = "doh-google"
+input = "dns.google"
+reason = "doh_endpoint"
+category = 3
+note = "DNS-over-HTTPS resolvers are blocked by name even when granted"
+
+[[case]]
+id = "doh-cloudflare"
+input = "mozilla.cloudflare-dns.com"
+reason = "doh_endpoint"
+category = 3
+
+[[case]]
+id = "dns-exfil-label"
+input = "c2VjcmV0LXRva2VuLXZhbHVl.exfil.attacker.example"
+reason = "host_not_allowed"
+category = 3
+note = "data encoded in query names: not admitted, so never resolved"
+
+[[case]]
+id = "not-granted"
+input = "evil.example"
+reason = "host_not_allowed"
+category = 9
+
+[[case]]
+id = "suffix-confusion"
+input = "api.github.com.evil.example"
+reason = "host_not_allowed"
+category = 8
+
+[[case]]
+id = "prefix-confusion"
+input = "evilgithub.com"
+reason = "host_not_allowed"
+category = 8
