@@ -12,6 +12,7 @@ name = "broker"
 path = "src/main.rs"
 
 [dependencies]
+learn.workspace = true
 anyhow.workspace = true
 audit.workspace = true
 brokerd = { path = "../brokerd" }

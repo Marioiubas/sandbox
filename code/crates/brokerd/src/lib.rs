@@ -9,6 +9,7 @@ pub mod l7_pipeline;
 pub mod pipeline;
 pub mod profiles;
 pub mod proto;
+pub mod repo_policy;
 pub mod rewind;
 pub mod server;
 pub mod session;

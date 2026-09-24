@@ -2,7 +2,9 @@ pub mod audit;
 pub mod ctl;
 pub mod daemon;
 pub mod doctor;
+pub mod policy;
 pub mod run;
+pub mod suggest;
 pub mod why;
 
 /// Exit code when the broker itself refuses or fails (not the agent's code).

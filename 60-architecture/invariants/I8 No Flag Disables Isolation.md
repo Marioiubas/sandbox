@@ -95,3 +95,4 @@ The report: "never let a prompt-disabling flag weaken isolation, egress or broke
 ## Build log
 
 - 2026-09-24: tests `no_flag_disables_isolation` (every clap flag enumerated; `run` accepts only `--profile`), `i8_no_profile_flag_or_env_disables_isolation` (6 profiles × 5 agent bypass flags, plus cleared or hostile client proxy variables: direct egress and DNS still denied, every session has all required layers), `i8_unknown_profile_is_refused_not_ignored`, `i8_invalid_user_policy_refuses_launch`. Fault injection can only cause refusals.
+- 2026-09-24 (M2): `broker learn` (record mode) is tested like any flag: `i8_learn_mode_keeps_sandbox_proxy_and_ceiling` (secrets unreadable, no direct route, metadata and ceiling hosts denied); the CLI test pins `learn` to the single `--profile` option.

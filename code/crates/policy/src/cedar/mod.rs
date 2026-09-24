@@ -105,11 +105,24 @@ impl Engine {
         Ok(Engine { base, repo: None, grant_of, reasons })
     }
 
-    /// Conjoin a repo layer (compiled from approved `.broker/` policy).
-    pub fn with_repo(mut self, compiled: &[Compiled]) -> Result<Engine, String> {
+    /// Conjoin a repo layer (compiled from approved `.broker/` policy, plus
+    /// raw `.broker/policy.cedar` text). Everything in it can only narrow:
+    /// a request must be allowed by the base set **and** by this set.
+    pub fn with_repo(mut self, compiled: &[Compiled], cedar: Option<&str>) -> Result<Engine, String> {
         let mut set = PolicySet::new();
         for c in compiled {
             add_compiled(&mut set, c)?;
+        }
+        if let Some(src) = cedar {
+            let parsed = PolicySet::from_str(src).map_err(|e| format!(".broker/policy.cedar: {e}"))?;
+            for (i, p) in parsed.policies().enumerate() {
+                let id =
+                    format!("repo:cedar#{}", p.annotation("id").map(str::to_string).unwrap_or_else(|| i.to_string()));
+                set.add(p.new_id(PolicyId::new(id))).map_err(|e| format!(".broker/policy.cedar: {e}"))?;
+            }
+            if parsed.templates().next().is_some() {
+                return Err(".broker/policy.cedar: templates are not supported".into());
+            }
         }
         // The repo layer never decides credential use (it cannot declare
         // credentials), so it neither grants nor blocks it.

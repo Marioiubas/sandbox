@@ -213,7 +213,7 @@ impl Conn {
         reason: Reason,
         policy_ids: Vec<String>,
         verbs: &[String],
-        extra: Option<(&str, String)>,
+        extra: Option<(&str, serde_json::Value)>,
         push: Option<&PushInfo>,
     ) -> Response<RespBody> {
         self.ctx.stats.denied.fetch_add(1, Ordering::Relaxed);
@@ -294,7 +294,14 @@ impl Conn {
             Ok(u) => u,
             Err(rej) => {
                 let verb = format!("http {method} {}", path.path());
-                return self.deny(&rid, rej.reason, vec![], &[verb], Some(("credential_location", rej.location)), None);
+                return self.deny(
+                    &rid,
+                    rej.reason,
+                    vec![],
+                    &[verb],
+                    Some(("credential_location", rej.location.into())),
+                    None,
+                );
             }
         };
 
@@ -321,6 +328,7 @@ impl Conn {
         };
         drop(decoded);
         let verbs: Vec<String> = actions.iter().map(|a| a.verb()).collect();
+        let actions_json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
 
         // 4. Authorize: every action must be allowed.
         let dec = self.ctx.policy.authorize_l7(&self.adm, &actions);
@@ -330,7 +338,14 @@ impl Conn {
                 .iter()
                 .map(|(v, r)| format!("{v} => {}", r.map(|_| "allow").unwrap_or_else(|e| e.as_str())))
                 .collect();
-            return self.deny(&rid, reason, dec.policy_ids, &per, None, push.as_ref());
+            return self.deny(
+                &rid,
+                reason,
+                dec.policy_ids,
+                &per,
+                Some(("actions", actions_json.into())),
+                push.as_ref(),
+            );
         }
 
         // 6. Credential: only through the binding the decision produced.
@@ -344,7 +359,7 @@ impl Conn {
                         Reason::MintFailed,
                         dec.policy_ids,
                         &verbs,
-                        Some(("error", e.to_string())),
+                        Some(("error", e.to_string().into())),
                         push.as_ref(),
                     );
                 }
@@ -352,7 +367,10 @@ impl Conn {
         };
 
         // Write-ahead audit of the allow (I9): no row, no request.
-        let mut ev = self.base_event(EventKind::RequestDecision, &rid, &verbs).allow(dec.policy_ids.clone());
+        let mut ev = self
+            .base_event(EventKind::RequestDecision, &rid, &verbs)
+            .allow(dec.policy_ids.clone())
+            .detail("actions", actions_json.clone());
         if let Some(w) = dec.would_deny {
             // Record mode: the enforce-mode decision, for the learner.
             ev = ev.audit_mode().detail("would_deny", w.as_str());

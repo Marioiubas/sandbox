@@ -182,15 +182,33 @@ impl Daemon {
             github_app_issuers: user_policy.issuers.github_app.keys().cloned().collect(),
             session: session_info,
         };
-        let egress = EgressPolicy::compile_with(
+        let mut egress = EgressPolicy::compile_with(
             [(scope.as_str(), profile.egress.as_slice()), ("user", user_policy.egress.as_slice())],
             &compile_env,
         )?;
-        let grants: Vec<String> =
+        // Repository policy: read here on the host, used only if its exact
+        // content was approved, and conjoined so it can only narrow (I4, I5).
+        let repo_status = crate::repo_policy::status(&self.dirs, &repo_root(&cwd))
+            .map_err(|e| format!("repository policy: {e:#}"))?;
+        if let crate::repo_policy::Status::Approved { toml, cedar, .. } = &repo_status {
+            let entries = toml.as_ref().map(|t| t.egress.clone()).unwrap_or_default();
+            egress = egress
+                .with_repo_layer(&entries, cedar.as_deref(), &compile_env)
+                .map_err(|e| format!("approved repository policy does not compile: {e}"))?;
+        }
+        let mut grants: Vec<String> =
             egress.grants().iter().map(|g| format!("{} {}:{:?}", g.id, g.pattern, g.ports)).collect();
+        if repo_status != crate::repo_policy::Status::Absent {
+            grants.push(format!("repo policy: {}", repo_status.describe()));
+        }
         let mut warnings = Vec::new();
         if egress.is_empty() {
             warnings.push("no egress grants: every network request will be denied (empty lists deny)".into());
+        }
+        if let crate::repo_policy::Status::Unapproved { sha256 } = &repo_status {
+            warnings.push(format!(
+                "repository policy in .broker/ is not approved ({sha256}); it is ignored until you run `broker policy approve`"
+            ));
         }
         if compile_env.repo_remote.is_none()
             && egress.credentials().iter().any(|c| matches!(c.kind, policy::CredKind::GitHubApp { .. }))

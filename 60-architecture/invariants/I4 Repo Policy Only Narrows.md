@@ -4,7 +4,7 @@ aliases: ["Repo Narrows Only"]
 type: concept
 section: architecture
 tags: [sandbox/architecture, concept, invariant/i4, topic/policy, boundary/tb5, control/pin, milestone/m2]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "Repository-supplied policy can only narrow user and org policy; wideni
 related: ["[[broker.toml Human Policy Layer]]", "[[SymCC CI Gates]]", "[[Claude Code Pre-Trust Config Execution]]", "[[Codex CLI Project Config Autoload]]", "[[Request and Session Lifecycle]]", "[[Claude Code and sandbox-runtime]]", "[[I3 Probabilistic Components Only Narrow]]", "[[I5 Config Outside Writable Mounts]]", "[[Policy Engine and Entity Builder]]", "[[Broker CLI and Daemon]]", "[[Cedar]]", "[[Trust Boundaries]]", "[[M2 Policy Audit and Learn]]", "[[ADR-007 Cedar with a TOML Front-End]]"]
 sources: ["https://nvd.nist.gov/vuln/detail/CVE-2025-59536", "https://nvd.nist.gov/vuln/detail/CVE-2026-21852", "https://github.com/advisories/GHSA-xrxf-jgv3-qmrm", "https://code.claude.com/docs/en/sandboxing", "https://docs.rs/cedar-policy-symcc"]
 milestone: M2
+code: ["code/crates/brokerd/src/repo_policy.rs", "code/crates/broker-cli/src/cmd/policy.rs", "code/crates/policy/src/cedar/mod.rs"]
 ---
 
 # I4 Repo Policy Only Narrows
@@ -95,3 +96,7 @@ This appears in the request lifecycle at step 1: "computes the Task entity and i
 - https://code.claude.com/docs/en/sandboxing
 - https://docs.rs/cedar-policy-symcc
 - Report: invariant I4, request-life step 1; research note 05 section 3.5 (repo policy may only narrow org policy).
+
+## Build log
+
+- 2026-09-24: built. Structural: the repo layer (`.broker/broker.toml` compiled + `.broker/policy.cedar` raw) is a separate Cedar policy set conjoined with the base set; repo scope rejects `credential`, `passthrough`, `addrs`, `[issuers]`, `[tls]` and `[filesystem]`; `credential.use` is decided by the base set only. Tests: `cedar::tests::{repo_layer_only_narrows, raw_repo_cedar_only_narrows, repo_layers_never_widen}` (property: `allow_effective ⇒ allow_base` over generated repo layers) and the end-to-end `invariants::i4_repo_policy_only_narrows_and_needs_approval` (unapproved: ignored and announced; approved: narrows and cannot widen; any edit revokes; authority keys cannot be approved). The SymCC `check_implies(repo ∧ org, org)` gate is still to come.

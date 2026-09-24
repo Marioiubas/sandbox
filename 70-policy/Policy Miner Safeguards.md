@@ -11,6 +11,7 @@ updated: 2026-09-24
 summary: "Generalisation rules (operation-level entries over wildcards, minimum support before prefix collapse, domain suffix only after k subdomains, never widen methods, risk classes never auto-granted, derive GitHub permissions and STS policy from observed operations) and poisoning defenses (trusted-input or N-run intersection, exclude foreign-credential runs, org deny ceiling, rate and volume limits)."
 related: ["[[Policy Learning Loop]]", "[[SymCC CI Gates]]", "[[Claude Cowork Allowed-Domain Abuse]]", "[[AgentSpec]]", "[[Risk Register]]", "[[I7 Reject Foreign Credentials]]", "[[GitHub App Installation Tokens]]", "[[AWS STS Session Policies]]", "[[Trace-Mined Least Privilege]]", "[[L4 Product Metrics]]", "[[Trifecta Session Labels]]", "[[Hostname Canonicaliser]]", "[[GitHub API Adapter]]", "[[July 2026 Artifactory Egress Incident]]", "[[Open Questions and Unverified Claims]]", "[[I3 Probabilistic Components Only Narrow]]", "[[Example Cedar Policies]]"]
 sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://arxiv.org/abs/2503.18666", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html", "https://aws.amazon.com/blogs/security/iam-access-analyzer-makes-it-easier-to-implement-least-privilege-permissions-by-generating-iam-policies-based-on-access-activity/", "https://axeploit.com/blog/the-hugging-face-sandbox-escape-everyone-watched-the-proxy-nobody-watched-port-53", "https://www.cncf.io/blog/2026/06/26/security-profiles-operator-v1-stable-apis-security-hardened-and-shaping-upstream-kubernetes/"]
+code: ["code/crates/learn/src/generalise.rs"]
 ---
 
 # Policy Miner Safeguards
@@ -124,3 +125,7 @@ The category entities would be maintained in org entity data. The schema sketch 
 - [AWS: IAM Access Analyzer policy generation](https://aws.amazon.com/blogs/security/iam-access-analyzer-makes-it-easier-to-implement-least-privilege-permissions-by-generating-iam-policies-based-on-access-activity/)
 - [axeploit: July 2026 incident](https://axeploit.com/blog/the-hugging-face-sandbox-escape-everyone-watched-the-proxy-nobody-watched-port-53)
 - [CNCF: SPO v1.0](https://www.cncf.io/blog/2026/06/26/security-profiles-operator-v1-stable-apis-security-hardened-and-shaping-upstream-kubernetes/)
+
+## Build log
+
+- 2026-09-24: G2 (identifier templating), G3 (prefix collapse after n=3 children in m=2 sessions), G4 (`*.name` after k=3 subdomains), G5 (one rule per observed method), G7 (high-risk proposals commented out: DELETE and non-standard methods, force pushes, pushes outside `refs/heads/agent/`), G8 (GitHub `contents` scope from observed fetch/push), G9 (never above the registrable domain or over a public suffix), P1 (minimum support, default 2 sessions), P2 (sessions with a foreign credential, wrong-host sentinel or reflected secret excluded entirely), P3 (ceiling hits listed as observed but blocked; the ceiling is in every policy). P4 (rate and volume limits) is not built. Defaults are in `learn::generalise::Options`.

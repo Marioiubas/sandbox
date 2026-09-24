@@ -48,6 +48,16 @@ pub enum Command {
         #[arg(last = true, required = true, num_args = 1..)]
         command: Vec<OsString>,
     },
+    /// Mine `broker learn` sessions into a proposed broker.toml diff with
+    /// evidence and replay statistics (nothing is applied automatically).
+    Suggest {
+        /// Minimum number of sessions a request must appear in (P1).
+        #[arg(long, default_value_t = 2)]
+        min_runs: usize,
+        /// Write the proposed TOML here instead of printing it.
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+    },
     /// Check every isolation layer on this host and show the active policy.
     Doctor,
     /// Explain a decision from the audit log.
@@ -59,6 +69,12 @@ pub enum Command {
     Audit {
         #[command(subcommand)]
         action: AuditCmd,
+    },
+    /// Repository policy in `.broker/`: show its status or approve its
+    /// current content (it only ever narrows your policy).
+    Policy {
+        #[command(subcommand)]
+        action: PolicyCmd,
     },
     /// Manage the per-user daemon.
     Daemon {
@@ -79,6 +95,14 @@ pub enum AuditCmd {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum PolicyCmd {
+    /// Show whether this repository's policy is present and approved.
+    Status,
+    /// Approve the repository policy's current content hash.
+    Approve,
+}
+
+#[derive(Subcommand, Debug)]
 pub enum DaemonCmd {
     Status,
     Stop,
@@ -89,10 +113,13 @@ fn main() {
     let code = match cli.command {
         Command::Run { profile, command } => cmd::run::run(profile, command),
         Command::Learn { profile, command } => cmd::run::learn(profile, command),
+        Command::Suggest { min_runs, out } => cmd::suggest::suggest(min_runs, out),
         Command::Doctor => cmd::doctor::doctor(),
         Command::Why { request_id } => cmd::why::why(&request_id),
         Command::Audit { action: AuditCmd::Verify } => cmd::audit::verify(),
         Command::Audit { action: AuditCmd::Tail { n } } => cmd::audit::tail(n),
+        Command::Policy { action: PolicyCmd::Status } => cmd::policy::status(),
+        Command::Policy { action: PolicyCmd::Approve } => cmd::policy::approve(),
         Command::Daemon { action: DaemonCmd::Status } => cmd::daemon::status(),
         Command::Daemon { action: DaemonCmd::Stop } => cmd::daemon::stop(),
     };

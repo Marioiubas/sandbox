@@ -265,3 +265,86 @@ fn i9_every_decision_is_chained_and_explainable() {
     assert!(h.probe(&["write", &db]).denied());
     assert!(h.verify_audit().is_ok());
 }
+
+// ---------------------------------------------------------------- I4 ------
+
+fn policy_cmd(h: &Harness, action: &str) -> std::process::Output {
+    Command::new(&h.bins.broker)
+        .args(["policy", action])
+        .current_dir(h.repo.path())
+        .env("BROKER_HOME", h.home.path())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn i4_repo_policy_only_narrows_and_needs_approval() {
+    let up = Upstream::start();
+    let p = up.port.to_string();
+    let h = Harness::new(&config_with_upstream(up.port, ""));
+    let reach = |h: &Harness| h.probe(&["proxy", "connect", "allowed.test", &p, "allowed.test"]);
+    assert!(reach(&h).allowed(), "control: the user grant allows the upstream");
+    // A repository policy that lists only another host (narrowing), and a
+    // grant for a host the user never granted (a widening attempt).
+    std::fs::create_dir_all(h.repo_path().join(".broker")).unwrap();
+    std::fs::write(
+        h.repo_path().join(".broker/broker.toml"),
+        "version = 1\n[[egress]]\nhost = \"other.test\"\n[[egress]]\nhost = \"evil.test\"\nports = [443]\n",
+    )
+    .unwrap();
+    // Not approved: ignored (and announced), so nothing changes yet.
+    let r = reach(&h);
+    assert!(r.allowed(), "{r:?}");
+    assert!(r.stderr.contains("not approved"), "{}", r.stderr);
+    let st = policy_cmd(&h, "status");
+    assert!(String::from_utf8_lossy(&st.stdout).contains("not approved"));
+    // Approved: it narrows the upstream away and still cannot widen.
+    assert!(policy_cmd(&h, "approve").status.success());
+    let r = reach(&h);
+    assert!(r.denied(), "approved repo policy narrows: {r:?}");
+    assert!(h.deny_reasons().contains(&Reason::RepoPolicyDenied));
+    let r = h.probe(&["proxy", "connect", "evil.test", "443", "evil.test"]);
+    assert!(r.denied(), "a repo grant never widens: {r:?}");
+    // Any change to the files revokes the approval.
+    std::fs::write(h.repo_path().join(".broker/policy.cedar"), "// edited\n").unwrap();
+    assert!(reach(&h).allowed(), "changed content is treated as absent until re-approved");
+    // A repository policy that tries to confer authority cannot be approved.
+    std::fs::remove_file(h.repo_path().join(".broker/policy.cedar")).unwrap();
+    std::fs::write(
+        h.repo_path().join(".broker/broker.toml"),
+        "version = 1\n[[egress]]\nhost = \"allowed.test\"\ncredential = { kind = \"static\", ref = \"env:HOME\" }\n",
+    )
+    .unwrap();
+    let out = policy_cmd(&h, "approve");
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("not allowed in repository policy"), "{out:?}");
+}
+
+// ---------------------------------------------------------------- I8 (learn) ---
+
+#[test]
+fn i8_learn_mode_keeps_sandbox_proxy_and_ceiling() {
+    let h = Harness::new("version = 1\n");
+    let learn = |args: &[&str]| {
+        let mut argv = vec![h.bins.probe.display().to_string()];
+        argv.extend(args.iter().map(|s| s.to_string()));
+        let out = Command::new(&h.bins.broker)
+            .arg("learn")
+            .arg("--")
+            .args(&argv)
+            .current_dir(h.repo.path())
+            .env("BROKER_HOME", h.home.path())
+            .env("BROKER_DAEMON_IDLE_SECS", "3")
+            .output()
+            .unwrap();
+        ProbeResult::from(out)
+    };
+    let home = std::env::var("HOME").unwrap();
+    assert!(learn(&["read", &format!("{home}/.ssh/id_ed25519")]).denied(), "secrets stay unreadable");
+    assert!(learn(&["tcp", "1.1.1.1", "443"]).denied(), "no direct route");
+    assert!(learn(&["proxy", "connect", "169.254.169.254", "443", "-"]).denied(), "metadata denied");
+    assert!(learn(&["proxy", "connect", "pastebin.com", "443", "pastebin.com"]).denied(), "ceiling holds");
+    assert!(learn(&["proxy", "connect", "x.ngrok-free.app", "443", "x.ngrok-free.app"]).denied(), "ceiling holds");
+    assert!(h.deny_reasons().contains(&Reason::CeilingPasteSite));
+    assert!(h.events().iter().any(|e| e.kind == EventKind::SessionStart && e.detail["mode"] == "record"));
+}

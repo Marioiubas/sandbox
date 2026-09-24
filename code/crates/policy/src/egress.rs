@@ -181,7 +181,12 @@ impl EgressPolicy {
 
     /// Conjoin an approved repository layer: it can only narrow (I4). Keys
     /// that confer authority are compile errors.
-    pub fn with_repo_layer(mut self, entries: &[EgressEntry], env: &CompileEnv) -> Result<Self, CompileError> {
+    pub fn with_repo_layer(
+        mut self,
+        entries: &[EgressEntry],
+        cedar: Option<&str>,
+        env: &CompileEnv,
+    ) -> Result<Self, CompileError> {
         for (i, e) in entries.iter().enumerate() {
             let id = e.id.clone().unwrap_or_else(|| format!("egress[{i}]"));
             let bad = if e.credential.is_some() {
@@ -198,7 +203,7 @@ impl EgressPolicy {
             }
         }
         let grants = build_grants([("repo", entries)], env)?;
-        self.engine = self.engine.with_repo(&compile_all(&grants)?).map_err(CompileError::Cedar)?;
+        self.engine = self.engine.with_repo(&compile_all(&grants)?, cedar).map_err(CompileError::Cedar)?;
         self.repo_grants = grants;
         Ok(self)
     }

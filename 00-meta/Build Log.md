@@ -109,3 +109,11 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **ADRs:** [[ADR-022 Cedar Schema and Engine as Built]].
 - **Next step:** repository policy with content-hash approval; learning (`broker suggest`); OCSF export and SIEM sink; SymCC gates in CI; native config exporters.
 
+### 2026-09-24: M2 step 2, repository policy and learning
+
+- **Milestone:** [[M2 Policy Audit and Learn]] (in progress).
+- **Built:** repository policy (`.broker/broker.toml`, `.broker/policy.cedar`) read on the host, conjoined only after `broker policy approve` records its content hash; `broker learn` (record mode) and `broker suggest` (`code/crates/learn`: observe, templatize, generalise with G2-G9 and P1-P3, replay); structured `actions` in L7 audit rows.
+- **Tests:** 212 passing on macOS 26.5, including I4 end to end, learn-mode I8, and C1/C2 with a deterministic agent against fake upstreams. CI for step 1 (commit e5338be) green on macOS 15/26 and Ubuntu 22.04/24.04.
+- **Invariants touched:** I4 built (conjunction, repo-scope key restrictions, approval); I5 extended to repository policy; I8 covers `broker learn`; I3 holds (the miner is deterministic and writes a diff a human must merge).
+- **Next step:** OCSF export and a SIEM sink test (C4); SymCC gates in CI (C3); native config exporters; shadow mode.
+

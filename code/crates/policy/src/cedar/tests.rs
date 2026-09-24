@@ -168,7 +168,7 @@ fn repo_layer_only_narrows() {
          [[egress]]\nhost = \"evil.test\"\n",
     )
     .unwrap();
-    let p = base.with_repo_layer(&repo_toml.egress, &env_with(session(Mode::Enforce))).unwrap();
+    let p = base.with_repo_layer(&repo_toml.egress, None, &env_with(session(Mode::Enforce))).unwrap();
     // A repo permit for a host the user never granted does not widen.
     assert_eq!(p.admit_host(&h("evil.test"), 443).unwrap_err().0, Reason::HostNotAllowed);
     // A host the repo layer does not list is narrowed away.
@@ -182,8 +182,73 @@ fn repo_layer_only_narrows() {
     // Keys that confer authority are rejected in repo scope.
     for bad in ["credential = { kind = \"static\", ref = \"env:K\" }", "passthrough = true", "addrs = [\"10.0.0.1\"]"] {
         let t = parse_policy_str(&format!("version = 1\n[[egress]]\nhost = \"a.test\"\n{bad}\n")).unwrap();
-        let e = policy(GIT).with_repo_layer(&t.egress, &env_with(session(Mode::Enforce))).unwrap_err().to_string();
+        let e =
+            policy(GIT).with_repo_layer(&t.egress, None, &env_with(session(Mode::Enforce))).unwrap_err().to_string();
         assert!(e.contains("not allowed in repository policy"), "{bad}: {e}");
+    }
+}
+
+#[test]
+fn raw_repo_cedar_only_narrows() {
+    let base = policy(GIT);
+    let widen = "permit (principal, action, resource);";
+    let narrow = "forbid (principal, action == Broker::Action::\"git.push\", resource);";
+    let p = base.clone().with_repo_layer(&[], Some(widen), &env_with(session(Mode::Enforce))).unwrap();
+    // A repo-wide permit cannot widen what the base denies…
+    assert_eq!(p.admit_host(&h("evil.test"), 443).unwrap_err().0, Reason::HostNotAllowed);
+    let mut g = p.admit_host(&h("github.com"), 443).unwrap();
+    p.admit_addrs(&mut g, &["140.82.112.3".parse().unwrap()]).unwrap();
+    assert_eq!(
+        p.authorize_l7(&g, &[push("github.com/acme/web", "refs/heads/main", false)]).result,
+        Err(Reason::GitRefNotAllowed)
+    );
+    // …while a repo forbid narrows what the base allows.
+    let q = base.with_repo_layer(&[], Some(&format!("{widen}\n{narrow}")), &env_with(session(Mode::Enforce))).unwrap();
+    let mut g = q.admit_host(&h("github.com"), 443).unwrap();
+    q.admit_addrs(&mut g, &["140.82.112.3".parse().unwrap()]).unwrap();
+    assert_eq!(
+        q.authorize_l7(&g, &[push("github.com/acme/web", "refs/heads/agent/x", false)]).result,
+        Err(Reason::RepoPolicyDenied)
+    );
+    assert!(
+        policy(GIT)
+            .with_repo_layer(
+                &[],
+                Some("permit (principal, action, resource) when { nope };"),
+                &env_with(session(Mode::Enforce))
+            )
+            .is_err()
+    );
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+    /// For generated repo layers, allow_effective ⇒ allow_base (I4).
+    #[test]
+    fn repo_layers_never_widen(hosts in proptest::collection::vec(prop_oneof![Just("github.com"), Just("evil.test"), Just("api.anthropic.com"), Just("a.example.com")], 0..4),
+                               methods in proptest::collection::vec(prop_oneof![Just("GET"), Just("POST"), Just("DELETE")], 0..3),
+                               target in prop_oneof![Just("github.com"), Just("evil.test"), Just("api.anthropic.com"), Just("a.example.com"), Just("pastebin.com")],
+                               method in prop_oneof![Just("GET"), Just("POST"), Just("DELETE")]) {
+        let mut t = String::from("version = 1\n");
+        for hst in &hosts {
+            t.push_str(&format!("[[egress]]\nhost = \"{hst}\"\nmethods = {methods:?}\n"));
+        }
+        let repo = parse_policy_str(&t).unwrap();
+        let base = policy(GIT);
+        let eff = base.clone().with_repo_layer(&repo.egress, Some("permit (principal, action, resource);"), &env_with(session(Mode::Enforce))).unwrap();
+        let host = h(target);
+        let (b, e) = (base.admit_host(&host, 443), eff.admit_host(&host, 443));
+        if e.is_ok() { prop_assert!(b.is_ok()); }
+        if let (Ok(mut ba), Ok(mut ea)) = (b, e) {
+            let addr: std::net::IpAddr = "93.184.216.34".parse().unwrap();
+            let bok = base.admit_addrs(&mut ba, &[addr]).is_ok();
+            let eok = eff.admit_addrs(&mut ea, &[addr]).is_ok();
+            if eok { prop_assert!(bok); }
+            if bok && eok {
+                let a = [Action::Http { method: method.into(), path: "/v1/messages".into() }];
+                if eff.authorize_l7(&ea, &a).result.is_ok() { prop_assert!(base.authorize_l7(&ba, &a).result.is_ok()); }
+            }
+        }
     }
 }
 

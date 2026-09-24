@@ -58,6 +58,38 @@ pub enum Action {
 }
 
 impl Action {
+    /// Structured form for audit rows (the learner reads this, never `verb`).
+    pub fn to_json(&self) -> serde_json::Value {
+        match self {
+            Action::Http { method, path } => serde_json::json!({ "kind": "http", "method": method, "path": path }),
+            Action::GitFetch { repo } => serde_json::json!({ "kind": "git.fetch", "repo": repo.to_string() }),
+            Action::GitPushAdvertise { repo } => {
+                serde_json::json!({ "kind": "git.advertise", "repo": repo.to_string() })
+            }
+            Action::GitPush { repo, refname, force, update } => serde_json::json!({
+                "kind": "git.push", "repo": repo.to_string(), "ref": refname, "force": force, "update": update,
+            }),
+        }
+    }
+
+    /// Inverse of [`to_json`](Self::to_json) (for replay).
+    pub fn from_json(v: &serde_json::Value) -> Option<Action> {
+        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_string);
+        let repo = || s("repo").and_then(|r| RepoId::parse(&r));
+        Some(match v.get("kind")?.as_str()? {
+            "http" => Action::Http { method: s("method")?, path: s("path")? },
+            "git.fetch" => Action::GitFetch { repo: repo()? },
+            "git.advertise" => Action::GitPushAdvertise { repo: repo()? },
+            "git.push" => Action::GitPush {
+                repo: repo()?,
+                refname: s("ref")?,
+                force: v.get("force")?.as_bool()?,
+                update: "replayed",
+            },
+            _ => return None,
+        })
+    }
+
     pub fn method(&self) -> Option<&str> {
         match self {
             Action::Http { method, .. } => Some(method),

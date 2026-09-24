@@ -167,3 +167,7 @@ Next milestone: [[M3 CI Identity and MCP]], which adds identity attribution, tri
 - Report: milestone row "Weeks 5-6 M2 Policy, audit, learn"; Cedar section (guarantees, schema sketch, formal gates, learning pipeline and mitigations); audit event fields.
 - Research note 05 section 5.2 M2 row (Claude Code, Codex, Gemini CLI; Splunk/Datadog test sink).
 - Research note 03 Q6 (learning pipeline and poisoning mitigations); research note 04a Q5 (SymCC API).
+
+## Build log
+
+- 2026-09-24: steps 1-2 built: the Cedar engine ([[ADR-022 Cedar Schema and Engine as Built]]), repository policy with content-hash approval, `broker learn` and `broker suggest`. Acceptance so far: C1 and C2 pass with a deterministic agent script against fake upstreams (`m2_learn::c1_learned_policy_passes_the_task_and_c2_seeded_injection_is_blocked`); C1 over 3 repos × 3 real agents is not run (only Claude Code is installed here); C5 is the M0 I9 test; C6 is `i4_repo_policy_only_narrows_and_needs_approval`; C7 holds by construction (G9) and is asserted in `mining_applies_the_safeguards`; C3 needs the SymCC gates; C4 needs the OCSF export.

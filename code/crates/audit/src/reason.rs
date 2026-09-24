@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Serialised in snake_case; the names are part of the audit format and of
 /// the public bypass corpus, so renaming one is a format change.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Reason {
     // ---- canonicaliser (netguard::canon), I6 ----
