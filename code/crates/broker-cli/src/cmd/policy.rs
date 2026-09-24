@@ -160,3 +160,73 @@ fn run_check(a: CheckArgs) -> anyhow::Result<i32> {
         0
     })
 }
+
+pub struct ExportArgs {
+    pub target: String,
+    pub profile: String,
+    pub policy: Option<PathBuf>,
+    pub out: Option<PathBuf>,
+}
+
+/// `broker policy export`: the profile's policy as a vendor-native file
+/// (defence in depth; the broker stays the boundary). The file goes to
+/// stdout or `--out`, the export report to stderr. Nothing is installed.
+pub fn export(a: ExportArgs) -> i32 {
+    match run_export(a) {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("broker: {e:#}");
+            EXIT_BROKER
+        }
+    }
+}
+
+fn run_export(a: ExportArgs) -> anyhow::Result<()> {
+    use launcher::fs_compile::{DEFAULT_DENY_READ, HOME_DENY_WRITE, ROOT_DENY_WRITE};
+    use policy::exporters::{Normalized, claude, codex};
+    let dirs = ctl::dirs()?;
+    let user = match &a.policy {
+        Some(p) => load(p)?,
+        None => brokerd::session_util::load_user_policy(&dirs)?,
+    };
+    let profile = (format!("profile:{}", a.profile), brokerd::profiles::by_name(&a.profile)?);
+    let env =
+        CompileEnv { github_app_issuers: user.issuers.github_app.keys().cloned().collect(), ..Default::default() };
+    let egress = compile(Some(&profile), &user, &env)?;
+    let mut report = Vec::new();
+    let mut paths = |list: &[String]| -> Vec<String> {
+        list.iter()
+            .filter(|p| {
+                let ok = p.starts_with("~/") || p.starts_with('/');
+                if !ok {
+                    report.push(format!("{p}: not exported (only `~/` and absolute paths resolve the same way)"));
+                }
+                ok
+            })
+            .cloned()
+            .collect()
+    };
+    let mut deny_read: Vec<String> = DEFAULT_DENY_READ.iter().map(|p| format!("~/{p}")).collect();
+    deny_read.extend(paths(&profile.1.filesystem.deny_read));
+    deny_read.extend(paths(&user.filesystem.deny_read));
+    let deny_write: Vec<String> = HOME_DENY_WRITE.iter().map(|p| format!("~/{p}")).collect();
+    let n = Normalized::from_policy(&egress, &deny_read, &deny_write);
+    let e = match a.target.as_str() {
+        "claude-code" => claude::export(&n),
+        "codex" => codex::export(&n, &a.profile),
+        t => anyhow::bail!("unknown target {t:?} (claude-code, codex)"),
+    };
+    report.extend(e.report);
+    report.push(format!(
+        "project-relative deny-write names ({}) are enforced by the broker only",
+        ROOT_DENY_WRITE.join(", ")
+    ));
+    match &a.out {
+        Some(p) => std::fs::write(p, &e.file)?,
+        None => print!("{}", e.file),
+    }
+    for r in report {
+        eprintln!("export: {r}");
+    }
+    Ok(())
+}

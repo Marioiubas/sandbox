@@ -4251,5 +4251,24 @@
     "aliases": [
       "ADR-024"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-025 Native Config Exporters as Built.md",
+    "title": "ADR-025 Native Config Exporters as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "broker policy export writes Claude Code managed-settings.json and Codex requirements.toml from the enforced policy of one profile per the vendors' documented schemas; domain allows only on admitted ports, the ceiling as denies, fail-closed flags, deny-read paths; no proxy chaining or MCP allowlist.",
+    "links_to": [
+      "Native Config Exporters",
+      "M2 Policy Audit and Learn",
+      "Claude Code and sandbox-runtime",
+      "OpenAI Codex CLI",
+      "I8 No Flag Disables Isolation",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M2 build (2026-09-24) from the Claude Code settings, sandboxing and managed-settings docs and OpenAI's managed-configuration reference.",
+    "aliases": [
+      "ADR-025"
+    ]
   }
 ]

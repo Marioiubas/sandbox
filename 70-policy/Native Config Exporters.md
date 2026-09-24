@@ -4,14 +4,14 @@ aliases: ["Compile-to-Native", "policy exporters"]
 type: component
 section: policy
 tags: [sandbox/policy, component, topic/policy, topic/market, milestone/m2, milestone/phase2]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
 summary: "Compile the one Cedar source to Claude Code managed settings, Codex requirements.toml, Cursor sandbox.json and OpenShell YAML so each vendor's own controls become defense in depth instead of competitors."
 related: ["[[Gap Analysis]]", "[[Claude Code and sandbox-runtime]]", "[[OpenAI Codex CLI]]", "[[Cursor and Gemini CLI]]", "[[NVIDIA OpenShell]]", "[[M2 Policy Audit and Learn]]", "[[broker.toml Human Policy Layer]]", "[[Risk Register]]", "[[Broker Cedar Schema]]", "[[Cedar]]", "[[Docker Sandboxes]]", "[[SymCC CI Gates]]", "[[Control Plane and Policy Bundles]]", "[[ADR-001 Value Lives in the Broker]]", "[[Repository Layout]]"]
 sources: ["https://code.claude.com/docs/en/sandboxing", "https://codex.danielvaughan.com/2026/03/31/codex-cli-network-security-requirements-toml/", "https://cursor.com/changelog/2-5", "https://docs.nvidia.com/openshell/latest/tutorials/first-network-policy.html", "https://github.com/NVIDIA/openshell", "https://docs.docker.com/ai/sandboxes/security/defaults/", "https://geminicli.com/docs/cli/sandbox/", "https://learn.chatgpt.com/codex/sandboxing"]
-code: []
+code: ["code/crates/policy/src/exporters", "code/crates/broker-cli/src/cmd/policy.rs", "code/tests/golden/exporters"]
 milestone: M2
 ---
 
@@ -51,6 +51,8 @@ Crate path: `code/crates/policy/exporters/{claude,codex,cursor,openshell}` ([[Re
 
 > [!question] Unverified
 > The record documents these controls' existence, not their exact file schemas. Before writing each exporter, fetch the current vendor schema and pin its version in the exporter's tests. Cursor's `sandbox.json` field names and the Codex managed-proxy key names are not in the record. Gemini CLI documents sandbox profiles but no credential brokering or managed network policy ([Gemini CLI docs](https://geminicli.com/docs/cli/sandbox/)), so it has no export target yet ([[Cursor and Gemini CLI]]).
+
+**Implementation notes (2026-09-24, M2):** the Claude Code and Codex schemas were fetched from the vendors' docs and are recorded in [[ADR-025 Native Config Exporters as Built]]. Codex's `[experimental_network]` uses a `domains` map (`"name" = "allow"|"deny"`; `*.name` subdomains only, `**.name` apex and subdomains; deny wins) and needs `enabled = true`; the legacy `allowed_domains`/`denied_domains` lists must not be combined with it. Claude Code domain entries take an optional `:port`. Cursor's `sandbox.json` remains unverified (phase 2).
 
 ### Exporter rules (Proposal)
 
@@ -115,3 +117,7 @@ OpenShell is the closest open-source analogue: Apache-2.0, per-binary L7 rules, 
 - [NVIDIA OpenShell docs](https://docs.nvidia.com/openshell/latest/tutorials/first-network-policy.html); [NVIDIA OpenShell GitHub](https://github.com/NVIDIA/openshell)
 - [Docker Sandboxes security defaults](https://docs.docker.com/ai/sandboxes/security/defaults/)
 - [Gemini CLI sandbox docs](https://geminicli.com/docs/cli/sandbox/)
+
+## Build log
+
+- 2026-09-24: Claude Code and Codex exporters built as `broker policy export --target claude-code|codex --profile NAME` ([[ADR-025 Native Config Exporters as Built]]): rules 1-3 and 5 hold (only narrowings, no secrets, fail-closed flags; a property test checks the exported files never admit a host or port the broker denies); rule 4 (proxy chaining) is not exported because the broker ingress is per session. Golden files per shipped profile in `code/tests/golden/exporters/`.

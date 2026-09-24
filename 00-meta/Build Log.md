@@ -137,3 +137,11 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **ADRs:** [[ADR-024 Formal Gates as Built]].
 - **Open questions:** SymCC feature coverage for this schema confirmed; scaling still open ([[Open Questions and Unverified Claims]]).
 - **Next step:** native config exporters (Claude Code managed settings, Codex `requirements.toml`); shadow mode; then the M2 CI matrix.
+
+### 2026-09-24: M2 step 5, native config exporters
+
+- **Milestone:** [[M2 Policy Audit and Learn]] (in progress).
+- **Built:** `broker policy export --target claude-code|codex --profile NAME`: Claude Code `managed-settings.json` and Codex `requirements.toml` compiled from the enforced policy, with an export report of everything only the broker enforces. Vendor schemas fetched from the vendors' docs first.
+- **Tests:** property test that neither exported file admits a host or port the broker denies (documented matchers); golden files for all six shipped profiles × two targets.
+- **ADRs:** [[ADR-025 Native Config Exporters as Built]] (no proxy chaining, no MCP allowlist until M3, Cursor/OpenShell in phase 2).
+- **Next step:** shadow mode; then the M2 CI matrix and milestone review.

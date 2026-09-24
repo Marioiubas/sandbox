@@ -136,6 +136,22 @@ pub enum PolicyCmd {
         #[arg(long)]
         json: bool,
     },
+    /// Write a profile's policy as a vendor-native config (defence in depth;
+    /// never installed by the broker). The export report goes to stderr.
+    Export {
+        /// claude-code (managed-settings.json) or codex (requirements.toml).
+        #[arg(long)]
+        target: String,
+        /// The built-in profile to export.
+        #[arg(long)]
+        profile: String,
+        /// The user policy to include (default: your broker.toml).
+        #[arg(long)]
+        policy: Option<std::path::PathBuf>,
+        /// Write the file here instead of stdout.
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -161,6 +177,9 @@ fn main() {
         Command::Policy { action: PolicyCmd::Approve } => cmd::policy::approve(),
         Command::Policy { action: PolicyCmd::Check { profile, policy, baseline, repo, json } } => {
             cmd::policy::check(cmd::policy::CheckArgs { profile, policy, baseline, repo, json })
+        }
+        Command::Policy { action: PolicyCmd::Export { target, profile, policy, out } } => {
+            cmd::policy::export(cmd::policy::ExportArgs { target, profile, policy, out })
         }
         Command::Daemon { action: DaemonCmd::Status } => cmd::daemon::status(),
         Command::Daemon { action: DaemonCmd::Stop } => cmd::daemon::stop(),

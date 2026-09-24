@@ -151,3 +151,16 @@ broker policy check --repo                                # with .broker/ policy
 
 A proof covers the policy text. Whether the broker turns hosts, paths and
 refs into the right values is tested separately by the conformance suite.
+
+## Exporting to vendor configs (M2)
+
+`broker policy export --target claude-code --profile claude-code` prints a
+Claude Code `managed-settings.json`; `--target codex` prints a Codex
+`requirements.toml`. They are a second layer inside the agent, compiled
+from the same policy: domain allows only on the ports the broker admits,
+the org ceiling as denies, the vendor's fail-closed switches, and the
+credential stores as deny-read paths. Method, path and git rules,
+credentials and address checks stay with the broker; the export report on
+stderr lists them. The broker never installs these files: deploy them with
+your MDM (`/Library/Application Support/ClaudeCode/`, `/etc/claude-code/`,
+`/etc/codex/`), and keep running agents under `broker run`.
