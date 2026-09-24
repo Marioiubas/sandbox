@@ -5,6 +5,7 @@ pub mod doctor;
 pub mod export;
 pub mod policy;
 pub mod run;
+pub mod shadow;
 pub mod suggest;
 pub mod why;
 

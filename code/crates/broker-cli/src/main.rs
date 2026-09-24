@@ -136,6 +136,19 @@ pub enum PolicyCmd {
         #[arg(long)]
         json: bool,
     },
+    /// Evaluate a candidate policy beside yours on every request and log
+    /// its verdict (shadow mode); it never decides anything.
+    Shadow {
+        /// The candidate broker.toml to activate.
+        #[arg(conflicts_with_all = ["off", "report"])]
+        file: Option<std::path::PathBuf>,
+        /// Deactivate the candidate.
+        #[arg(long)]
+        off: bool,
+        /// Report what the candidate would have changed.
+        #[arg(long)]
+        report: bool,
+    },
     /// Write a profile's policy as a vendor-native config (defence in depth;
     /// never installed by the broker). The export report goes to stderr.
     Export {
@@ -177,6 +190,13 @@ fn main() {
         Command::Policy { action: PolicyCmd::Approve } => cmd::policy::approve(),
         Command::Policy { action: PolicyCmd::Check { profile, policy, baseline, repo, json } } => {
             cmd::policy::check(cmd::policy::CheckArgs { profile, policy, baseline, repo, json })
+        }
+        Command::Policy { action: PolicyCmd::Shadow { file, off, report } } => {
+            cmd::shadow::shadow(match (file, off, report) {
+                (Some(f), _, _) => cmd::shadow::Action::Activate(f),
+                (None, true, _) => cmd::shadow::Action::Off,
+                (None, false, _) => cmd::shadow::Action::Report,
+            })
         }
         Command::Policy { action: PolicyCmd::Export { target, profile, policy, out } } => {
             cmd::policy::export(cmd::policy::ExportArgs { target, profile, policy, out })

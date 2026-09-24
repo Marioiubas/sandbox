@@ -4270,5 +4270,25 @@
     "aliases": [
       "ADR-025"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-026 Shadow Mode as Built.md",
+    "title": "ADR-026 Shadow Mode as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "broker policy shadow <file> activates a candidate broker.toml that every enforce session evaluates beside the enforced policy (mode shadow) and logs per decision; it never decides or attaches a credential; --report lists what it would tighten or widen; record sessions are never shadowed.",
+    "links_to": [
+      "Policy Learning Loop",
+      "ADR-011 Verified Policy Learning Loop",
+      "I3 Probabilistic Components Only Narrow",
+      "Broker Cedar Schema",
+      "Broker CLI and Daemon",
+      "M2 Policy Audit and Learn",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M2 build (2026-09-24) from the shadow-mode implementation and its conformance test.",
+    "aliases": [
+      "ADR-026"
+    ]
   }
 ]

@@ -33,6 +33,8 @@ pub enum Mode {
     /// Learning: task permits relaxed to the org ceiling, credentials still
     /// only by grant (Policy Learning Loop).
     Record,
+    /// Enforce, with a candidate policy evaluated and logged alongside.
+    Shadow,
 }
 
 impl Mode {
@@ -40,6 +42,7 @@ impl Mode {
         match self {
             Mode::Enforce => "enforce",
             Mode::Record => "record",
+            Mode::Shadow => "shadow",
         }
     }
 }

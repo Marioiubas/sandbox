@@ -48,6 +48,15 @@ pub fn render(events: &[StoredEvent]) -> String {
             let origin = detail.get("credential_origin").and_then(|v| v.as_str()).unwrap_or("-");
             out.push_str(&format!("  credential {c} ({origin}; the value is never logged)\n"));
         }
+        if let Some(sh) = detail.remove("shadow") {
+            let allow = sh.get("allow").and_then(|v| v.as_bool()).unwrap_or(false);
+            let why = sh.get("reason").and_then(|v| v.as_str()).map(|r| format!(" ({r})")).unwrap_or_default();
+            let scope = if sh.get("name_only").is_some() { " on the name alone" } else { "" };
+            out.push_str(&format!(
+                "  shadow    the candidate policy would {}{why}{scope}; it decided nothing\n",
+                if allow { "allow" } else { "deny" }
+            ));
+        }
         if !detail.is_empty() {
             out.push_str(&format!("  detail    {}\n", serde_json::Value::Object(detail)));
         }

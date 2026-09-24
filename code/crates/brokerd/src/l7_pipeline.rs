@@ -20,23 +20,21 @@
 use crate::pipeline::{Outcome, PipelineCtx};
 use crate::rewind::Rewind;
 use crate::upstream;
-use audit::{AuditEvent, Dest, EventKind, Reason, Recorder, RequestId};
+use audit::{Dest, EventKind, Reason, RequestId};
 use bytes::Bytes;
 use creds::SessionCreds;
-use http::{HeaderValue, Request, Response, StatusCode};
+use http::{HeaderValue, Request, Response};
 use http_body_util::combinators::UnsyncBoxBody;
-use http_body_util::{BodyExt, Full, Limited};
+use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::client::conn::http1::SendRequest;
 use hyper_util::rt::{TokioIo, TokioTimer};
 use l7::filter::{BoxError, FilteredBody};
-use l7::git::PushInfo;
 use netguard::CanonicalHost;
 use policy::Admission;
 use policy::l7::Protocol;
 use std::collections::BTreeSet;
 use std::convert::Infallible;
-use std::io::Read;
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -44,6 +42,10 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
+
+mod respond;
+
+use respond::{OutcomeBody, collect, decode_body};
 
 /// Largest request body the broker buffers for inspection (git pushes,
 /// body sentinel swap). Larger bodies are denied, not streamed unchecked.
@@ -79,13 +81,10 @@ struct Conn {
     protocols: BTreeSet<Protocol>,
     upstream: tokio::sync::Mutex<Upstream>,
     requests: AtomicU64,
+    /// Shadow mode: the candidate policy's admission of this connection.
+    shadow_adm: Option<Result<Admission, Reason>>,
 }
 
-fn full(b: impl Into<Bytes>) -> RespBody {
-    Full::new(b.into()).map_err(|n: Infallible| match n {}).boxed_unsync()
-}
-
-/// Serve one terminated tunnel. `peeked` holds the ClientHello bytes.
 #[allow(clippy::too_many_arguments)]
 pub async fn serve<S>(
     ctx: Arc<PipelineCtx>,
@@ -99,6 +98,7 @@ pub async fn serve<S>(
     addrs: Vec<IpAddr>,
     dest: Dest,
     conn_rid: RequestId,
+    shadow_adm: Option<Result<Admission, Reason>>,
 ) -> Outcome
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -134,6 +134,7 @@ where
         protocols,
         upstream: tokio::sync::Mutex::new(Upstream { first: Some(upstream_tcp), sender: None }),
         requests: AtomicU64::new(0),
+        shadow_adm,
     });
     let c2 = conn.clone();
     let svc = hyper::service::service_fn(move |req: Request<Incoming>| {
@@ -166,107 +167,9 @@ where
     Outcome::Terminated { request_id: conn_rid, requests: conn.requests.load(Ordering::Relaxed) }
 }
 
-/// Decode a request body for inspection (identity or gzip only).
-fn decode_body(headers: &http::HeaderMap, raw: &Bytes, max: usize) -> Result<Vec<u8>, Reason> {
-    match l7::filter::coding(headers) {
-        Some(l7::filter::Coding::Identity) => Ok(raw.to_vec()),
-        Some(l7::filter::Coding::Gzip) => {
-            let mut out = Vec::new();
-            flate2::read::GzDecoder::new(&raw[..])
-                .take(max as u64 + 1)
-                .read_to_end(&mut out)
-                .map_err(|_| Reason::GitParseError)?;
-            if out.len() > max {
-                return Err(Reason::BodyTooLarge);
-            }
-            Ok(out)
-        }
-        _ => Err(Reason::UnsupportedEncoding),
-    }
-}
-
-async fn collect(body: Incoming, max: usize) -> Result<Bytes, Reason> {
-    match Limited::new(body, max).collect().await {
-        Ok(c) => Ok(c.to_bytes()),
-        Err(e) if e.downcast_ref::<http_body_util::LengthLimitError>().is_some() => Err(Reason::BodyTooLarge),
-        Err(_) => Err(Reason::MalformedRequest),
-    }
-}
-
 impl Conn {
     fn authority(&self) -> String {
         if self.port == 443 { self.host.as_str().to_string() } else { format!("{}:{}", self.host, self.port) }
-    }
-
-    fn base_event(&self, kind: EventKind, rid: &RequestId, verbs: &[String]) -> AuditEvent {
-        let mut ev = self.ctx.event(kind, rid).dest(self.dest.clone()).detail("layer", "l7");
-        if !verbs.is_empty() {
-            ev = ev.detail("verb", verbs.join("; "));
-        }
-        ev
-    }
-
-    /// Record a deny and answer the client (git-native for pushes).
-    fn deny(
-        &self,
-        rid: &RequestId,
-        reason: Reason,
-        policy_ids: Vec<String>,
-        verbs: &[String],
-        extra: Option<(&str, serde_json::Value)>,
-        push: Option<&PushInfo>,
-    ) -> Response<RespBody> {
-        self.ctx.stats.denied.fetch_add(1, Ordering::Relaxed);
-        let mut ev = self.base_event(EventKind::RequestDecision, rid, verbs).deny(reason, policy_ids);
-        if let Some((k, v)) = extra {
-            ev = ev.detail(k, v);
-        }
-        if let Some(p) = push.and_then(|p| p.pack_note.clone()) {
-            ev = ev.detail("pack", p);
-        }
-        if let Err(e) = self.ctx.recorder.append(&ev) {
-            eprintln!("brokerd: audit append failed for deny {rid}: {e:#}");
-        }
-        let hint = format!("broker: denied ({}): {}; run `broker why {rid}`", reason.as_str(), reason.explain());
-        if let Some(p) = push.filter(|p| l7::git::receive_pack::wants_report(&p.capabilities)) {
-            let rejected: Vec<(String, String)> = p
-                .refs
-                .iter()
-                .map(|r| (r.clone(), format!("broker denied: {} (broker why {rid})", reason.as_str())))
-                .collect();
-            let body = l7::git::receive_pack::rejection(&p.capabilities, &rejected, &hint);
-            return self.local(StatusCode::OK, rid, reason, "application/x-git-receive-pack-result", body);
-        }
-        let status = match reason {
-            Reason::MintFailed | Reason::UpstreamTls | Reason::UpstreamConnectFailed | Reason::AuditUnavailable => {
-                StatusCode::BAD_GATEWAY
-            }
-            Reason::BodyTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Reason::HeadTooLarge => StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE,
-            Reason::HostHeaderMismatch => StatusCode::MISDIRECTED_REQUEST,
-            _ => StatusCode::FORBIDDEN,
-        };
-        self.local(status, rid, reason, "text/plain; charset=utf-8", format!("{hint}\n").into_bytes())
-    }
-
-    fn local(
-        &self,
-        status: StatusCode,
-        rid: &RequestId,
-        reason: Reason,
-        ct: &str,
-        body: Vec<u8>,
-    ) -> Response<RespBody> {
-        let mut r = Response::new(full(body));
-        *r.status_mut() = status;
-        let h = r.headers_mut();
-        h.insert("content-type", HeaderValue::from_str(ct).unwrap_or(HeaderValue::from_static("text/plain")));
-        if let Ok(v) = HeaderValue::from_str(rid.as_str()) {
-            h.insert("x-broker-request-id", v);
-        }
-        h.insert("x-broker-reason", HeaderValue::from_static(reason.as_str()));
-        h.insert("cache-control", HeaderValue::from_static("no-store"));
-        r
     }
 
     async fn handle(self: &Arc<Self>, req: Request<Incoming>) -> Response<RespBody> {
@@ -332,20 +235,16 @@ impl Conn {
 
         // 4. Authorize: every action must be allowed.
         let dec = self.ctx.policy.authorize_l7(&self.adm, &actions);
+        let shadow = self.shadow_note(&actions, dec.result.is_ok());
         if let Err(reason) = dec.result {
             let per: Vec<String> = dec
                 .actions
                 .iter()
                 .map(|(v, r)| format!("{v} => {}", r.map(|_| "allow").unwrap_or_else(|e| e.as_str())))
                 .collect();
-            return self.deny(
-                &rid,
-                reason,
-                dec.policy_ids,
-                &per,
-                Some(("actions", actions_json.into())),
-                push.as_ref(),
-            );
+            let mut extra = vec![("actions", actions_json.into())];
+            extra.extend(shadow.map(|s| ("shadow", s)));
+            return self.deny_with(&rid, reason, dec.policy_ids, &per, extra, push.as_ref());
         }
 
         // 6. Credential: only through the binding the decision produced.
@@ -374,6 +273,9 @@ impl Conn {
         if let Some(w) = dec.would_deny {
             // Record mode: the enforce-mode decision, for the learner.
             ev = ev.audit_mode().detail("would_deny", w.as_str());
+        }
+        if let Some(s) = shadow {
+            ev = ev.detail("shadow", s);
         }
         if let Some((i, reused, _, _)) = &issued {
             ev = ev
@@ -481,22 +383,6 @@ impl Conn {
         Response::from_parts(rparts, body.boxed_unsync())
     }
 
-    fn cut_response(&self, rid: &RequestId, verbs: &[String], status: u16) -> Response<RespBody> {
-        let mut ev = self.base_event(EventKind::RequestOutcome, rid, verbs).detail("status", status);
-        ev.reason = Some(Reason::SecretReflected);
-        let _ = self.ctx.recorder.append(&ev);
-        self.local(
-            StatusCode::BAD_GATEWAY,
-            rid,
-            Reason::SecretReflected,
-            "text/plain; charset=utf-8",
-            format!(
-                "broker: the upstream response reflected an injected secret and was withheld; run `broker why {rid}`\n"
-            )
-            .into_bytes(),
-        )
-    }
-
     async fn send(&self, req: Request<ReqBody>) -> Result<Response<Incoming>, Reason> {
         let mut up = self.upstream.lock().await;
         if up.sender.as_ref().is_none_or(|s| s.is_closed()) {
@@ -516,52 +402,5 @@ impl Conn {
         let s = up.sender.as_mut().ok_or(Reason::UpstreamConnectFailed)?;
         s.ready().await.map_err(|_| Reason::UpstreamConnectFailed)?;
         s.send_request(req).await.map_err(|_| Reason::UpstreamConnectFailed)
-    }
-}
-
-/// Counts response bytes and appends the outcome row when the body ends
-/// (or is dropped, for example when the filter cut it).
-struct OutcomeBody {
-    inner: RespBody,
-    bytes: u64,
-    ev: Option<AuditEvent>,
-    recorder: Arc<dyn Recorder>,
-    cut: Arc<AtomicBool>,
-}
-
-impl http_body::Body for OutcomeBody {
-    type Data = Bytes;
-    type Error = BoxError;
-    fn poll_frame(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Result<http_body::Frame<Bytes>, BoxError>>> {
-        let r = std::pin::Pin::new(&mut self.inner).poll_frame(cx);
-        if let std::task::Poll::Ready(Some(Ok(f))) = &r
-            && let Some(d) = f.data_ref()
-        {
-            self.bytes += d.len() as u64;
-        }
-        r
-    }
-    fn is_end_stream(&self) -> bool {
-        self.inner.is_end_stream()
-    }
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.inner.size_hint()
-    }
-}
-
-impl Drop for OutcomeBody {
-    fn drop(&mut self) {
-        if let Some(mut ev) = self.ev.take() {
-            ev = ev.detail("bytes_in", self.bytes);
-            if self.cut.load(Ordering::SeqCst) {
-                ev.reason = Some(Reason::SecretReflected);
-            }
-            if let Err(e) = self.recorder.append(&ev) {
-                eprintln!("brokerd: audit append failed for outcome: {e:#}");
-            }
-        }
     }
 }

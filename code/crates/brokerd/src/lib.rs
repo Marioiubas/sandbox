@@ -15,4 +15,5 @@ pub mod server;
 pub mod session;
 pub mod session_l7;
 pub mod session_util;
+pub mod shadow;
 pub mod upstream;

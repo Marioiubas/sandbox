@@ -95,6 +95,7 @@ fn fx(
         connect_timeout: Duration::from_secs(2),
         sni_timeout: Duration::from_secs(2),
         l7: None,
+        shadow: None,
     });
     Fx { ctx, rec, resolver }
 }

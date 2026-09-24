@@ -50,6 +50,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-023 OCSF and OTLP Export as Built]] | OCSF 1.9.0 classes verified (4001/4002/6003); pull export from the verified chain as NDJSON, HEC or OTLP/HTTP JSON without the OTel SDK; chain hash in every event. |
 | [[ADR-024 Formal Gates as Built]] | Gates on cedar-policy-symcc 0.7.0 + cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, no forced pushes in record mode, I4 proved on a single-set encoding of the conjunction. |
 | [[ADR-025 Native Config Exporters as Built]] | `broker policy export` writes Claude Code managed-settings.json and Codex requirements.toml from the enforced policy (verified vendor schemas); no proxy chaining or MCP allowlist yet. |
+| [[ADR-026 Shadow Mode as Built]] | `broker policy shadow <file>` evaluates a candidate broker.toml beside the enforced policy in every enforce session (mode `shadow`), logs its verdict per decision and reports what it would change; it never decides. |
 
 ## Where the value is
 
@@ -105,6 +106,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-023 OCSF and OTLP Export as Built]] — OCSF 1.9.0 classes verified (4001/4002/6003); pull export from the verified chain as NDJSON, HEC or OTLP/HTTP JSON without the OTel SDK; chain hash in every event.
 - [[ADR-024 Formal Gates as Built]] — Gates on cedar-policy-symcc 0.7.0 + cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, no forced pushes in record mode, I4 proved on a single-set encoding of the conjunction.
 - [[ADR-025 Native Config Exporters as Built]] — `broker policy export` writes Claude Code managed-settings.json and Codex requirements.toml from the enforced policy (verified vendor schemas); no proxy chaining or MCP allowlist yet.
+- [[ADR-026 Shadow Mode as Built]] — `broker policy shadow <file>` evaluates a candidate broker.toml beside the enforced policy in every enforce session (mode `shadow`), logs its verdict per decision and reports what it would change; it never decides.
 
 ## How this section connects
 

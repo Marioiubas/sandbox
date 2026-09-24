@@ -3,9 +3,8 @@
 //! a `launch_refused` event naming what was missing, and never runs the agent.
 
 use crate::dirs::{BrokerDirs, passwd_user};
-use crate::pipeline::{self, PipelineCtx, Stats};
-use crate::profiles;
-use crate::proto::{Exited, StartParams, StartResult};
+use crate::pipeline::{PipelineCtx, Stats};
+use crate::proto::{StartParams, StartResult};
 use crate::session_util::*;
 use audit::{AuditEvent, EventKind, Reason, Recorder, SessionId, SqliteRecorder};
 use launcher::{EgressEndpoint, FsInputs, LayerStatus, SandboxBackend, SandboxSpec};
@@ -18,6 +17,12 @@ use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+mod assemble;
+mod running;
+
+use assemble::Assembled;
+use running::{Listener, accept_loop};
 
 /// Every grant expires with its task (the `task-expiry` forbid).
 pub const TASK_LIFETIME_SECS: i64 = 24 * 3600;
@@ -144,77 +149,8 @@ impl Daemon {
         let user = passwd_user()?;
         let home = user.dir.clone();
 
-        // Policy: built-in profile + user layer (repo layers wait for M2's
-        // hash approval and narrowing gate: I4, I5).
-        let profile = match &params.profile {
-            Some(p) => profiles::by_name(p)?,
-            None => profiles::detect(&params.argv[0])?,
-        };
-        let user_policy = load_user_policy(&self.dirs)?;
-        let scope = format!("profile:{}", profile.name);
-        // `${repo_remote}` comes from the checkout's own config file, read
-        // without running git; unresolved, rules that use it grant nothing.
-        let repo_remote = origin_remote(&repo_root(&cwd));
-        let mode = match params.mode.as_deref() {
-            None | Some("enforce") => policy::cedar::Mode::Enforce,
-            Some("record") => policy::cedar::Mode::Record,
-            Some(m) => return Err(format!("unknown session mode {m:?}").into()),
-        };
-        let agent_path = resolve_command(&params.argv[0], params.env.get("PATH").map(String::as_str), &cwd);
-        let agent_base = std::path::Path::new(&params.argv[0])
-            .file_name()
-            .map(|b| b.to_string_lossy().into_owned())
-            .unwrap_or_else(|| params.argv[0].clone());
-        // The principal of every decision: the Task, carrying user and agent.
-        let session_info = policy::cedar::SessionInfo {
-            session_id: id.to_string(),
-            task_id: format!("task-{id}"),
-            user: format!("local:{}", user.name),
-            agent: agent_base,
-            agent_sha256: agent_path.as_deref().and_then(|p| self.hash_binary(p)).unwrap_or_default(),
-            repo: repo_remote.as_ref().map(|r| format!("{}/{}", r.owner(), r.name())).unwrap_or_default(),
-            branch_prefix: "agent/".into(),
-            expires_at: policy::cedar::entities::now_epoch() + TASK_LIFETIME_SECS,
-            mode,
-        };
-        let compile_env = policy::CompileEnv {
-            repo_remote,
-            github_app_issuers: user_policy.issuers.github_app.keys().cloned().collect(),
-            session: session_info,
-        };
-        let mut egress = EgressPolicy::compile_with(
-            [(scope.as_str(), profile.egress.as_slice()), ("user", user_policy.egress.as_slice())],
-            &compile_env,
-        )?;
-        // Repository policy: read here on the host, used only if its exact
-        // content was approved, and conjoined so it can only narrow (I4, I5).
-        let repo_status = crate::repo_policy::status(&self.dirs, &repo_root(&cwd))
-            .map_err(|e| format!("repository policy: {e:#}"))?;
-        if let crate::repo_policy::Status::Approved { toml, cedar, .. } = &repo_status {
-            let entries = toml.as_ref().map(|t| t.egress.clone()).unwrap_or_default();
-            egress = egress
-                .with_repo_layer(&entries, cedar.as_deref(), &compile_env)
-                .map_err(|e| format!("approved repository policy does not compile: {e}"))?;
-        }
-        let mut grants: Vec<String> =
-            egress.grants().iter().map(|g| format!("{} {}:{:?}", g.id, g.pattern, g.ports)).collect();
-        if repo_status != crate::repo_policy::Status::Absent {
-            grants.push(format!("repo policy: {}", repo_status.describe()));
-        }
-        let mut warnings = Vec::new();
-        if egress.is_empty() {
-            warnings.push("no egress grants: every network request will be denied (empty lists deny)".into());
-        }
-        if let crate::repo_policy::Status::Unapproved { sha256 } = &repo_status {
-            warnings.push(format!(
-                "repository policy in .broker/ is not approved ({sha256}); it is ignored until you run `broker policy approve`"
-            ));
-        }
-        if compile_env.repo_remote.is_none()
-            && egress.credentials().iter().any(|c| matches!(c.kind, policy::CredKind::GitHubApp { .. }))
-        {
-            warnings.push("no origin remote found: rules using ${repo_remote} grant nothing in this session".into());
-        }
+        let Assembled { profile, user_policy, egress, shadow, grants, warnings } =
+            self.assemble_policy(id, &params, &cwd, &user.name)?;
 
         // Session directories.
         let session_dir = self.dirs.sessions_dir().join(id.as_str());
@@ -253,6 +189,7 @@ impl Daemon {
                 stdio,
                 grants,
                 warnings,
+                shadow,
             )
             .await;
         if result.is_err() {
@@ -278,6 +215,7 @@ impl Daemon {
         stdio: [OwnedFd; 3],
         grants: Vec<String>,
         warnings: Vec<String>,
+        shadow: Option<(String, Result<EgressPolicy, String>)>,
     ) -> Result<Running, StartFailure> {
         // Filesystem policy.
         let mut extra_write = Vec::new();
@@ -423,6 +361,7 @@ impl Daemon {
             connect_timeout: Duration::from_secs(10),
             sni_timeout: Duration::from_secs(15),
             l7: Some(l7.ctx.clone()),
+            shadow: shadow.as_ref().and_then(|(_, r)| r.as_ref().ok()).map(|p| Arc::new(p.clone())),
         });
         // Write-ahead (I9): the session is on record before the agent can run;
         // if the log cannot take it, the agent never starts (I2).
@@ -444,6 +383,9 @@ impl Daemon {
             .detail("layers", serde_json::to_value(&probe_layers).unwrap_or_default())
             .detail("credentials", l7.credentials.clone())
             .detail("trust_bundle", tls::trust_bundle::describe(&l7.bundle));
+        if let Some((sha, r)) = &shadow {
+            ev = ev.detail("shadow", serde_json::json!({ "candidate": sha, "error": r.as_ref().err() }));
+        }
         ev.enduser = Some(enduser.clone());
         ev.agent = Some(params.argv[0].clone());
         ev.agent_sha256 = agent_sha;
@@ -518,86 +460,5 @@ impl Daemon {
             agent: params.argv[0].clone(),
             enduser,
         })
-    }
-}
-
-enum Listener {
-    Unix(tokio::net::UnixListener),
-    Tcp(tokio::net::TcpListener),
-}
-
-async fn accept_loop(l: Listener, ctx: Arc<PipelineCtx>) {
-    loop {
-        match &l {
-            Listener::Unix(u) => match u.accept().await {
-                Ok((s, _)) => {
-                    let c = ctx.clone();
-                    tokio::spawn(async move {
-                        pipeline::handle(&c, s).await;
-                    });
-                }
-                Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
-            },
-            Listener::Tcp(t) => match t.accept().await {
-                Ok((s, peer)) => {
-                    // Loopback only; the sentinel authenticates the session.
-                    if !peer.ip().is_loopback() {
-                        continue;
-                    }
-                    let _ = s.set_nodelay(true);
-                    let c = ctx.clone();
-                    tokio::spawn(async move {
-                        pipeline::handle(&c, s).await;
-                    });
-                }
-                Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
-            },
-        }
-    }
-}
-
-impl Running {
-    /// Forward a signal to the agent. Only a small set is accepted.
-    pub fn signal(&self, name: &str) {
-        let sig = match name {
-            "INT" => libc::SIGINT,
-            "TERM" => libc::SIGTERM,
-            "HUP" => libc::SIGHUP,
-            "WINCH" => libc::SIGWINCH,
-            "QUIT" => libc::SIGQUIT,
-            _ => return,
-        };
-        let target = signal_target(self.pid);
-        // SAFETY: plain kill(2).
-        unsafe { libc::kill(target as i32, sig) };
-    }
-
-    pub fn take_child(&mut self) -> Option<std::process::Child> {
-        self.child.take()
-    }
-
-    /// Kill everything left in the session, remove its directories, and
-    /// write `session.stop`.
-    pub fn teardown(self, daemon: &Daemon, exited: &Exited) {
-        self.accept.abort();
-        // SAFETY: the sandbox leads its own process group (setsid).
-        unsafe { libc::kill(-(self.pid as i32), libc::SIGKILL) };
-        for p in &self.placeholders {
-            let _ = std::fs::remove_dir(p);
-        }
-        let _ = std::fs::remove_dir_all(&self.session_dir);
-        let _ = std::fs::remove_dir_all(&self.session_tmp);
-        if let Ok(mut s) = daemon.sessions.lock() {
-            s.remove(self.id.as_str());
-        }
-        let mut ev = AuditEvent::new(EventKind::SessionStop)
-            .session(&self.id)
-            .detail("exit_code", exited.code.map(i64::from))
-            .detail("exit_signal", exited.signal.map(i64::from))
-            .detail("stats", self.stats.snapshot());
-        ev.enduser = Some(self.enduser);
-        ev.agent = Some(self.agent);
-        ev.sandbox = Some(self.backend_name);
-        let _ = self.recorder.append(&ev);
     }
 }

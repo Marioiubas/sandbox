@@ -164,3 +164,14 @@ credentials and address checks stay with the broker; the export report on
 stderr lists them. The broker never installs these files: deploy them with
 your MDM (`/Library/Application Support/ClaudeCode/`, `/etc/claude-code/`,
 `/etc/codex/`), and keep running agents under `broker run`.
+
+## Trying a policy change in shadow mode (M2)
+
+`broker policy shadow candidate.toml` makes every later `broker run`
+session evaluate `candidate.toml` (in place of your `broker.toml`) beside
+your policy. Your policy still decides everything; each decision records
+what the candidate would have done, and `broker why <request-id>` shows
+it. `broker policy shadow --report` lists the requests the candidate would
+deny that your policy allowed, and those it would allow that your policy
+denied. `broker policy shadow --off` ends it. `broker learn` sessions are
+never shadowed. To enforce a candidate, make it your `broker.toml`.

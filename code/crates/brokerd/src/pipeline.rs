@@ -67,6 +67,8 @@ pub struct PipelineCtx {
     /// Session CA, credentials and upstream TLS for terminated hosts. When
     /// absent, a host that needs L7 is denied (never spliced unchecked).
     pub l7: Option<Arc<L7Ctx>>,
+    /// Shadow mode: the candidate policy, evaluated and logged, never applied.
+    pub shadow: Option<Arc<EgressPolicy>>,
 }
 
 /// What happened to one connection (returned for tests).
@@ -123,8 +125,26 @@ async fn deny<S: AsyncWrite + Unpin>(
     dest: Dest,
     policy_ids: Vec<String>,
 ) -> Outcome {
+    deny_noted(ctx, client, kind, rid, reason, dest, policy_ids, None).await
+}
+
+/// A deny carrying the shadow candidate's verdict.
+#[allow(clippy::too_many_arguments)]
+async fn deny_noted<S: AsyncWrite + Unpin>(
+    ctx: &PipelineCtx,
+    client: &mut S,
+    kind: Option<IngressKind>,
+    rid: RequestId,
+    reason: Reason,
+    dest: Dest,
+    policy_ids: Vec<String>,
+    shadow: Option<serde_json::Value>,
+) -> Outcome {
     ctx.stats.denied.fetch_add(1, Ordering::Relaxed);
-    let ev = ctx.event(EventKind::RequestDecision, &rid).deny(reason, policy_ids).dest(dest);
+    let mut ev = ctx.event(EventKind::RequestDecision, &rid).deny(reason, policy_ids).dest(dest);
+    if let Some(s) = shadow {
+        ev = ev.detail("shadow", s);
+    }
     if let Err(e) = ctx.recorder.append(&ev) {
         // The deny stands either way; the missing row is itself reported.
         eprintln!("brokerd: audit append failed for deny {rid}: {e:#}");
@@ -168,7 +188,10 @@ where
         Ok(a) => a,
         Err((reason, ids)) => {
             let dest = dest_for(kind, Some(&host), None, Some(raw.port), &[]);
-            return deny(ctx, &mut client, kind, rid, reason, dest, ids).await;
+            let sh = ctx.shadow.as_ref().map(|s| {
+                crate::shadow::note(&crate::shadow::admission(s, &host, raw.port, None).map(|_| ()), false, false)
+            });
+            return deny_noted(ctx, &mut client, kind, rid, reason, dest, ids, sh).await;
         }
     };
 
@@ -186,9 +209,13 @@ where
     };
 
     // 5. Every resolved address must be of an admitted class.
+    let shadow_verdict = ctx.shadow.as_ref().map(|s| crate::shadow::admission(s, &host, raw.port, Some(&addrs)));
+    let shadow_note = |applied: bool| {
+        shadow_verdict.as_ref().map(|v| crate::shadow::note(&v.as_ref().map(|_| ()).map_err(|r| *r), applied, true))
+    };
     if let Err((reason, _bad)) = ctx.policy.admit_addrs(&mut adm, &addrs) {
         let dest = dest_for(kind, Some(&host), None, Some(raw.port), &addrs);
-        return deny(ctx, &mut client, kind, rid, reason, dest, adm.policy_ids.clone()).await;
+        return deny_noted(ctx, &mut client, kind, rid, reason, dest, adm.policy_ids.clone(), shadow_note(false)).await;
     }
 
     // 6. Write-ahead audit of the allow.
@@ -197,6 +224,9 @@ where
     if let Some(w) = adm.would_deny {
         // Record mode: what enforce mode would have decided (for the learner).
         allow_ev = allow_ev.audit_mode().detail("would_deny", w.as_str());
+    }
+    if let Some(s) = shadow_note(true) {
+        allow_ev = allow_ev.detail("shadow", s);
     }
     if ctx.recorder.append(&allow_ev).is_err() {
         return deny(ctx, &mut client, kind, rid, Reason::AuditUnavailable, dest, adm.policy_ids.clone()).await;
@@ -273,7 +303,22 @@ where
             let _ = ctx.recorder.append(&ev);
             return Outcome::Denied { request_id: rid, reason: Reason::L7NoRuleMatched };
         };
-        return l7_pipeline::serve(ctx.clone(), l7, client, buf, upstream, host, raw.port, adm, addrs, dest, rid).await;
+        let shadow_adm = shadow_verdict;
+        return l7_pipeline::serve(
+            ctx.clone(),
+            l7,
+            client,
+            buf,
+            upstream,
+            host,
+            raw.port,
+            adm,
+            addrs,
+            dest,
+            rid,
+            shadow_adm,
+        )
+        .await;
     }
 
     // 9b. Splice and record the outcome.

@@ -2,7 +2,7 @@
 // Schema note; every change from the sketch is recorded there.
 namespace Broker {
   type Trifecta = { untrusted_input: Bool, sensitive_read: Bool, external_effect: Bool };
-  // mode: "enforce" | "record"
+  // mode: "enforce" | "record" | "shadow" (shadow applies enforce semantics)
   type Session  = { id: String, now: Long, approved: Bool, trifecta: Trifecta, mode: String };
   // A canonical path as segments: n is the segment count; s0..s15 hold the
   // first sixteen segments (deeper segments are matched only by `**`).

@@ -145,3 +145,11 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Tests:** property test that neither exported file admits a host or port the broker denies (documented matchers); golden files for all six shipped profiles × two targets.
 - **ADRs:** [[ADR-025 Native Config Exporters as Built]] (no proxy chaining, no MCP allowlist until M3, Cursor/OpenShell in phase 2).
 - **Next step:** shadow mode; then the M2 CI matrix and milestone review.
+
+### 2026-09-24: M2 step 6, shadow mode
+
+- **Milestone:** [[M2 Policy Audit and Learn]] (in progress).
+- **Built:** `broker policy shadow <file> | --off | --report`; enforce sessions run in mode `shadow` while a candidate is active, with the candidate's verdict on every admission and L7 decision row; `broker why` shows it. The daemon's session start and L7 answer code split into child modules (files under 500 lines).
+- **Tests:** `m2_shadow::a_shadow_candidate_is_logged_but_never_decides`; 227 passing on macOS 26.5 with the solver required.
+- **ADRs:** [[ADR-026 Shadow Mode as Built]].
+- **Next step:** M2 CI matrix; milestone review (C1 over 3 real repos × 3 real agents needs Codex and Gemini CLI logins).
