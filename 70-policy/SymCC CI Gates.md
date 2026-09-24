@@ -4,10 +4,11 @@ aliases: ["cedar-policy-symcc", "L5 Formal Gates", "Formal Gates"]
 type: concept
 section: policy
 tags: [sandbox/policy, concept, topic/policy, topic/evaluation, topic/learning, invariant/i3, invariant/i4, milestone/m2, evidence/unverified]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
+code: ["code/crates/policy/src/gates", "code/crates/broker-cli/src/cmd/policy.rs", "code/crates/broker-cli/src/cmd/suggest.rs", ".github/workflows/ci.yml"]
 summary: "cedar-policy-symcc's six queries (never_errors, always_allows, always_denies, implies, equivalent, disjoint, each with counterexamples, on cvc5) and the six merge-blocking gates: narrowing, org ceiling, credential confinement, no runtime errors, live deny rules, tenant disjointness. This is eval layer L5."
 related: ["[[Cedar]]", "[[Progent]]", "[[Policy Learning Loop]]", "[[Policy Miner Safeguards]]", "[[I3 Probabilistic Components Only Narrow]]", "[[I4 Repo Policy Only Narrows]]", "[[Evaluation Harness]]", "[[Control Plane and Policy Bundles]]", "[[M2 Policy Audit and Learn]]", "[[ADR-011 Verified Policy Learning Loop]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[Hostname Canonicaliser]]", "[[L1 Conformance Suite]]", "[[Open Questions and Unverified Claims]]", "[[broker.toml Human Policy Layer]]", "[[AWS AgentCore]]"]
 sources: ["https://docs.rs/cedar-policy-symcc", "https://aws.amazon.com/blogs/opensource/introducing-cedar-analysis-open-source-tools-for-verifying-authorization-policies/", "https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://arxiv.org/html/2504.11703v3", "https://arxiv.org/html/2403.04651", "https://github.com/cedar-policy/cedar/issues/1385", "https://aws.amazon.com/blogs/security/why-policy-in-amazon-bedrock-agentcore-chose-cedar-for-securing-agentic-workflows/"]
@@ -92,6 +93,17 @@ broker policy check --bundle ./bundle --baseline ./bundle@main --ceiling ./org/c
 
 The same command runs in the customer's policy-repo CI and inside `brokerd` before a bundle is activated. A bundle that fails is never loaded ([[Control Plane and Policy Bundles]]).
 
+## Implementation notes
+
+2026-09-24 (M2), with `cedar-policy-symcc` 0.7.0 and cvc5 1.3.1 ([[ADR-024 Formal Gates as Built]]):
+
+- **Credential confinement is not "by construction" from entity data.** The analyzer quantifies over entity attributes, so the entity-based forbid does not prove confinement (a counterexample sets `allowed_hosts` to the destination). The compiler now also emits a textual `credential:<id>#confine` forbid per credential; the gate proves against that.
+- **"Deny rules stay live"** is built as: every `@reason` forbid can fire in some environment; `pkg.publish` and `pr.merge` are allowed only when `context.session.approved`; a forced `git.push` is allowed only by a `force = true` push rule or a plain (uninspected) host grant. A literal "not always-allowed" check passed vacuously because `task-expiry` always denies something. The force check found that record mode allowed forced pushes; record mode no longer does.
+- **Repository gate:** the runtime conjoins the repo layer; the gate proves `implies(conjoin(P, R), P)` on a single-set encoding (`repo#layer` forbids unless some repo permit's condition holds), tied to the runtime by a property test.
+- **Tenant disjointness** is deferred to the control plane (one tenant per endpoint).
+- **Timing:** 24 request environments, 155-250 queries, 0.1-0.2 s per shipped profile on Apple M-series; larger policies unmeasured.
+- Every Cedar feature the Broker schema uses (`like`, `containsAny`, `has` on optional record attributes, hierarchy `in`, sets of strings, Long arithmetic) compiled and solved without an unsupported-feature error.
+
 ## Limits
 
 What a passing gate does **not** prove:
@@ -143,3 +155,7 @@ What a passing gate does **not** prove:
 - [Progent](https://arxiv.org/html/2504.11703v3)
 - [cedar issue #1385](https://github.com/cedar-policy/cedar/issues/1385)
 - [AWS Security Blog: AgentCore Policy](https://aws.amazon.com/blogs/security/why-policy-in-amazon-bedrock-agentcore-chose-cedar-for-securing-agentic-workflows/)
+
+## Build log
+
+- 2026-09-24: built ([[ADR-024 Formal Gates as Built]]). `broker policy check` (exit 0 proved, 2 widens with counterexamples, 1 hard failure, 125 no solver), gates inside `broker suggest`, CI installs cvc5 1.3.1 with pinned SHA-256 and checks every shipped profile with `BROKER_REQUIRE_SOLVER=1`. Tests: `gates::tests::*` (each hard gate proves the shipped policy and fails its deliberate regression; widening shows the expansion delta; I4 encoding agrees with the runtime), `m2_gates::policy_check_proves_flags_widenings_and_blocks_hard_failures`, C3 assertions in `m2_learn`.

@@ -4228,5 +4228,28 @@
     "aliases": [
       "ADR-023"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-024 Formal Gates as Built.md",
+    "title": "ADR-024 Formal Gates as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "The SymCC gates as built on cedar-policy-symcc 0.7.0 and cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, record mode without forced pushes, I4 proved on a single-set encoding of the runtime conjunction, tenant disjointness deferred.",
+    "links_to": [
+      "SymCC CI Gates",
+      "M2 Policy Audit and Learn",
+      "I3 Probabilistic Components Only Narrow",
+      "I4 Repo Policy Only Narrows",
+      "I7 Reject Foreign Credentials",
+      "Example Cedar Policies",
+      "ADR-022 Cedar Schema and Engine as Built",
+      "Policy Learning Loop",
+      "Open Questions and Unverified Claims",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M2 build (2026-09-24) from the cedar-policy-symcc 0.7.0 API, the cvc5 1.3.1 release and the gate tests.",
+    "aliases": [
+      "ADR-024"
+    ]
   }
 ]

@@ -63,10 +63,28 @@ fn run(min_runs: usize, out: Option<std::path::PathBuf>) -> anyhow::Result<()> {
              ceiling/blocked still denied {} of {}",
             before.denied, before.total, after.denied, after.blocked_still_denied, after.blocked_total
         );
-        println!(
-            "gates: narrowing FAIL by construction (every proposal widens; each shows the request it newly allows) · ceiling {}",
-            if after.blocked_still_denied == after.blocked_total { "PASS" } else { "FAIL" }
-        );
+        let layers = |with_learned: bool| {
+            let mut l = vec![(scope.as_str(), prof.egress.as_slice()), ("user", user.egress.as_slice())];
+            if with_learned {
+                l.push(("learned", learned.as_slice()));
+            }
+            policy::EgressPolicy::compile_with(l, &env).map_err(|e| anyhow::anyhow!("{e}"))
+        };
+        match policy::gates::solver_version() {
+            Ok(_) => {
+                let old = policy::gates::Bundle::from_egress(&layers(false)?);
+                let new = policy::gates::Bundle::from_egress(&layers(true)?);
+                let r = policy::gates::check(&policy::gates::Inputs { new: &new, old: Some(&old), repo: None })?;
+                println!("gates ({profile}; {}):\n{}", r.solver, r.render());
+                if !r.hard_failures().is_empty() {
+                    println!("the proposal fails a hard gate: do not merge it");
+                }
+            }
+            Err(why) => println!(
+                "gates: not run ({why}); replay says the ceiling still denies {} of {} blocked requests",
+                after.blocked_still_denied, after.blocked_total
+            ),
+        }
     }
     let toml = s.render_toml();
     match out {

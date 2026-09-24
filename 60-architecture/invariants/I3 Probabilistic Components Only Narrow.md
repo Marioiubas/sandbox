@@ -99,3 +99,7 @@ The report calls principle 1 ("Enforce outside the model, and allow probabilisti
 - https://arxiv.org/abs/2606.26479
 - https://arxiv.org/html/2509.07764v1
 - Report: invariant I3, principle 1, learning-loop section ("An LLM may explain a diff but never merge it"); research note 02 Q4 and Q5.
+
+## Build log
+
+- 2026-09-24 (M2): the learner is deterministic and never applies anything; `broker suggest` runs the formal gates on every proposal and shows each widening as the requests it newly permits (the narrowing gate is soft: human approval), while the ceiling, confinement, never-errors and deny-live gates are hard ([[ADR-024 Formal Gates as Built]]). No LLM component exists yet. Tests: C3 assertions in `m2_learn::c1_learned_policy_passes_the_task_and_c2_seeded_injection_is_blocked`, `gates::tests::a_learned_widening_shows_counterexamples_and_a_narrowing_is_proved`.

@@ -49,6 +49,7 @@ cargo build --release --workspace --bins
 ./target/release/broker learn -- claude        # record mode, bounded by the ceiling
 ./target/release/broker suggest --out learned.toml
 ./target/release/broker policy status          # repository policy approval
+./target/release/broker policy check --baseline old.toml   # formal gates (needs cvc5 1.3.1)
 ./target/release/broker audit export --format ocsf
 ```
 

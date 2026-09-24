@@ -79,3 +79,4 @@ Built (2026-09-24) with the first M2 step.
 ## Build log
 
 - 2026-09-24: created and built. Tests: `policy::cedar::tests::*` (golden worked decisions, admission semantics, record mode, repo narrowing, credential ceiling, malformed requests, differential property test), all M0/M1 suites.
+- 2026-09-24: record mode narrowed: forced pushes are no longer permitted in record mode (`record#push` requires `!context.force`), found by the force gate of [[ADR-024 Formal Gates as Built]].

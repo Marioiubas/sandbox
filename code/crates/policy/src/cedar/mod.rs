@@ -147,6 +147,20 @@ impl Engine {
         &self.base
     }
 
+    /// The same engine evaluating `base` alone (tests of the gates' single-set
+    /// encoding of the repo conjunction).
+    #[cfg(all(test, feature = "gates"))]
+    pub(crate) fn with_base_only(mut self, base: PolicySet) -> Engine {
+        self.base = base;
+        self.repo = None;
+        self
+    }
+
+    /// The conjoined repository layer, if any.
+    pub fn repo(&self) -> Option<&PolicySet> {
+        self.repo.as_ref()
+    }
+
     pub fn grant_of(&self, policy_id: &str) -> Option<usize> {
         self.grant_of.get(policy_id).copied()
     }

@@ -12,6 +12,8 @@ pub mod cedar;
 pub mod config;
 pub mod doh;
 pub mod egress;
+#[cfg(feature = "gates")]
+pub mod gates;
 pub mod glob;
 pub mod l7;
 pub mod repo;

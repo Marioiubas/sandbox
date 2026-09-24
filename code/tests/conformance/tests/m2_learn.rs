@@ -92,6 +92,16 @@ fn c1_learned_policy_passes_the_task_and_c2_seeded_injection_is_blocked() {
     let report = String::from_utf8_lossy(&out.stdout).to_string();
     assert!(out.status.success(), "{report}{}", String::from_utf8_lossy(&out.stderr));
     assert!(report.contains("with the proposals 0;"), "the candidate covers every recorded request: {report}");
+    // C3: every learned change is proved by the hard gates or shown with the
+    // counterexample requests it newly permits.
+    if solver() {
+        assert!(report.contains("ceiling                 proved"), "{report}");
+        assert!(report.contains("deny-live               proved"), "{report}");
+        assert!(report.contains("never-errors            proved"), "{report}");
+        assert!(report.contains("narrowing               widens:"), "{report}");
+        assert!(report.contains("newly permits: http.GET on Broker::Host::\"api.test\""), "{report}");
+        assert!(!report.contains("fails a hard gate"), "{report}");
+    }
     let toml = std::fs::read_to_string(&learned).unwrap();
     assert!(toml.contains("/repos/acme/web/pulls/*"), "IDs are templated: {toml}");
     assert!(toml.contains("methods = [\"GET\"]"), "only the observed method: {toml}");

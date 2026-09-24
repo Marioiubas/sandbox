@@ -274,7 +274,10 @@ fn credential_ceiling_confines_credentials() {
     assert!(e.authorize("credential.use", &entities::credential_uid(&c.id), ents.clone(), ctx("github.com")).allowed);
     let v = e.authorize("credential.use", &entities::credential_uid(&c.id), ents, ctx("paste.example.org"));
     assert!(!v.allowed);
-    assert_eq!(v.determining, vec!["credential-host-ceiling"]);
+    // Both the entity-based ceiling and the textual confinement forbid fire.
+    let mut d = v.determining.clone();
+    d.sort();
+    assert_eq!(d, vec!["credential-host-ceiling", "credential:user:git#confine"]);
 }
 
 #[test]

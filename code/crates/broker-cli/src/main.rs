@@ -116,6 +116,26 @@ pub enum PolicyCmd {
     Status,
     /// Approve the repository policy's current content hash.
     Approve,
+    /// Prove the formal gates (needs cvc5 1.3.1 via CVC5 or PATH). Exit 0:
+    /// proved; 2: the policy widens the baseline (counterexamples shown,
+    /// human approval required); 1: a hard gate failed.
+    Check {
+        /// Include this built-in profile's grants in both policies.
+        #[arg(long)]
+        profile: Option<String>,
+        /// The policy to check (default: your broker.toml).
+        #[arg(long)]
+        policy: Option<std::path::PathBuf>,
+        /// Compare against this policy (enables the narrowing gate).
+        #[arg(long)]
+        baseline: Option<std::path::PathBuf>,
+        /// Include this repository's `.broker/` policy (approved or not).
+        #[arg(long)]
+        repo: bool,
+        /// Print the report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -139,6 +159,9 @@ fn main() {
         }
         Command::Policy { action: PolicyCmd::Status } => cmd::policy::status(),
         Command::Policy { action: PolicyCmd::Approve } => cmd::policy::approve(),
+        Command::Policy { action: PolicyCmd::Check { profile, policy, baseline, repo, json } } => {
+            cmd::policy::check(cmd::policy::CheckArgs { profile, policy, baseline, repo, json })
+        }
         Command::Daemon { action: DaemonCmd::Status } => cmd::daemon::status(),
         Command::Daemon { action: DaemonCmd::Stop } => cmd::daemon::stop(),
     };

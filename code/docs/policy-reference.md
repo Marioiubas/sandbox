@@ -125,3 +125,29 @@ keychain item `broker-anthropic-api-key` (or `ANTHROPIC_API_KEY` in the
 environment that starts brokerd). `codex` and `gemini` broker
 `OPENAI_API_KEY` and `GEMINI_API_KEY` the same way; their account-login modes
 are not brokered yet and fail closed.
+
+## Checking a policy change (M2)
+
+`broker policy check` proves properties of the compiled policy with
+Cedar's symbolic analyzer. It needs cvc5 1.3.1 (the `CVC5` environment
+variable, or `cvc5` on `PATH`).
+
+```sh
+broker policy check --profile claude-code                 # your broker.toml
+broker policy check --policy new.toml --baseline old.toml # a proposed change
+broker policy check --repo                                # with .broker/ policy
+```
+
+- **Hard gates** (exit 1 on failure; no override): the org ceiling holds;
+  each brokered credential is used only for its declared hosts; no policy
+  can hit an evaluation error; every deny rule can fire, publishing and
+  merging need approval, and a forced push needs a `force = true` rule (or
+  a plain host grant, whose traffic is not inspected); a repository layer
+  only narrows.
+- **Narrowing** (exit 2): with `--baseline`, every request the new policy
+  allows must be allowed by the old one. Otherwise the report shows the
+  requests it newly permits; that is a change for a human to approve.
+- `broker suggest` runs the same gates on its proposal.
+
+A proof covers the policy text. Whether the broker turns hosts, paths and
+refs into the right values is tested separately by the conformance suite.

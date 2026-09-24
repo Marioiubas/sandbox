@@ -126,3 +126,14 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **ADRs:** [[ADR-023 OCSF and OTLP Export as Built]] (pull export without the OTel SDK instead of live `opentelemetry-otlp` spans).
 - **Open questions:** OCSF class names and IDs resolved; OTel GenAI conventions still open ([[Open Questions and Unverified Claims]]).
 - **Next step:** SymCC gates in CI (C3); native config exporters; shadow mode.
+
+### 2026-09-24: M2 step 4, formal gates
+
+- **Milestone:** [[M2 Policy Audit and Learn]] (in progress).
+- **Built:** `cedar-policy-symcc` 0.7.0 gates over every request environment (ceiling, credential confinement, never-errors, deny-live and repo-narrows hard; narrowing soft with counterexamples), `broker policy check`, gates inside `broker suggest`, cvc5 1.3.1 in CI with pinned digests and a gate check of every shipped profile.
+- **Findings:** credential confinement could not be proved from entity data (the analyzer treats attributes as arbitrary), so each credential now has a textual confinement forbid; record mode allowed forced pushes (now denied); a literal "not always-allowed" check passes vacuously, so high-risk actions are proved to need approval or an explicit opt-in.
+- **Tests:** 221 passing on macOS 26.5 with `BROKER_REQUIRE_SOLVER=1`, including C3.
+- **Invariants touched:** I4 gains its formal gate; I3 holds (widenings shown, never applied); I1/I7 confinement now provable from the policy text.
+- **ADRs:** [[ADR-024 Formal Gates as Built]].
+- **Open questions:** SymCC feature coverage for this schema confirmed; scaling still open ([[Open Questions and Unverified Claims]]).
+- **Next step:** native config exporters (Claude Code managed settings, Codex `requirements.toml`); shadow mode; then the M2 CI matrix.

@@ -16,6 +16,13 @@ netguard.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 toml.workspace = true
+cedar-policy-symcc = { workspace = true, optional = true }
+cedar-policy-core = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+
+[features]
+# Formal gates (SymCC CI Gates, L5): needs the cvc5 solver at run time.
+gates = ["dep:cedar-policy-symcc", "dep:cedar-policy-core", "dep:tokio"]
 
 [dev-dependencies]
 proptest.workspace = true

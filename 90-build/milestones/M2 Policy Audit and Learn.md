@@ -78,8 +78,8 @@ The rationale is twofold. Cedar's authorization semantics are proved in Lean ("I
 
 **Formal gates (L5)**
 
-- [ ] `policies/gates/*.toml` and a CI job running the six gates in [[SymCC CI Gates]]: narrowing (`check_implies(P_new, P_old)`), org ceiling, credential confinement per brokered secret, `check_never_errors`, deny rules stay live (no shadowed forbid, no always-allow on `pkg.publish`, `pr.merge`, forced `git.push`), tenant disjointness.
-- [ ] Counterexample requests from a failed narrowing gate are rendered as the "expansion delta" in the PR or CLI output.
+- [x] `policies/gates/*.toml` and a CI job running the six gates in [[SymCC CI Gates]]: narrowing (`check_implies(P_new, P_old)`), org ceiling, credential confinement per brokered secret, `check_never_errors`, deny rules stay live (no shadowed forbid, no always-allow on `pkg.publish`, `pr.merge`, forced `git.push`), tenant disjointness.
+- [x] Counterexample requests from a failed narrowing gate are rendered as the "expansion delta" in the PR or CLI output.
 
 **Exporters**
 
@@ -172,3 +172,4 @@ Next milestone: [[M3 CI Identity and MCP]], which adds identity attribution, tri
 
 - 2026-09-24: steps 1-2 built: the Cedar engine ([[ADR-022 Cedar Schema and Engine as Built]]), repository policy with content-hash approval, `broker learn` and `broker suggest`. Acceptance so far: C1 and C2 pass with a deterministic agent script against fake upstreams (`m2_learn::c1_learned_policy_passes_the_task_and_c2_seeded_injection_is_blocked`); C1 over 3 repos × 3 real agents is not run (only Claude Code is installed here); C5 is the M0 I9 test; C6 is `i4_repo_policy_only_narrows_and_needs_approval`; C7 holds by construction (G9) and is asserted in `mining_applies_the_safeguards`; C3 needs the SymCC gates; C4 needs the OCSF export.
 - 2026-09-24: step 3 built: OCSF 1.9.0 export and SIEM delivery ([[ADR-023 OCSF and OTLP Export as Built]]). C4 passes: `m2_ocsf::c4_events_validate_and_reach_the_sinks` (100% of decisions validate; a HEC-style sink and an OTLP/HTTP collector on loopback receive every event).
+- 2026-09-24: step 4 built: the formal gates ([[ADR-024 Formal Gates as Built]]) as `broker policy check`, inside `broker suggest`, and in CI on every shipped profile (gate specs live in code, not `policies/gates/*.toml`; tenant disjointness deferred to the control plane). C3 passes: every learned change is proved by the hard gates or shown with counterexamples (`m2_learn` C3 assertions, `m2_gates::policy_check_proves_flags_widenings_and_blocks_hard_failures`).

@@ -365,3 +365,17 @@ pub fn config_with_upstream(port: u16, extra: &str) -> String {
         "version = 1\n\n[[egress]]\nid = \"upstream\"\nhost = \"allowed.test\"\nports = [{port}]\naddrs = [\"127.0.0.1\"]\nallow_addr_classes = [\"loopback\"]\n\n{extra}"
     )
 }
+
+/// Is the cvc5 solver for the formal gates runnable? With
+/// `BROKER_REQUIRE_SOLVER` set (CI), a missing solver fails the test.
+pub fn solver() -> bool {
+    let path = std::env::var("CVC5").unwrap_or_else(|_| "cvc5".into());
+    let ok = Command::new(&path).arg("--version").output().is_ok_and(|o| o.status.success());
+    if !ok && std::env::var_os("BROKER_REQUIRE_SOLVER").is_some() {
+        panic!("cvc5 not runnable ({path}) but BROKER_REQUIRE_SOLVER is set");
+    }
+    if !ok {
+        eprintln!("skipping the formal gates: cvc5 not runnable ({path})");
+    }
+    ok
+}

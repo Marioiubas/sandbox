@@ -174,3 +174,4 @@ Rows 1-4 are the M1 acceptance criteria for push scoping ([[M1 Secrets Outside]]
 ## Build log
 
 - 2026-09-24: the core policies ship as `code/policies/default.cedar` (credential host ceiling, task expiry, Rule of Two, pinned MCP only, publish and merge need approval) and `code/policies/ceiling.cedar`; the worked-decision table rows 1-5 and 8 are the golden test `golden_worked_decisions`. The push permit itself is compiled from `broker.toml` push rules rather than shipped as a fixed policy.
+- 2026-09-24 (M2 step 4): the compiler adds a textual forbid `credential:<id>#confine` per brokered credential (reason `credential_host_ceiling`) beside the entity-based ceiling, so confinement is provable from the policy text; record mode splits into `record#l7` (HTTP, fetch, advertise) and `record#push` (never a forced push) ([[ADR-024 Formal Gates as Built]]).

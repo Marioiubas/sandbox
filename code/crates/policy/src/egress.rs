@@ -153,6 +153,9 @@ fn compile_all(grants: &[Grant]) -> Result<Vec<Compiled>, CompileError> {
     let mut out = Vec::new();
     for (i, g) in grants.iter().enumerate() {
         out.extend(cedar::compile::grant_policies(i, g).map_err(CompileError::Cedar)?);
+        if let Some(c) = g.l7.as_ref().and_then(|r| r.credential.as_ref()) {
+            out.push(cedar::compile::confinement_policy(c));
+        }
     }
     Ok(out)
 }
@@ -218,6 +221,12 @@ impl EgressPolicy {
 
     pub fn engine(&self) -> &Engine {
         &self.engine
+    }
+
+    #[cfg(all(test, feature = "gates"))]
+    pub(crate) fn with_engine(mut self, e: Engine) -> Self {
+        self.engine = e;
+        self
     }
 
     pub fn session(&self) -> &SessionInfo {

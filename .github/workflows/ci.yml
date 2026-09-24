@@ -52,10 +52,33 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           [ -e ~/.ssh/id_ed25519 ] || echo "CANARY-CI-NOT-A-KEY" > ~/.ssh/id_ed25519
+      - name: Install cvc5 1.3.1 (formal gates; checksum-pinned)
+        shell: bash
+        run: |
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64)   asset=cvc5-Linux-x86_64-static; sum=1a1cda20d2df4938fa4944a69f33ddc9172e319ece0eed0aa09c4d7abede3ed1 ;;
+            Linux-ARM64) asset=cvc5-Linux-arm64-static;  sum=fe2b661834a82fd8830f7a757c340f0e20041fa41e19b038fa02ace0eaf1c6f2 ;;
+            macOS-ARM64) asset=cvc5-macOS-arm64-static;  sum=a0e7f5b03b1bc4284fbfff7cdfb08c704801701cf7ece83a13f8a505e7581215 ;;
+            macOS-X64)   asset=cvc5-macOS-x86_64-static; sum=e7fe4af9491bd7c0db7591c0a483775735bd1a98b23933fd337a73ae39c10ff9 ;;
+            *) echo "no cvc5 build for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
+          esac
+          curl -fsSL -o "$RUNNER_TEMP/cvc5.zip" "https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.1/$asset.zip"
+          echo "$sum  $RUNNER_TEMP/cvc5.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/cvc5.zip" -d "$RUNNER_TEMP"
+          "$RUNNER_TEMP/$asset/bin/cvc5" --version | head -1
+          echo "CVC5=$RUNNER_TEMP/$asset/bin/cvc5" >> "$GITHUB_ENV"
+          # A missing solver fails the gate tests instead of skipping them.
+          echo "BROKER_REQUIRE_SOLVER=1" >> "$GITHUB_ENV"
       - name: Build
         run: cargo build --workspace --bins --locked
       - name: broker doctor
         run: ./target/debug/broker doctor
+      - name: Formal gates (L5) on every shipped profile
+        run: |
+          export BROKER_HOME="$RUNNER_TEMP/gates-home"
+          for p in profiles/*.toml; do
+            ./target/debug/broker policy check --profile "$(basename "$p" .toml)"
+          done
       - name: Tests (unit, pipeline, conformance, invariants)
         run: cargo test --workspace --no-fail-fast --locked
 

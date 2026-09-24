@@ -184,6 +184,38 @@ pub fn grant_policies(idx: usize, g: &Grant) -> Result<Vec<Compiled>, String> {
     Ok(out)
 }
 
+/// Confine a brokered credential to its declared hosts in the policy text
+/// itself. The default `credential-host-ceiling` forbid reads the hosts from
+/// entity data, which the formal gates treat as arbitrary; this forbid makes
+/// credential confinement provable from the policy alone (SymCC CI Gates).
+pub fn confinement_policy(c: &crate::l7::CredentialDef) -> Compiled {
+    let id = format!("credential:{}#confine", c.id);
+    let (mut hosts, mut domains) = (vec![], vec![]);
+    for p in &c.hosts {
+        match p {
+            HostPattern::Exact(h) => hosts.push(lit(h.as_str())),
+            HostPattern::Subdomains(b) => domains.push(lit(b.as_str())),
+        }
+    }
+    let mut alts = vec![];
+    if !hosts.is_empty() {
+        alts.push(format!("[{}].contains(context.dest_host)", hosts.join(", ")));
+    }
+    if !domains.is_empty() {
+        alts.push(format!("context.dest_domains.containsAny([{}])", domains.join(", ")));
+    }
+    let allowed = if alts.is_empty() { "false".to_string() } else { alts.join(" || ") };
+    Compiled {
+        id: id.clone(),
+        grant: None,
+        src: format!(
+            "@id({})\n@reason(\"credential_host_ceiling\")\nforbid (principal, action == Broker::Action::\"credential.use\", resource == Broker::Credential::{})\nunless {{ {allowed} }};",
+            lit(&id),
+            lit(&c.id)
+        ),
+    }
+}
+
 fn l7_policies(
     id: &dyn Fn(&str) -> String,
     idx: usize,
@@ -247,7 +279,7 @@ fn l7_policies(
                 ));
                 let force = if r.force { "true".to_string() } else { "!context.force".to_string() };
                 out.push(permit(
-                    &id(&format!("push{k}")),
+                    &id(&push_suffix(k)),
                     idx,
                     &["git.push".into()],
                     &[h.into(), p.into(), rc, refs_cond(&r.refs), force],
@@ -258,17 +290,26 @@ fn l7_policies(
     Ok(out)
 }
 
+/// The ID suffix of a grant's `k`-th push permit (`<grant id>#push<k>`).
+pub fn push_suffix(k: usize) -> String {
+    format!("push{k}")
+}
+
 /// Record mode (learning): task permits relaxed to public HTTPS names; the
 /// ceiling and default forbids still apply, and no credential is attached
 /// that a grant does not bind.
 pub fn record_policies() -> Vec<Compiled> {
     let net = "@id(\"record#net\")\npermit (principal, action in [Broker::Action::\"net.resolve\", Broker::Action::\"net.connect\"], resource)\n\
                when { context.session.mode == \"record\" && [443].contains(context.port) && !resource.ip_literal\n       && [\"public\"].containsAll(context.addr_classes) };";
-    let l7 = "@id(\"record#l7\")\npermit (principal, action in [Broker::Action::\"http.read\", Broker::Action::\"http.write\", Broker::Action::\"git.fetch\", Broker::Action::\"git.advertise\", Broker::Action::\"git.push\"], resource)\n\
+    let l7 = "@id(\"record#l7\")\npermit (principal, action in [Broker::Action::\"http.read\", Broker::Action::\"http.write\", Broker::Action::\"git.fetch\", Broker::Action::\"git.advertise\"], resource)\n\
               when { context.session.mode == \"record\" };";
+    // A forced push is never recorded: only a grant with `force = true` allows one.
+    let push = "@id(\"record#push\")\npermit (principal, action == Broker::Action::\"git.push\", resource)\n\
+                when { context.session.mode == \"record\" && !context.force };";
     vec![
         Compiled { id: "record#net".into(), grant: None, src: net.into() },
         Compiled { id: "record#l7".into(), grant: None, src: l7.into() },
+        Compiled { id: "record#push".into(), grant: None, src: push.into() },
     ]
 }
 

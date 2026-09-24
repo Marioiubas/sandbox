@@ -69,6 +69,9 @@ webpki-roots = "1"
 
 # M2: Cedar (pinned 2026-09-24 from crates.io)
 cedar-policy = "4.13.0"
+# Pins cedar-policy =4.13.0; needs cvc5 1.3.1 (CVC5 env var) at run time.
+cedar-policy-symcc = "=0.7.0"
+cedar-policy-core = "=4.13.0"
 
 # dev
 proptest = "1.11.0"

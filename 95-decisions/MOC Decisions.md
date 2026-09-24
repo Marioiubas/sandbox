@@ -48,6 +48,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-021 L7 Path Choices for M1]] | Per-session CA only, HTTP/1.1 only, no broker-followed redirects, no cookies on terminated hosts, rule-driven attachment, buffered push inspection, fail-closed force detection. |
 | [[ADR-022 Cedar Schema and Engine as Built]] | Compiled schema (Domain/HostCategory, Repo in Host, segmented Path record, net.* admission), Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies. |
 | [[ADR-023 OCSF and OTLP Export as Built]] | OCSF 1.9.0 classes verified (4001/4002/6003); pull export from the verified chain as NDJSON, HEC or OTLP/HTTP JSON without the OTel SDK; chain hash in every event. |
+| [[ADR-024 Formal Gates as Built]] | Gates on cedar-policy-symcc 0.7.0 + cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, no forced pushes in record mode, I4 proved on a single-set encoding of the conjunction. |
 
 ## Where the value is
 
@@ -101,6 +102,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 
 - [[ADR-022 Cedar Schema and Engine as Built]] — Compiled schema (Domain/HostCategory, Repo in Host, segmented Path record, net.* admission), Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies.
 - [[ADR-023 OCSF and OTLP Export as Built]] — OCSF 1.9.0 classes verified (4001/4002/6003); pull export from the verified chain as NDJSON, HEC or OTLP/HTTP JSON without the OTel SDK; chain hash in every event.
+- [[ADR-024 Formal Gates as Built]] — Gates on cedar-policy-symcc 0.7.0 + cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, no forced pushes in record mode, I4 proved on a single-set encoding of the conjunction.
 
 ## How this section connects
 
