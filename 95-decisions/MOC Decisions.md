@@ -1,0 +1,83 @@
+---
+title: "MOC Decisions"
+aliases: []
+type: moc
+section: decisions
+tags: [sandbox/decisions, moc]
+status: verified
+confidence: high
+created: 2026-09-24
+updated: 2026-09-24
+summary: "The fifteen architecture decision records with the alternatives each rejected, and how to add a new one."
+related: ["[[ADR-001 Value Lives in the Broker]]", "[[ADR-002 OS Process Sandbox by Default with VM Hard Tier]]", "[[ADR-003 Topology-Enforced Egress]]", "[[ADR-004 Selective TLS Termination with Per-Session CA]]", "[[ADR-005 Mint Credentials Per Task]]", "[[ADR-006 Deny Unmatched L7 Requests]]", "[[ADR-007 Cedar with a TOML Front-End]]", "[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[ADR-009 Broker-Only DNS Resolution]]", "[[ADR-010 Session-Level Trifecta Labels in the MVP]]", "[[ADR-011 Verified Policy Learning Loop]]", "[[ADR-012 MCP Servers as Pinned Sandboxed Principals]]", "[[ADR-013 Seatbelt for macOS MVP with VZ Hedge]]", "[[ADR-014 Apache-2.0 Endpoint with Commercial ee]]", "[[ADR-015 Rust for the Endpoint and Custom Proxy]]", "[[MOC Architecture]]", "[[Risk Register]]", "[[CLAUDE]]"]
+sources: []
+---
+
+# MOC Decisions
+
+> The fifteen architecture decision records with the alternatives each rejected, and how to add a new one.
+
+Architecture decision records for the fourteen decisions in the report's decision table plus the endpoint-language and proxy choice from its tech-stack table. Every ADR states the chosen option, the alternatives rejected and why, and links the evidence. ADRs are `status: proposal` until the build confirms them; mark `status: built` when code implements them, and `superseded` relationships in the body when a newer ADR replaces one.
+
+**Adding a decision:** copy `templates/Template ADR.md`, number it with the next free `ADR-NNN`, add it to this MOC and to [[Build Log]]. Never weaken an invariant from [[MOC Architecture]] without an ADR that says so explicitly.
+
+## Decision table
+
+| ADR | Decision |
+|---|---|
+| [[ADR-001 Value Lives in the Broker]] | Put the product's value in the broker (policy, minting, semantics, audit, learning), not in a new isolation primitive, because isolation is mature and shipped by incumbents. |
+| [[ADR-002 OS Process Sandbox by Default with VM Hard Tier]] | Default to the OS process sandbox (Seatbelt; bwrap+seccomp+Landlock) with a microVM as opt-in hard tier, rejecting microVM-by-default and containers. |
+| [[ADR-003 Topology-Enforced Egress]] | Enforce egress by topology (no NIC or loopback-only plus UDS or vsock), rejecting HTTP_PROXY-only and eBPF-redirect-only designs. |
+| [[ADR-004 Selective TLS Termination with Per-Session CA]] | Terminate TLS only for hosts with credentials or L7 rules using a per-session CA; splice everything else at L4; rejecting MITM-everything and SNI-only. |
+| [[ADR-005 Mint Credentials Per Task]] | Mint per-task credentials wherever providers allow and fall back to static sentinel swap; reject static-swap-only and env-var secrets. |
+| [[ADR-006 Deny Unmatched L7 Requests]] | Within an allowed domain, method and path rules are authorization: unmatched L7 requests are denied, rejecting Vercel's pass-without-credential semantics. |
+| [[ADR-007 Cedar with a TOML Front-End]] | Use Cedar (Lean-verified, SymCC-analyzable, µs latency, agent-gateway precedent) behind a small TOML layer; reject OPA/Rego, Progent JSON-Schema, Invariant rules and a custom DSL. |
+| [[ADR-008 Grant Representation as Entities and Txn-Token JWT]] | Represent grants as Cedar entities inside the broker and as a Txn-Token-shaped DPoP-bound JWT across hosts, with Biscuit later for sub-agents; reject Macaroons or Biscuit from day one and opaque handles only. |
+| [[ADR-009 Broker-Only DNS Resolution]] | Resolve all names in the broker; the sandbox has no UDP/53 or ICMP; reject filtered UDP/53 passthrough. |
+| [[ADR-010 Session-Level Trifecta Labels in the MVP]] | Ship session-level trifecta labels sourced from systems of record in the MVP; defer CaMeL-style interpreters and FIDES planners. |
+| [[ADR-011 Verified Policy Learning Loop]] | Learn policy via record, mine, SymCC, human PR, shadow, enforce; reject auto-applied LLM-synthesized policy and no learning. |
+| [[ADR-012 MCP Servers as Pinned Sandboxed Principals]] | Run MCP servers as pinned, separately sandboxed principals reached by name; reject container gateways (Docker, ToolHive) and Wasm-only (Wassette). |
+| [[ADR-013 Seatbelt for macOS MVP with VZ Hedge]] | Use generated Seatbelt profiles on macOS for the MVP with a Virtualization.framework backend as hedge; reject a Network Extension and VM-only. |
+| [[ADR-014 Apache-2.0 Endpoint with Commercial ee]] | License everything on the endpoint Apache-2.0 and keep the fleet control plane in a commercial ee/ directory; reject AGPL and closed source. |
+| [[ADR-015 Rust for the Endpoint and Custom Proxy]] | Write the whole endpoint in Rust as one static binary and build a custom tokio/hyper/rustls/rcgen proxy (hudsucker as reference); reject Go and Envoy/mitmproxy for the product path. |
+
+## Where the value is
+
+- [[ADR-001 Value Lives in the Broker]] — Put the product's value in the broker (policy, minting, semantics, audit, learning), not in a new isolation primitive, because isolation is mature and shipped by incumbents.
+- [[ADR-014 Apache-2.0 Endpoint with Commercial ee]] — License everything on the endpoint Apache-2.0 and keep the fleet control plane in a commercial ee/ directory; reject AGPL and closed source.
+
+## Isolation and platform
+
+- [[ADR-002 OS Process Sandbox by Default with VM Hard Tier]] — Default to the OS process sandbox (Seatbelt; bwrap+seccomp+Landlock) with a microVM as opt-in hard tier, rejecting microVM-by-default and containers.
+- [[ADR-013 Seatbelt for macOS MVP with VZ Hedge]] — Use generated Seatbelt profiles on macOS for the MVP with a Virtualization.framework backend as hedge; reject a Network Extension and VM-only.
+
+## Network path
+
+- [[ADR-003 Topology-Enforced Egress]] — Enforce egress by topology (no NIC or loopback-only plus UDS or vsock), rejecting HTTP_PROXY-only and eBPF-redirect-only designs.
+- [[ADR-004 Selective TLS Termination with Per-Session CA]] — Terminate TLS only for hosts with credentials or L7 rules using a per-session CA; splice everything else at L4; rejecting MITM-everything and SNI-only.
+- [[ADR-006 Deny Unmatched L7 Requests]] — Within an allowed domain, method and path rules are authorization: unmatched L7 requests are denied, rejecting Vercel's pass-without-credential semantics.
+- [[ADR-009 Broker-Only DNS Resolution]] — Resolve all names in the broker; the sandbox has no UDP/53 or ICMP; reject filtered UDP/53 passthrough.
+
+## Credentials and grants
+
+- [[ADR-005 Mint Credentials Per Task]] — Mint per-task credentials wherever providers allow and fall back to static sentinel swap; reject static-swap-only and env-var secrets.
+- [[ADR-008 Grant Representation as Entities and Txn-Token JWT]] — Represent grants as Cedar entities inside the broker and as a Txn-Token-shaped DPoP-bound JWT across hosts, with Biscuit later for sub-agents; reject Macaroons or Biscuit from day one and opaque handles only.
+
+## Policy
+
+- [[ADR-007 Cedar with a TOML Front-End]] — Use Cedar (Lean-verified, SymCC-analyzable, µs latency, agent-gateway precedent) behind a small TOML layer; reject OPA/Rego, Progent JSON-Schema, Invariant rules and a custom DSL.
+- [[ADR-010 Session-Level Trifecta Labels in the MVP]] — Ship session-level trifecta labels sourced from systems of record in the MVP; defer CaMeL-style interpreters and FIDES planners.
+- [[ADR-011 Verified Policy Learning Loop]] — Learn policy via record, mine, SymCC, human PR, shadow, enforce; reject auto-applied LLM-synthesized policy and no learning.
+
+## MCP
+
+- [[ADR-012 MCP Servers as Pinned Sandboxed Principals]] — Run MCP servers as pinned, separately sandboxed principals reached by name; reject container gateways (Docker, ToolHive) and Wasm-only (Wassette).
+
+## Implementation
+
+- [[ADR-015 Rust for the Endpoint and Custom Proxy]] — Write the whole endpoint in Rust as one static binary and build a custom tokio/hyper/rustls/rcgen proxy (hudsucker as reference); reject Go and Envoy/mitmproxy for the product path.
+
+## How this section connects
+
+- Decisions implement the architecture in [[MOC Architecture]] and are justified by [[MOC Landscape]], [[MOC Research]] and [[MOC Threat Model]].
+- Residual risk each decision accepts is tracked in [[Risk Register]].

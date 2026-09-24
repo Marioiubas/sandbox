@@ -1,0 +1,14 @@
+# Local tooling state, never part of the design record
+.vault-import.tar.gz
+.claude-flow/
+.claude/settings.local.json
+.obsidian/workspace*.json
+.obsidian/cache
+.DS_Store
+
+# Rust build output
+code/target/
+code/tests/fuzz/target/
+code/tests/fuzz/corpus/
+code/tests/fuzz/artifacts/
+code/tests/fuzz/coverage/

@@ -1,0 +1,8 @@
+{
+  "userIgnoreFilters": [
+    "code/"
+  ],
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "current",
+  "useMarkdownLinks": false
+}
