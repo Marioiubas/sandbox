@@ -16,6 +16,7 @@ brokerd = { path = "../../crates/brokerd" }
 creds = { path = "../../crates/creds" }
 l7 = { path = "../../crates/l7" }
 policy = { path = "../../crates/policy" }
+mcpguard = { path = "../../crates/mcpguard" }
 http = "1"
 serde_json = "1"
 
@@ -102,6 +103,13 @@ bench = false
 [[bin]]
 name = "github_route"
 path = "fuzz_targets/github_route.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp_frame"
+path = "fuzz_targets/mcp_frame.rs"
 test = false
 doc = false
 bench = false

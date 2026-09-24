@@ -62,11 +62,11 @@ The motivating incidents: a public issue drove an agent to read private repos wi
 
 **MCP guard (crate `mcpguard`)**
 
-- [ ] `crates/mcpguard/src/wrap.rs`: `broker mcp wrap -- <cmd>` launches the command in its own standard-tier sandbox as an `McpServer` principal with sentinel env vars and its own egress policy.
-- [ ] `crates/mcpguard/src/relay.rs`: `broker mcp connect <name>` stub that the agent's MCP config points at; the pinned command comes only from user or org config, never the repo ([[I5 Config Outside Writable Mounts]]).
-- [ ] `crates/mcpguard/src/manifest_pin.rs`: hash `tools/list` names, schemas and descriptions before relaying; any change revokes the server's grants until re-approved ([Invariant Labs](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)).
-- [ ] `crates/mcpguard/src/tools_call.rs` and `crates/l7/src/adapters/mcp.rs`: authorize each `tools/call` with its arguments (`mcp.call_tool`); JSON-RPC parser gets `tests/fuzz/fuzz_targets/jsonrpc.rs`.
-- [ ] Stdio secrets: replace env secrets with sentinels and swap them back only on the server's egress to its upstream API.
+- [x] `crates/mcpguard/src/wrap.rs`: `broker mcp wrap -- <cmd>` launches the command in its own standard-tier sandbox as an `McpServer` principal with sentinel env vars and its own egress policy. (built as `crates/brokerd/src/session/mcp_launch.rs`: the daemon starts the pinned command; the agent-side `mcp wrap` is not built: [[ADR-030 MCP Guard as Built]])
+- [x] `crates/mcpguard/src/relay.rs`: `broker mcp connect <name>` stub that the agent's MCP config points at; the pinned command comes only from user or org config, never the repo ([[I5 Config Outside Writable Mounts]]). (built as `crates/brokerd/src/mcp/` with `mcpguard::frame`)
+- [x] `crates/mcpguard/src/manifest_pin.rs`: hash `tools/list` names, schemas and descriptions before relaying; any change revokes the server's grants until re-approved ([Invariant Labs](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks)). (built as `mcpguard::manifest` and `brokerd::mcp::pin`)
+- [x] `crates/mcpguard/src/tools_call.rs` and `crates/l7/src/adapters/mcp.rs`: authorize each `tools/call` with its arguments (`mcp.call_tool`); JSON-RPC parser gets `tests/fuzz/fuzz_targets/jsonrpc.rs`. (stdio only; fuzz target `mcp_frame`)
+- [x] Stdio secrets: replace env secrets with sentinels and swap them back only on the server's egress to its upstream API.
 
 **AWS (crate `creds`)**
 
@@ -162,3 +162,4 @@ Next milestone: [[M4 Harden and Ship]].
 ## Build log
 
 - 2026-09-24: step 1 built: the GitHub API adapter and session trifecta labels ([[ADR-029 GitHub API Adapter and Session Labels as Built]]). D5 passes against a fake GitHub API: `m3_github::d5_toxic_flow_is_stopped_at_the_public_write` (public issue → private read → public PR denied by the Rule of Two, both labels logged); ADR-010's benign case passes (`a_public_issue_then_a_pr_on_that_public_repo_is_allowed`). Remaining: CI mode (D1), identity (D2, needs Okta/Entra dev tenants), MCP Guard (D3, D4), AWS STS (D6), and D7 across them.
+- 2026-09-25: step 2 built: MCP Guard for stdio servers ([[ADR-030 MCP Guard as Built]]). D3 and D4 pass against a fake server and API (`m3_mcp::d3_d4_pinned_server_is_approved_confined_and_revoked_on_change`), with I1 and I5 extended to the server principal. The real GitHub MCP server run needs a GitHub token (user). Remaining: CI mode (D1), identity (D2), AWS STS (D6).

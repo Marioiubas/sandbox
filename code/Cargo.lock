@@ -269,6 +269,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "audit",
+ "base64 0.22.1",
  "brokerd",
  "bytes",
  "clap",
@@ -308,6 +309,7 @@ dependencies = [
  "l7",
  "launcher",
  "libc",
+ "mcpguard",
  "netguard",
  "nix",
  "policy",
@@ -1518,6 +1520,12 @@ dependencies = [
 [[package]]
 name = "mcpguard"
 version = "0.1.0"
+dependencies = [
+ "hex",
+ "proptest",
+ "serde_json",
+ "sha2",
+]
 
 [[package]]
 name = "memchr"

@@ -4,7 +4,7 @@ aliases: ["mcpguard", "MCP Adapter", "Tool Pinning", "MCP Tool Poisoning"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/mcp, topic/credentials, topic/supply-chain, topic/isolation, control/pin, control/iso, control/cred-out, boundary/tb6, invariant/i1, invariant/i5, milestone/m3]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -203,3 +203,7 @@ Per `tools/call`: JSON parse, schema validation and one Cedar call, well under t
 - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy-core-concepts.html
 - https://invariantlabs.ai/blog/mcp-github-vulnerability
 - Report: "MCP guard: servers are principals, names are capabilities", "MCP authorization makes the broker compliant by construction, except for stdio", adapter "MCP over HTTP and stdio", local MCP servers row, M3 acceptance, decisions table; research notes 02 Q3 and 03 Q2, 05 §3.2.
+
+## Build log
+
+- 2026-09-25 (M3): built for stdio servers ([[ADR-030 MCP Guard as Built]]): `[mcp.<name>]` in user/org policy, the stub `broker mcp connect`, the server as its own sandboxed session with its own egress and sentinel credentials, manifest pinning before any relay, host-side approval with a diff, strict framing, per-call authorization with labels, refusal of server-to-client requests, re-pin on `list_changed`. Not built: remote servers and OAuth, `insufficient_scope`, argument-schema validation, resources/prompts. Tests: `m3_mcp::d3_d4_pinned_server_is_approved_confined_and_revoked_on_change`, `mcpguard::*`, `mcp_calls_decide`; fuzz `mcp_frame`.

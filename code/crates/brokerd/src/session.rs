@@ -19,7 +19,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 mod assemble;
+mod mcp_launch;
 mod running;
+
+pub use mcp_launch::McpProcess;
 
 use assemble::Assembled;
 use running::{Listener, accept_loop};
@@ -149,8 +152,23 @@ impl Daemon {
         let user = passwd_user()?;
         let home = user.dir.clone();
 
-        let Assembled { profile, user_policy, egress, shadow, grants, warnings } =
-            self.assemble_policy(id, &params, &cwd, &user.name)?;
+        let assembled = self.assemble_policy(id, &params, &cwd, &user.name)?;
+        self.start_assembled(id, params, cwd, &home, &user.name, assembled, stdio).await
+    }
+
+    /// Launch a session whose policy layers are already assembled.
+    #[allow(clippy::too_many_arguments)]
+    async fn start_assembled(
+        self: &Arc<Self>,
+        id: &SessionId,
+        params: StartParams,
+        cwd: PathBuf,
+        home: &Path,
+        username: &str,
+        assembled: Assembled,
+        stdio: [OwnedFd; 3],
+    ) -> Result<Running, StartFailure> {
+        let Assembled { profile, user_policy, egress, shadow, grants, warnings } = assembled;
 
         // Session directories.
         let session_dir = self.dirs.sessions_dir().join(id.as_str());
@@ -181,8 +199,8 @@ impl Daemon {
                 &user_policy,
                 egress,
                 &cwd,
-                &home,
-                &user.name,
+                home,
+                username,
                 &session_dir,
                 &session_tmp,
                 platform_tmp,
@@ -362,6 +380,14 @@ impl Daemon {
             sni_timeout: Duration::from_secs(15),
             l7: Some(l7.ctx.clone()),
             shadow: shadow.as_ref().and_then(|(_, r)| r.as_ref().ok()).map(|p| Arc::new(p.clone())),
+            // Only agent sessions reach pinned servers; a server session never does.
+            mcp: (!user_policy.mcp.is_empty() && !profile.name.starts_with("mcp:")).then(|| {
+                Arc::new(crate::mcp::McpCtx {
+                    daemon: Arc::downgrade(self),
+                    user: user_policy.clone(),
+                    dirs: self.dirs.clone(),
+                })
+            }),
         });
         // Write-ahead (I9): the session is on record before the agent can run;
         // if the log cannot take it, the agent never starts (I2).

@@ -33,6 +33,7 @@ getrandom.workspace = true
 hex.workspace = true
 launcher.workspace = true
 libc.workspace = true
+mcpguard.workspace = true
 netguard.workspace = true
 nix.workspace = true
 policy.workspace = true

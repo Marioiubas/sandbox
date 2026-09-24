@@ -100,6 +100,9 @@ pub fn parse_toml(text: &str) -> anyhow::Result<PolicyFile> {
     if !p.tls.extra_roots.is_empty() {
         anyhow::bail!("[tls] is not allowed in repository policy (it would confer authority; I4)");
     }
+    if !p.mcp.is_empty() {
+        anyhow::bail!("[mcp] is not allowed in repository policy: servers are pinned in user or org policy only (I5)");
+    }
     if !p.filesystem.write.is_empty() || !p.filesystem.deny_read.is_empty() {
         anyhow::bail!("[filesystem] is not supported in repository policy yet");
     }

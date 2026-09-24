@@ -76,6 +76,12 @@ pub enum Command {
         #[command(subcommand)]
         action: PolicyCmd,
     },
+    /// Pinned MCP servers: `connect` (the stub an agent's MCP config runs
+    /// inside the sandbox), `approve` and `list` (on the host).
+    Mcp {
+        #[command(subcommand)]
+        action: McpCmd,
+    },
     /// Manage the per-user daemon.
     Daemon {
         #[command(subcommand)]
@@ -193,6 +199,21 @@ pub enum PolicyCmd {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum McpCmd {
+    /// Relay stdio to the pinned server `name` (inside a `broker run` session).
+    Connect { name: String },
+    /// Approve the server's current tool manifest (shows what changed).
+    Approve {
+        name: String,
+        /// Approve only if the manifest is exactly this digest.
+        #[arg(long)]
+        sha: Option<String>,
+    },
+    /// List pinned servers and their approval state.
+    List,
+}
+
+#[derive(Subcommand, Debug)]
 pub enum DaemonCmd {
     Status,
     Stop,
@@ -242,6 +263,9 @@ fn main() {
         Command::Policy { action: PolicyCmd::Export { target, profile, policy, out } } => {
             cmd::policy::export(cmd::policy::ExportArgs { target, profile, policy, out })
         }
+        Command::Mcp { action: McpCmd::Connect { name } } => cmd::mcp::connect(&name),
+        Command::Mcp { action: McpCmd::Approve { name, sha } } => cmd::mcp::approve(&name, sha),
+        Command::Mcp { action: McpCmd::List } => cmd::mcp::list(),
         Command::Daemon { action: DaemonCmd::Status } => cmd::daemon::status(),
         Command::Daemon { action: DaemonCmd::Stop } => cmd::daemon::stop(),
     };

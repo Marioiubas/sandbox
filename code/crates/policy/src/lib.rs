@@ -18,6 +18,7 @@ pub mod gates;
 pub mod github;
 pub mod glob;
 pub mod l7;
+pub mod mcp;
 pub mod repo;
 
 pub use config::{AgentSection, FsSection, PolicyFile, ProfileFile, load_policy_file, load_profile_str};

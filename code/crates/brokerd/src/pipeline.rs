@@ -69,6 +69,9 @@ pub struct PipelineCtx {
     pub l7: Option<Arc<L7Ctx>>,
     /// Shadow mode: the candidate policy, evaluated and logged, never applied.
     pub shadow: Option<Arc<EgressPolicy>>,
+    /// Agent sessions with pinned MCP servers (MCP Guard); `None` for an
+    /// MCP server's own session and for sessions without servers.
+    pub mcp: Option<Arc<crate::mcp::McpCtx>>,
 }
 
 /// What happened to one connection (returned for tests).
@@ -182,6 +185,19 @@ where
             return deny(ctx, &mut client, kind, rid, rej.reason(), dest, vec![]).await;
         }
     };
+
+    // 2b. MCP Guard: a pinned server by name, over this session's proxy.
+    // Reserved names never reach admission, DNS or the network.
+    if host.as_str().ends_with(crate::mcp::RESERVED_SUFFIX) {
+        let dest = dest_for(kind, Some(&host), None, Some(raw.port), &[]);
+        let Some(name) = crate::mcp::server_for(ctx, &host, raw.port).map(str::to_string) else {
+            return deny(ctx, &mut client, kind, rid, Reason::McpServerUnknown, dest, vec![]).await;
+        };
+        if ingress::reply_ok(&mut client, raw.kind).await.is_err() {
+            return Outcome::Terminated { request_id: rid, requests: 0 };
+        }
+        return crate::mcp::serve(ctx.clone(), name, client, raw.kind).await;
+    }
 
     // 3. Name and port admission. No network I/O has happened yet.
     let mut adm = match ctx.policy.admit_host(&host, raw.port) {

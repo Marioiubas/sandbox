@@ -186,6 +186,11 @@ protocol = "github"
 verbs = ["repo.read", "pr.create", "issue.comment"]   # never pr.merge by default
 repos = ["${repo_remote}"]                           # absent = the task repository only
 credential = { kind = "github_app", issuer = "acme", permissions = { contents = "read", pull_requests = "write" }, repos = ["${repo_remote}"] }
+
+[issuers.github_app.acme]               # as in "Terminated hosts" above
+app_id = "123456"
+installation_id = "7890123"
+private_key = "keychain:broker-github-app-acme"
 ```
 
 Every request on a GitHub grant is a verb, or it is denied: `repo.read`
@@ -199,3 +204,29 @@ public repository sets **untrusted input**. Once both are set, every write
 in that session is denied (the Rule of Two). A new `broker run` starts a
 new session. Mark a credential `risk = "high"` to treat any use of it as a
 sensitive read.
+
+## MCP servers (M3)
+
+```toml
+[mcp.github]
+command = ["/usr/local/bin/github-mcp-server", "stdio"]   # an absolute path
+tools.write = ["create_pull_request", "add_issue_comment"]  # external effects
+tools.untrusted = ["get_issue", "list_issues"]               # results anyone can write
+tools.deny = ["merge_pull_request"]
+
+[[mcp.github.egress]]                   # the server's own grants, nothing else
+host = "api.github.com"
+protocol = "github"
+verbs = ["repo.read", "issue.comment", "pr.create"]
+credential = { kind = "static", ref = "keychain:broker-github-mcp", env = "GITHUB_PERSONAL_ACCESS_TOKEN" }
+```
+
+Point the agent's MCP configuration at the stub, never at the server:
+`{"command": "broker", "args": ["mcp", "connect", "github"]}`. On first
+use the server is refused until you run `broker mcp approve github` on
+the host, which shows every tool and what changed since the last approval.
+Any later change to the server's tools revokes it until you approve again.
+The server runs in its own sandbox, and its token reaches it only as a
+sentinel. Every tool call is authorized and logged. Resources, prompts and
+the server's own requests (such as sampling) are not relayed.
+Only your own or your org's policy can define servers; a repository cannot.

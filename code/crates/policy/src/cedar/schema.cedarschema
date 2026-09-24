@@ -32,7 +32,8 @@ namespace Broker {
   type GitCtx  = { session: Session, port: Long, ref: String, force: Bool };
   type CredCtx = { session: Session, dest_host: String, dest_domains: Set<String>, port: Long, method: String,
                    path_str: String, verb: String };
-  type McpCtx  = { session: Session, tool: String, args_integrity: String };
+  // write: the tool is org-classified as having external effects.
+  type McpCtx  = { session: Session, tool: String, args_integrity: String, write: Bool };
   type GitHubCtx = { session: Session, port: Long, method: String, path_str: String };
 
   // L4 admission: may the broker resolve the name (before any DNS query),

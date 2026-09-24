@@ -215,6 +215,7 @@ dependencies = [
  "http",
  "l7",
  "libfuzzer-sys",
+ "mcpguard",
  "netguard",
  "policy",
  "serde_json",
@@ -241,6 +242,7 @@ dependencies = [
  "l7",
  "launcher",
  "libc",
+ "mcpguard",
  "netguard",
  "nix",
  "policy",
@@ -1320,6 +1322,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d3a9855747c17eaf4383823f135220716ab49bea5fbea7dd42cc9a92f8aa31"
 dependencies = [
  "logos-codegen",
+]
+
+[[package]]
+name = "mcpguard"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

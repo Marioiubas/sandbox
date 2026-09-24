@@ -195,6 +195,9 @@ pub struct PolicyFile {
     /// User/org scope only: upstream trust additions.
     #[serde(default)]
     pub tls: TlsSection,
+    /// User/org scope only: pinned MCP servers by name (MCP Guard).
+    #[serde(default)]
+    pub mcp: BTreeMap<String, crate::mcp::McpServerConfig>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -249,6 +252,7 @@ fn check_version(v: u32) -> anyhow::Result<()> {
 pub fn parse_policy_str(text: &str) -> anyhow::Result<PolicyFile> {
     let p: PolicyFile = toml::from_str(text)?;
     check_version(p.version)?;
+    crate::mcp::validate(&p.mcp).map_err(|e| anyhow::anyhow!(e))?;
     Ok(p)
 }
 

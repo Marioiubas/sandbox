@@ -33,6 +33,23 @@ impl Daemon {
             None => profiles::detect(&params.argv[0])?,
         };
         let user_policy = load_user_policy(&self.dirs)?;
+        self.assemble_layers(id, params, cwd, username, profile, user_policy, true)
+    }
+
+    /// The layers for a given profile and user policy. `agent` sessions
+    /// get shadow candidates and their pinned MCP servers' call permits;
+    /// an MCP server's own session gets neither.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn assemble_layers(
+        &self,
+        id: &SessionId,
+        params: &StartParams,
+        cwd: &Path,
+        username: &str,
+        profile: ProfileFile,
+        user_policy: PolicyFile,
+        agent: bool,
+    ) -> Result<Assembled, StartFailure> {
         let scope = format!("profile:{}", profile.name);
         // `${repo_remote}` comes from the checkout's own config file, read
         // without running git; unresolved, rules that use it grant nothing.
@@ -45,7 +62,7 @@ impl Daemon {
         // Shadow mode: an active candidate is evaluated beside the enforced
         // policy in enforce sessions (never in record mode).
         let candidate = match crate::shadow::load(&self.dirs) {
-            Ok(c) => c,
+            Ok(c) => c.filter(|_| agent),
             Err(e) => return Err(format!("shadow candidate: {e:#}").into()),
         };
         if candidate.is_some() && mode == policy::cedar::Mode::Enforce {
@@ -76,7 +93,8 @@ impl Daemon {
         let mut egress = EgressPolicy::compile_with(
             [(scope.as_str(), profile.egress.as_slice()), ("user", user_policy.egress.as_slice())],
             &compile_env,
-        )?;
+        )?
+        .with_mcp(&user_policy.mcp)?;
         // Repository policy: read here on the host, used only if its exact
         // content was approved, and conjoined so it can only narrow (I4, I5).
         let repo_status =

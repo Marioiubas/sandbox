@@ -172,3 +172,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found:** every credential entity carried `risk: "high"`, which under the label rules would have blocked every write after any public-issue read; risk now comes from config.
 - **ADRs:** [[ADR-029 GitHub API Adapter and Session Labels as Built]].
 - **Next step:** MCP Guard (D3, D4) with local stdio MCP servers.
+
+### 2026-09-25: M3 step 2, MCP Guard
+
+- **Milestone:** [[M3 CI Identity and MCP]] (in progress).
+- **Built:** pinned stdio MCP servers ([[ADR-030 MCP Guard as Built]]): `[mcp.<name>]` in user/org policy, the in-sandbox stub `broker mcp connect`, each server started by the daemon as its own sandboxed session with its own egress and sentinel credentials, manifest pinning before any relay, `broker mcp approve`/`list` on the host, strict framing (`mcpguard`), per-call Cedar authorization with labels, refusal of server-to-client requests, re-pin on `list_changed`.
+- **Tests:** D3 and D4 pass against fakes; I1 and I5 extended to MCP principals; property tests and the `mcp_frame` fuzz target (1.4 M runs locally); 249+ tests pass on macOS 26.5.
+- **Found:** the launcher refused to make a working directory inside broker state writable, as I5 requires; server working directories now live in the temp area.
+- **CI:** M3 step 1 failed its test jobs because a policy-reference example named an undefined GitHub App issuer (the docs test compiles every example); fixed in this push.
+- **Next step:** CI mode (D1) with GitHub Actions OIDC; AWS STS minting against a fake STS endpoint (D6).

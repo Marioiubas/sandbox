@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 learn.workspace = true
 anyhow.workspace = true
+base64.workspace = true
 audit.workspace = true
 brokerd = { path = "../brokerd" }
 bytes.workspace = true

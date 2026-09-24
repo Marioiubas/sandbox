@@ -4353,5 +4353,26 @@
     "aliases": [
       "ADR-029"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-030 MCP Guard as Built.md",
+    "title": "ADR-030 MCP Guard as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Pinned stdio MCP servers named in user/org policy, reached by the in-sandbox stub broker mcp connect through the session proxy, started as their own sandboxed session with sentinel credentials, pinned by a canonical digest of their tools list, approved on the host, every tools/call authorized; remote servers, mcp wrap and argument validation not built.",
+    "links_to": [
+      "MCP Guard",
+      "ADR-012 MCP Servers as Pinned Sandboxed Principals",
+      "Trifecta Session Labels",
+      "I1 No Secrets in the Sandbox",
+      "I5 Config Outside Writable Mounts",
+      "postmark-mcp Rug Pull",
+      "M3 CI Identity and MCP",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-25) from the MCP Guard implementation and the D3/D4 test.",
+    "aliases": [
+      "ADR-030"
+    ]
   }
 ]

@@ -7,6 +7,7 @@
 pub mod audit_query;
 pub mod dirs;
 pub mod l7_pipeline;
+pub mod mcp;
 pub mod pipeline;
 pub mod profiles;
 pub mod proto;

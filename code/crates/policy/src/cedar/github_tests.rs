@@ -138,3 +138,36 @@ proptest! {
         }
     }
 }
+
+/// MCP calls: a pinned server's tools pass, denied tools and unpinned
+/// servers do not, and a write tool joins the Rule of Two.
+#[test]
+fn mcp_calls_decide() {
+    let p = parse_policy_str(
+        "version = 1\n[mcp.gh]\ncommand = [\"/bin/true\"]\ntools.write = [\"post\"]\ntools.deny = [\"delete_repo\"]\n",
+    )
+    .unwrap();
+    let e = EgressPolicy::compile_with([("user", p.egress.as_slice())], &env()).unwrap().with_mcp(&p.mcp).unwrap();
+    let call =
+        |tool: &str, pinned: bool, write: bool| e.authorize_mcp("gh", "sha256:x", pinned, tool, "sha256:a", write);
+    assert!(call("read", true, false).is_ok());
+    assert!(call("post", true, true).is_ok());
+    assert_eq!(call("delete_repo", true, false).unwrap_err().0, Reason::McpToolNotAllowed);
+    assert_eq!(call("read", false, false).unwrap_err().0, Reason::McpUnpinned);
+    assert_eq!(
+        e.authorize_mcp("other", "sha256:x", true, "read", "sha256:a", false).unwrap_err().0,
+        Reason::McpToolNotAllowed
+    );
+    e.labels().raise(Label::UntrustedInput);
+    e.labels().raise(Label::SensitiveRead);
+    assert_eq!(call("post", true, true).unwrap_err().0, Reason::RuleOfTwo);
+    assert!(call("read", true, false).is_ok(), "reads still pass");
+    // Invalid definitions fail closed.
+    for bad in [
+        "version = 1\n[mcp.gh]\ncommand = [\"relative\"]\n",
+        "version = 1\n[mcp.GH]\ncommand = [\"/bin/true\"]\n",
+        "version = 1\n[mcp.gh]\ncommand = []\n",
+    ] {
+        assert!(parse_policy_str(bad).is_err(), "{bad}");
+    }
+}

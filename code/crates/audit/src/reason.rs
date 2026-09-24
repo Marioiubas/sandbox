@@ -102,6 +102,22 @@ pub enum Reason {
     GithubVerbNotAllowed,
     /// GitHub API: the verb is granted, but not on this repository.
     GithubRepoNotAllowed,
+    /// MCP: no pinned server by that name in user or org policy.
+    McpServerUnknown,
+    /// MCP: the server's manifest was never approved.
+    McpManifestUnapproved,
+    /// MCP: the server's manifest differs from the approved one (rug pull).
+    McpManifestChanged,
+    /// MCP: the tool is not in the pinned manifest.
+    McpToolUnknown,
+    /// MCP: the tool is denied by policy.
+    McpToolNotAllowed,
+    /// MCP: a method the guard does not relay.
+    McpMethodNotAllowed,
+    /// MCP: a frame that is not strict JSON-RPC 2.0, or too large.
+    McpMalformed,
+    /// MCP: the pinned server could not be started or pinned.
+    McpLaunchFailed,
 
     // ---- credentials (M1, I1/I7) ----
     /// A credential the broker did not issue (I7).
@@ -200,6 +216,14 @@ impl Reason {
         Reason::GithubGraphqlUnsupported,
         Reason::GithubVerbNotAllowed,
         Reason::GithubRepoNotAllowed,
+        Reason::McpServerUnknown,
+        Reason::McpManifestUnapproved,
+        Reason::McpManifestChanged,
+        Reason::McpToolUnknown,
+        Reason::McpToolNotAllowed,
+        Reason::McpMethodNotAllowed,
+        Reason::McpMalformed,
+        Reason::McpLaunchFailed,
         Reason::ForeignCredential,
         Reason::SentinelWrongHost,
         Reason::AmbiguousCredential,
@@ -270,6 +294,14 @@ impl Reason {
             Reason::GithubGraphqlUnsupported => "github_graphql_unsupported",
             Reason::GithubVerbNotAllowed => "github_verb_not_allowed",
             Reason::GithubRepoNotAllowed => "github_repo_not_allowed",
+            Reason::McpServerUnknown => "mcp_server_unknown",
+            Reason::McpManifestUnapproved => "mcp_manifest_unapproved",
+            Reason::McpManifestChanged => "mcp_manifest_changed",
+            Reason::McpToolUnknown => "mcp_tool_unknown",
+            Reason::McpToolNotAllowed => "mcp_tool_not_allowed",
+            Reason::McpMethodNotAllowed => "mcp_method_not_allowed",
+            Reason::McpMalformed => "mcp_malformed",
+            Reason::McpLaunchFailed => "mcp_launch_failed",
             Reason::ForeignCredential => "foreign_credential",
             Reason::SentinelWrongHost => "sentinel_wrong_host",
             Reason::AmbiguousCredential => "ambiguous_credential",
@@ -325,6 +357,14 @@ impl Reason {
             | GithubVerbNotAllowed
             | GithubRepoNotAllowed => "l7",
             ForeignCredential | SentinelWrongHost | AmbiguousCredential | MintFailed | SecretReflected => "credentials",
+            McpServerUnknown
+            | McpManifestUnapproved
+            | McpManifestChanged
+            | McpToolUnknown
+            | McpToolNotAllowed
+            | McpMethodNotAllowed
+            | McpMalformed
+            | McpLaunchFailed => "mcp",
             PolicyDenied
             | RepoPolicyDenied
             | PolicyError
@@ -407,6 +447,14 @@ impl Reason {
             GithubGraphqlUnsupported => "GitHub GraphQL requests are denied until they can be mapped to verbs",
             GithubVerbNotAllowed => "the GitHub verb (for example pr.merge) is not granted",
             GithubRepoNotAllowed => "the GitHub verb is granted, but not on this repository",
+            McpServerUnknown => "no pinned MCP server by that name is defined in user or org policy",
+            McpManifestUnapproved => "the MCP server's tool manifest has not been approved (`broker mcp approve`)",
+            McpManifestChanged => "the MCP server's tool manifest changed since approval; its grants are revoked",
+            McpToolUnknown => "the tool is not in the MCP server's pinned manifest",
+            McpToolNotAllowed => "policy does not allow this MCP tool",
+            McpMethodNotAllowed => "the MCP method is not relayed by the broker",
+            McpMalformed => "the MCP message is not strict JSON-RPC 2.0 or is too large",
+            McpLaunchFailed => "the pinned MCP server could not be started or pinned",
             ForeignCredential => "the request carried a credential the broker did not issue",
             SentinelWrongHost => "a broker sentinel was sent to a host it is not bound to",
             AmbiguousCredential => "more than one credential rule allowed the request",

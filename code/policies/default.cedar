@@ -19,6 +19,12 @@ forbid (principal, action in [Broker::Action::"http.write", Broker::Action::"git
 when { context.session.trifecta.untrusted_input && context.session.trifecta.sensitive_read }
 unless { context.session.approved };
 
+@id("rule-of-two-mcp")
+@reason("rule_of_two")
+forbid (principal, action == Broker::Action::"mcp.call_tool", resource)
+when { context.write && context.session.trifecta.untrusted_input && context.session.trifecta.sensitive_read }
+unless { context.session.approved };
+
 @id("pinned-mcp-only")
 @reason("mcp_unpinned")
 forbid (principal, action == Broker::Action::"mcp.call_tool", resource)
