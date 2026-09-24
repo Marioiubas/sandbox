@@ -40,7 +40,7 @@ Copy this block for each session:
 | Milestone | Status | Date built | Evidence (test run, commit) |
 |---|---|---|---|
 | [[M0 Contained Run]] | in progress: implemented; A1 verified on macOS 26 with Claude Code only | | CI run 35999705456 (commit 9a63853): 109 tests green on macOS 15/26 and Ubuntu 22.04/24.04 runners |
-| [[M1 Secrets Outside]] | in progress: implemented; B1-B8 pass against local fakes on macOS 26; e2e with Claude Code's brokered login passes; real GitHub App run pending |  | see entry "M1 secrets outside implemented" |
+| [[M1 Secrets Outside]] | in progress: implemented; B1-B8 green in CI against local fakes on macOS 15/26 and Ubuntu 22.04/24.04; e2e with Claude Code's brokered login passes on macOS 26; real GitHub App run pending |  | CI run 36012256447 (commit 4c2a1ef): 190 tests and 11 fuzz targets green |
 | [[M2 Policy Audit and Learn]] | not started |  |  |
 | [[M3 CI Identity and MCP]] | not started |  |  |
 | [[M4 Harden and Ship]] | not started |  |  |
@@ -92,4 +92,11 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **ADRs created or changed:** [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] (supersedes the keychain half of [[ADR-016 macOS M0 Compatibility Exceptions]]), [[ADR-021 L7 Path Choices for M1]].
 - **Open questions resolved or raised:** hyper/rustls/rcgen pinned and exercised; GitHub branch scope still absent upstream (broker-enforced); ECH still unmeasured ([[Open Questions and Unverified Claims]]).
 - **Next step:** CI on macOS 15/26 and Ubuntu 22.04/24.04; B2/B3 against a real throwaway GitHub App (needs the user's app key); then mark M1 `built`.
+
+### 2026-09-24: M1 CI matrix green
+
+- **Milestone:** [[M1 Secrets Outside]] (in progress).
+- **Tests:** CI run 36012256447 (commit 4c2a1ef): lint, 190 tests on macOS 15, macOS 26, Ubuntu 22.04 and Ubuntu 24.04 (including the twelve M1 conformance tests, B1-B8), and the fuzz smoke over all eleven targets, all green. The M1 conformance tests also passed on Linux 6.12 in Docker (aarch64) before the push.
+- **Notes updated:** [[M1 Secrets Outside]].
+- **Next step:** B2/B3 against a real throwaway GitHub App on a test org with two repositories (the app key goes into the keychain or CI secrets, never the repository); then mark M1 `built`. M0 still needs A1 for Codex and on macOS 15/Ubuntu.
 
