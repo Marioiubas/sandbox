@@ -4,7 +4,7 @@ aliases: ["broker.toml", "TOML Front-End", "TOML to Cedar Compiler"]
 type: interface
 section: policy
 tags: [sandbox/policy, interface, topic/policy, topic/filesystem, topic/egress, topic/git, invariant/i4, invariant/i5, milestone/m2]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -164,3 +164,4 @@ plus a `Credential` entity with `allowed_hosts = ["github.com"]` and `risk = "hi
 ## Build log
 
 - 2026-09-24: M1 keys implemented in `policy::config`/`policy::l7`: `protocol` (`http`, `git`, `registry`), `methods`, `paths` (`*` within a segment, `**` any segments), `allow = { fetch, push = { repo, refs, force } }`, `credential = { kind = static|github_app, … }`, `passthrough`, and user/org-only `[issuers.github_app.<name>]` and `[tls] extra_roots`. Absent `methods`/`paths` mean any; empty lists mean none; `${repo_remote}` unresolved grants nothing. Reference: `code/docs/policy-reference.md`.
+- 2026-09-24 (M2): status `built` for the implemented keys; plain entries are L4 admission only ([[ADR-027 Plain Host Grants Carry No L7 Authority]]); `[profile.*]` tables, `broker init` and recompilation equivalence are deferred ([[ADR-028 M2 Plan Items Built Differently or Deferred]]).

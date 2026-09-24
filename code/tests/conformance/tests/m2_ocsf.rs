@@ -94,3 +94,42 @@ fn c4_events_validate_and_reach_the_sinks() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("loopback"), "{}", String::from_utf8_lossy(&out.stderr));
 }
+
+/// `audit.query` on the control socket: filters narrow the answer and bad
+/// filters are refused, never ignored.
+#[test]
+fn audit_query_filters_through_the_daemon() {
+    let h = Harness::new("version = 1\n");
+    let r =
+        h.sh("curl -sS -m 5 -o /dev/null https://evil.test/ ; curl -sS -m 5 -o /dev/null https://other.test/ ; true");
+    assert_eq!(r.code, 0, "{r:?}");
+    let q = |args: &[&str]| {
+        let out = Command::new(&h.bins.broker)
+            .args(["audit", "query"])
+            .args(args)
+            .env("BROKER_HOME", h.home.path())
+            .output()
+            .unwrap();
+        (
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout).to_string(),
+            String::from_utf8_lossy(&out.stderr).to_string(),
+        )
+    };
+    let (code, out, err) = q(&["--decision", "deny", "--host", "EVIL.test", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    let rows: Vec<serde_json::Value> = out.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert!(!rows.is_empty());
+    for r in &rows {
+        assert_eq!(r["event"]["dest"]["host"], "evil.test");
+        assert_eq!(r["event"]["decision"]["result"], "deny");
+        assert_eq!(r["hash"].as_str().unwrap().len(), 64);
+    }
+    let (code, out, _) = q(&["--kind", "session.start", "--limit", "1"]);
+    assert_eq!(code, Some(0));
+    assert_eq!(out.lines().count(), 1);
+    for bad in [&["--decision", "maybe"][..], &["--reason", "nope"], &["--host", "a..b"], &["--limit", "5000"]] {
+        let (code, _, err) = q(bad);
+        assert_eq!(code, Some(2), "{bad:?}: {err}");
+    }
+}

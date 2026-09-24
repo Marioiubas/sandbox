@@ -4,7 +4,7 @@ aliases: ["Recorder", "Audit Event Schema", "OCSF Mapping", "audit crate"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/audit, topic/identity, control/audit, adversary/a3, invariant/i9, invariant/i1, milestone/m2, evidence/unverified, evidence/conflict]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -212,3 +212,4 @@ Exports feed [[Control Plane and Policy Bundles]]; traces feed [[Policy Learning
 - 2026-09-24: M0 slice built in `code/crates/audit/`: `Recorder` trait, `SqliteRecorder` (WAL, `synchronous=FULL`, busy timeout), hash `SHA-256(prev || canonical_json(event + seq))` with a random per-database genesis in `meta`, `verify` returning the first bad sequence number, `open` refusing a broken chain, read-only readers for `broker why` and `broker audit`. Canonical JSON: sorted keys, no whitespace, floats rejected. The enumerated deny `Reason` (36 codes with stage, trust boundary and explanation) lives here and is shared by every deciding crate. Tests: tamper one byte, delete, swap, re-hash an edited row (breaks the next link), property test over random single-byte mutations, `audit_failure_denies_before_connecting`, `i9_every_decision_is_chained_and_explainable`. Truncating the tail is only detectable against an exported anchor (tested and documented).
 - 2026-09-24: not built (M2): OCSF and OTLP export, anchoring, rotation. Added event kind `session.ready`.
 - 2026-09-24 (M2): OCSF 1.9.0 mapping and validation (`ocsf.rs`), OTLP/HTTP JSON logs body (`otlp.rs`), `broker audit export --format ocsf|hec|otlp [--to URL] [--token REF] [--from-seq N]` exporting only the verified prefix (`SqliteRecorder::range`), chain hash and sequence in every event as the anchor ([[ADR-023 OCSF and OTLP Export as Built]]). Tests: `ocsf::tests::classes_map_and_validate`, `otlp::tests::wraps_each_event`, `m2_ocsf::c4_events_validate_and_reach_the_sinks`. Still not built: segment rotation, batch signing, live streaming.
+- 2026-09-24 (M2): `audit.query` on the control socket (filters on session, kind, decision, reason, canonical host, sequence; validated at the boundary, unknown keys refused) and `broker audit query`. Status `built` for the M2 scope (chain, verify, OCSF, OTLP, tail, query); segment rotation, batch signing and live streaming remain open. Tests: `audit_query::tests::filters_are_validated_not_ignored`, `m2_ocsf::audit_query_filters_through_the_daemon`.

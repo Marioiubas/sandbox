@@ -40,8 +40,7 @@ pub struct CredSpec {
 pub struct Bundle {
     pub set: PolicySet,
     pub credentials: Vec<CredSpec>,
-    /// Permits that may allow a forced push: push rules with `force = true`,
-    /// and plain host grants (their traffic is spliced, not inspected).
+    /// Permits that may allow a forced push: push rules with `force = true`.
     pub force_opt_ins: Vec<String>,
 }
 
@@ -64,15 +63,14 @@ impl Bundle {
         let force_opt_ins = p
             .grants()
             .iter()
-            .flat_map(|g| match g.l7.as_deref() {
-                None => vec![format!("{}#any", g.id)],
-                Some(r) => r
-                    .push_rules()
+            .flat_map(|g| {
+                let rules = g.l7.as_deref().map(|r| r.push_rules()).unwrap_or_default();
+                rules
                     .iter()
                     .enumerate()
                     .filter(|(_, r)| r.force)
                     .map(|(k, _)| format!("{}#{}", g.id, crate::cedar::compile::push_suffix(k)))
-                    .collect(),
+                    .collect::<Vec<_>>()
             })
             .collect();
         Bundle { set: p.engine().base().clone(), credentials, force_opt_ins }
@@ -379,8 +377,8 @@ async fn run(inputs: &Inputs<'_>) -> anyhow::Result<Report> {
             rep.push(Gate::DenyLive, format!("{a} needs approval"), &en, o);
         }
         if action_is(&env, "git.push") {
-            // Forced pushes only through grants that opt in (`force = true`)
-            // or plain host grants; nothing else (record mode, defaults).
+            // Forced pushes only through push rules that opt in (`force =
+            // true`); nothing else (plain grants, record mode, defaults).
             let mut reference = parse_set(
                 "permit (principal, action == Broker::Action::\"git.push\", resource) when { !context.force };",
             )?;

@@ -4290,5 +4290,47 @@
     "aliases": [
       "ADR-026"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-027 Plain Host Grants Carry No L7 Authority.md",
+    "title": "ADR-027 Plain Host Grants Carry No L7 Authority",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "A plain [[egress]] entry compiles to L4 admission only; it no longer emits an #any permit, so on a host another rule terminates it allows no request. Fixes a same-host over-grant that silently disabled method and path rules.",
+    "links_to": [
+      "broker.toml Human Policy Layer",
+      "ADR-006 Deny Unmatched L7 Requests",
+      "ADR-022 Cedar Schema and Engine as Built",
+      "ADR-024 Formal Gates as Built",
+      "Example Cedar Policies",
+      "M2 Policy Audit and Learn",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M2 build (2026-09-24) from a probe of a plain plus read-only grant on one host.",
+    "aliases": [
+      "ADR-027"
+    ]
+  },
+  {
+    "file": "95-decisions/ADR-028 M2 Plan Items Built Differently or Deferred.md",
+    "title": "ADR-028 M2 Plan Items Built Differently or Deferred",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Where M2 as built differs from its task list: grants compile to policy text so the formal gates can prove them; a differential property test replaces round-trips; per-file-operation decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init and LLM explanations are deferred.",
+    "links_to": [
+      "M2 Policy Audit and Learn",
+      "Policy Engine and Entity Builder",
+      "broker.toml Human Policy Layer",
+      "Policy Miner Safeguards",
+      "Policy Learning Loop",
+      "Audit Recorder and Event Schema",
+      "ADR-022 Cedar Schema and Engine as Built",
+      "ADR-024 Formal Gates as Built",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M2 build (2026-09-24) while reconciling the milestone task list with the code.",
+    "aliases": [
+      "ADR-028"
+    ]
   }
 ]

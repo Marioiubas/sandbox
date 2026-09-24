@@ -21,7 +21,7 @@ pub mod time;
 pub use event::{AuditEvent, Decision, DecisionResult, Dest, EventKind, Mode};
 pub use ids::{RequestId, SessionId};
 pub use reason::Reason;
-pub use store::{SqliteRecorder, StoredEvent, VerifyError};
+pub use store::{Query, SqliteRecorder, StoredEvent, VerifyError};
 
 /// SHA-256 chain hash of a stored event: `H(prev || canonical_json(ev))`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]

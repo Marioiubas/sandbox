@@ -4,7 +4,7 @@ aliases: ["Conservative Generalisation", "Org Deny Ceiling", "Learning Poisoning
 type: concept
 section: policy
 tags: [sandbox/policy, concept, topic/learning, topic/policy, invariant/i3, invariant/i7, milestone/m2, evidence/unverified]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -129,3 +129,4 @@ The category entities would be maintained in org entity data. The schema sketch 
 ## Build log
 
 - 2026-09-24: G2 (identifier templating), G3 (prefix collapse after n=3 children in m=2 sessions), G4 (`*.name` after k=3 subdomains), G5 (one rule per observed method), G7 (high-risk proposals commented out: DELETE and non-standard methods, force pushes, pushes outside `refs/heads/agent/`), G8 (GitHub `contents` scope from observed fetch/push), G9 (never above the registrable domain or over a public suffix), P1 (minimum support, default 2 sessions), P2 (sessions with a foreign credential, wrong-host sentinel or reflected secret excluded entirely), P3 (ceiling hits listed as observed but blocked; the ceiling is in every policy). P4 (rate and volume limits) is not built. Defaults are in `learn::generalise::Options`.
+- 2026-09-24: status `built` for G2-G10 and P1-P3 (G6 holds by construction: only observed methods on observed hosts are proposed; G10: the miner reads canonical hosts from audit rows). G1, P4 and the newly-registered-domain and object-storage ceiling categories are deferred ([[ADR-028 M2 Plan Items Built Differently or Deferred]]).

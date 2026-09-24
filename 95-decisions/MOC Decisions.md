@@ -51,6 +51,8 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-024 Formal Gates as Built]] | Gates on cedar-policy-symcc 0.7.0 + cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, no forced pushes in record mode, I4 proved on a single-set encoding of the conjunction. |
 | [[ADR-025 Native Config Exporters as Built]] | `broker policy export` writes Claude Code managed-settings.json and Codex requirements.toml from the enforced policy (verified vendor schemas); no proxy chaining or MCP allowlist yet. |
 | [[ADR-026 Shadow Mode as Built]] | `broker policy shadow <file>` evaluates a candidate broker.toml beside the enforced policy in every enforce session (mode `shadow`), logs its verdict per decision and reports what it would change; it never decides. |
+| [[ADR-027 Plain Host Grants Carry No L7 Authority]] | A plain [[egress]] entry is L4 admission only (no `#any` permit); on a host another rule terminates it allows nothing. Fixes a same-host over-grant. |
+| [[ADR-028 M2 Plan Items Built Differently or Deferred]] | M2 task list reconciled: grants compile to policy text so gates can prove them; differential test instead of round-trip; per-file-op decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init, LLM explanations deferred. |
 
 ## Where the value is
 
@@ -107,6 +109,8 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-024 Formal Gates as Built]] — Gates on cedar-policy-symcc 0.7.0 + cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, no forced pushes in record mode, I4 proved on a single-set encoding of the conjunction.
 - [[ADR-025 Native Config Exporters as Built]] — `broker policy export` writes Claude Code managed-settings.json and Codex requirements.toml from the enforced policy (verified vendor schemas); no proxy chaining or MCP allowlist yet.
 - [[ADR-026 Shadow Mode as Built]] — `broker policy shadow <file>` evaluates a candidate broker.toml beside the enforced policy in every enforce session (mode `shadow`), logs its verdict per decision and reports what it would change; it never decides.
+- [[ADR-027 Plain Host Grants Carry No L7 Authority]] — A plain [[egress]] entry is L4 admission only (no `#any` permit); on a host another rule terminates it allows nothing. Fixes a same-host over-grant.
+- [[ADR-028 M2 Plan Items Built Differently or Deferred]] — M2 task list reconciled: grants compile to policy text so gates can prove them; differential test instead of round-trip; per-file-op decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init, LLM explanations deferred.
 
 ## How this section connects
 

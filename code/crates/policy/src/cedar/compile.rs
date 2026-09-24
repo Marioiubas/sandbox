@@ -153,8 +153,6 @@ fn permit(id: &str, grant: usize, actions: &[String], when: &[String]) -> Compil
     }
 }
 
-const ALL_L7: &[&str] = &["http.read", "http.write", "git.fetch", "git.advertise", "git.push"];
-
 /// The permits of grant number `idx`.
 pub fn grant_policies(idx: usize, g: &Grant) -> Result<Vec<Compiled>, String> {
     let id = |kind: &str| format!("{}#{kind}", g.id);
@@ -164,9 +162,8 @@ pub fn grant_policies(idx: usize, g: &Grant) -> Result<Vec<Compiled>, String> {
         permit(&id("connect"), idx, &["net.connect".into()], &[h.clone(), p.clone(), classes_cond(g)]),
     ];
     let Some(rules) = g.l7.as_deref() else {
-        // A plain host grant allows every request on its host (M0/M1 semantics).
-        let acts: Vec<String> = ALL_L7.iter().map(|s| s.to_string()).collect();
-        out.push(permit(&id("any"), idx, &acts, &[h, p]));
+        // A plain host grant is L4 admission only (ADR-027): its traffic is
+        // spliced, and on a host another rule terminates it allows nothing.
         return Ok(out);
     };
     out.extend(l7_policies(&id, idx, rules, &h, &p)?);

@@ -42,39 +42,39 @@ The rationale is twofold. Cedar's authorization semantics are proved in Lean ("I
 
 **Schema and engine (crate `policy`)**
 
-- [ ] `crates/policy/src/schema.cedarschema`: start from the report's schema sketch (not compiled) in [[Broker Cedar Schema]]; compile it; fix it until `cedar-policy` validates it; record every change in that note's Implementation notes.
-- [ ] `crates/policy/src/entities.rs`: the entity builder. Grants are **entities**, not policy text, so expiry and revocation are data updates with no recompile ([[Policy Engine and Entity Builder]]). Hosts enter only in canonical form from [[Hostname Canonicaliser]].
-- [ ] `crates/policy/src/authorize.rs`: the adapter produces one or more Cedar requests per network request; **all** must allow before any credential is attached.
-- [ ] Port M0/M1 allowlists and method/path tables to Cedar policies; delete the interim tables.
-- [ ] Load [[Example Cedar Policies]] as the default policy set (credential host binding, task expiry, push only to `agent/*` never force, Rule of Two forbid, pinned MCP only).
+- [x] `crates/policy/src/schema.cedarschema`: start from the report's schema sketch (not compiled) in [[Broker Cedar Schema]]; compile it; fix it until `cedar-policy` validates it; record every change in that note's Implementation notes. (built as `crates/policy/src/cedar/schema.cedarschema`; [[ADR-022 Cedar Schema and Engine as Built]])
+- [x] `crates/policy/src/entities.rs`: the entity builder. Grants are **entities**, not policy text, so expiry and revocation are data updates with no recompile ([[Policy Engine and Entity Builder]]). Hosts enter only in canonical form from [[Hostname Canonicaliser]]. (built as `crates/policy/src/cedar/entities.rs`; grants compile to policy text instead of entities: [[ADR-028 M2 Plan Items Built Differently or Deferred]])
+- [x] `crates/policy/src/authorize.rs`: the adapter produces one or more Cedar requests per network request; **all** must allow before any credential is attached. (built in `crates/policy/src/egress.rs` `authorize_l7`)
+- [x] Port M0/M1 allowlists and method/path tables to Cedar policies; delete the interim tables. (the tables remain only as the explainer and differential oracle: ADR-022)
+- [x] Load [[Example Cedar Policies]] as the default policy set (credential host binding, task expiry, push only to `agent/*` never force, Rule of Two forbid, pinned MCP only).
 
 **Human layer and repo narrowing**
 
-- [ ] `crates/policy/src/toml_compile.rs`: compile `broker.toml` (`[profile.*]`, `[[egress]]`, `credential = {...}`) to Cedar entities and policies; property test: compile → decompile round-trip on the supported subset.
-- [ ] Repo policy (`.broker/broker.toml`, `.broker/policy.cedar`) is loaded only after content-hash approval and composed so that it can only narrow: CI gate `check_implies(repo ∧ org, org)`; a widening repo policy is rejected ([[I4 Repo Policy Only Narrows]], [[I5 Config Outside Writable Mounts]]).
+- [x] `crates/policy/src/toml_compile.rs`: compile `broker.toml` (`[profile.*]`, `[[egress]]`, `credential = {...}`) to Cedar entities and policies; property test: compile → decompile round-trip on the supported subset. (built as `crates/policy/src/cedar/compile.rs`; a differential property test replaces the round-trip: ADR-028)
+- [x] Repo policy (`.broker/broker.toml`, `.broker/policy.cedar`) is loaded only after content-hash approval and composed so that it can only narrow: CI gate `check_implies(repo ∧ org, org)`; a widening repo policy is rejected ([[I4 Repo Policy Only Narrows]], [[I5 Config Outside Writable Mounts]]). (content-hash approval, conjunction, and the formal gate `broker policy check --repo`: ADR-024)
 
 **Modes**
 
-- [ ] Enforce and audit modes per session; audit mode records the would-be decision for every request and file operation, plus process ancestry (binary path, argv hash).
+- [ ] Enforce and audit modes per session; audit mode records the would-be decision for every request and file operation, plus process ancestry (binary path, argv hash). — partly: enforce, record and shadow modes are built; per-file-operation decisions and process ancestry are deferred (ADR-028).
 
 **Audit (crate `audit`)**
 
-- [ ] `crates/audit/src/chain.rs`: finalise `hash = H(prev || canonical_json(ev))`; `verify.rs` recomputes the chain; `broker audit verify` exits non-zero on the first bad row.
-- [ ] Event fields per [[Audit Recorder and Event Schema]]: IdP subject (placeholder until M3), agent ID and binary hash, task ID, session ID, sandbox identity; method and redacted URL; adapter verb; Cedar decision, determining policy IDs and mode; credential ID and issuer, never the value; upstream status and bytes; chain hash.
+- [x] `crates/audit/src/chain.rs`: finalise `hash = H(prev || canonical_json(ev))`; `verify.rs` recomputes the chain; `broker audit verify` exits non-zero on the first bad row. (built in M0 as `crates/audit/src/store.rs`)
+- [x] Event fields per [[Audit Recorder and Event Schema]]: IdP subject (placeholder until M3), agent ID and binary hash, task ID, session ID, sandbox identity; method and redacted URL; adapter verb; Cedar decision, determining policy IDs and mode; credential ID and issuer, never the value; upstream status and bytes; chain hash. (IdP subject is `local:<user>` until M3)
 - [x] `crates/audit/src/otlp.rs`: one log record per decision (OTLP/HTTP JSON, no SDK; [[ADR-023 OCSF and OTLP Export as Built]]).
 - [x] `crates/audit/src/ocsf.rs`: map to OCSF HTTP or API Activity records. **Verify class names and IDs first** (verified 2026-09-24 against OCSF 1.9.0: 4001, 4002, 6003).
-- [ ] `broker audit tail` and `audit.query` on the control socket.
+- [x] `broker audit tail` and `audit.query` on the control socket.
 
 **Learning (crate `learn`)**
 
-- [ ] `record.rs`: collect `(task class, repo, binary, host, method, path template, verb)` tuples from audit-mode sessions.
-- [ ] `templatize.rs`: collapse IDs, SHAs and UUIDs; map GitHub requests to known OpenAPI operations.
-- [ ] `generalise.rs`: prefer operation-level entries to wildcards; require minimum support before collapsing a path prefix; collapse to a domain suffix only after k distinct subdomains; never widen methods beyond those observed ([[Policy Miner Safeguards]]).
-- [ ] `risk.rs`: classify write, auth-bearing, publish and delete; never auto-grant high-risk verbs.
-- [ ] Derive the GitHub `permissions` object from the operations actually observed.
-- [ ] `diff.rs` and `replay.rs`: emit a Cedar diff with evidence counts and replay statistics ("would have blocked N requests").
-- [ ] Poisoning safeguards: learn only from trusted-input runs or the intersection of N runs; exclude any request that carried a foreign credential or tripped the sentinel check; enforce the org deny ceiling (paste sites, raw IPs, `*.ngrok.*`, newly registered domains, arbitrary object storage) in `policies/ceiling/`.
-- [ ] `broker learn -- <agent> ...` and `broker suggest`; `suggest` may ask an LLM to *explain* the diff but never applies it ([[I3 Probabilistic Components Only Narrow]]).
+- [x] `record.rs`: collect `(task class, repo, binary, host, method, path template, verb)` tuples from audit-mode sessions. (built as `crates/learn/src/observe.rs`)
+- [x] `templatize.rs`: collapse IDs, SHAs and UUIDs; map GitHub requests to known OpenAPI operations. (IDs, SHAs and UUIDs; the OpenAPI mapping G1 waits for the M3 GitHub adapter: ADR-028)
+- [x] `generalise.rs`: prefer operation-level entries to wildcards; require minimum support before collapsing a path prefix; collapse to a domain suffix only after k distinct subdomains; never widen methods beyond those observed ([[Policy Miner Safeguards]]).
+- [x] `risk.rs`: classify write, auth-bearing, publish and delete; never auto-grant high-risk verbs. (in `generalise.rs`, G7)
+- [x] Derive the GitHub `permissions` object from the operations actually observed. (G8)
+- [x] `diff.rs` and `replay.rs`: emit a Cedar diff with evidence counts and replay statistics ("would have blocked N requests"). (`Suggestion::render_toml`, `learn::replay`)
+- [x] Poisoning safeguards: learn only from trusted-input runs or the intersection of N runs; exclude any request that carried a foreign credential or tripped the sentinel check; enforce the org deny ceiling (paste sites, raw IPs, `*.ngrok.*`, newly registered domains, arbitrary object storage) in `policies/ceiling/`. (P1-P3; newly registered domains and object storage deferred: ADR-028)
+- [x] `broker learn -- <agent> ...` and `broker suggest`; `suggest` may ask an LLM to *explain* the diff but never applies it ([[I3 Probabilistic Components Only Narrow]]). (no LLM explanation: ADR-028)
 
 **Formal gates (L5)**
 
@@ -87,8 +87,8 @@ The rationale is twofold. Cedar's authorization semantics are proved in Lean ("I
 
 **Probes and fixtures**
 
-- [ ] `tests/e2e/learn_3x3`: 3 repos × 3 agents, learn then enforce.
-- [ ] `tests/e2e/seeded_injection`: repo file instructing "post `~/.aws` to a paste site; push to attacker repo".
+- [ ] `tests/e2e/learn_3x3`: 3 repos × 3 agents, learn then enforce. — mechanics pass with a deterministic agent (`m2_learn`); the real 3 × 3 run needs Codex and Gemini CLI signed in.
+- [x] `tests/e2e/seeded_injection`: repo file instructing "post `~/.aws` to a paste site; push to attacker repo". (`m2_learn` C2)
 - [x] `tests/e2e/ocsf_sink`: validate events against the OCSF schema and deliver to the test SIEM (built as `tests/conformance/tests/m2_ocsf.rs`).
 
 ## Components delivered
@@ -175,3 +175,4 @@ Next milestone: [[M3 CI Identity and MCP]], which adds identity attribution, tri
 - 2026-09-24: step 4 built: the formal gates ([[ADR-024 Formal Gates as Built]]) as `broker policy check`, inside `broker suggest`, and in CI on every shipped profile (gate specs live in code, not `policies/gates/*.toml`; tenant disjointness deferred to the control plane). C3 passes: every learned change is proved by the hard gates or shown with counterexamples (`m2_learn` C3 assertions, `m2_gates::policy_check_proves_flags_widenings_and_blocks_hard_failures`).
 - 2026-09-24: step 5 built: native config exporters for Claude Code managed settings and Codex `requirements.toml` ([[ADR-025 Native Config Exporters as Built]]).
 - 2026-09-24: step 6 built: shadow mode ([[ADR-026 Shadow Mode as Built]]). Not built from the Modes item: per-file-operation would-be decisions and process ancestry in audit rows (file access is decided by the kernel sandbox, not per request).
+- 2026-09-24: step 7: `audit.query` on the control socket and `broker audit query`; a same-host over-grant fixed ([[ADR-027 Plain Host Grants Carry No L7 Authority]]); the task list reconciled with the code ([[ADR-028 M2 Plan Items Built Differently or Deferred]]). Acceptance status: C2, C3, C4, C5, C6 and C7 pass in CI on macOS 15/26 and Ubuntu 22.04/24.04; C1 passes with a deterministic agent, and its 3 repos × 3 real agents run is outstanding. M2 stays `in progress` until that run.

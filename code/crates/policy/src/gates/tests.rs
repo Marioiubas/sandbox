@@ -168,7 +168,7 @@ fn each_hard_gate_catches_its_regression() {
     assert!(failed(&force, Gate::DenyLive));
     // A grant that opts in is not a failure.
     let opt_in = bundle(&BASE.replace("force = false", "force = true"));
-    assert_eq!(opt_in.force_opt_ins, vec!["user:git#push0".to_string(), "user:wild#any".to_string()]);
+    assert_eq!(opt_in.force_opt_ins, vec!["user:git#push0".to_string()]);
     assert!(!failed(&opt_in, Gate::DenyLive));
 }
 

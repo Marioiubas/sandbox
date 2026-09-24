@@ -151,6 +151,30 @@ impl SqliteRecorder {
         Ok(v)
     }
 
+    /// Filtered rows, oldest first (`audit.query`). Filters are bound
+    /// parameters; the caller validates and canonicalises them.
+    pub fn query_filtered(&self, q: &Query) -> anyhow::Result<Vec<StoredEvent>> {
+        self.query(
+            "WHERE seq > ?1 AND (?2 IS NULL OR session = ?2) AND (?3 IS NULL OR kind = ?3)
+               AND (?4 IS NULL OR json_extract(body, '$.decision.result') = ?4)
+               AND (?5 IS NULL OR json_extract(body, '$.reason') = ?5)
+               AND (?6 IS NULL OR json_extract(body, '$.dest.host') = ?6)
+             ORDER BY seq LIMIT ?7",
+            params![
+                q.after_seq,
+                q.session.as_deref(),
+                q.kind.map(|k| k.as_str()),
+                q.decision.map(|d| match d {
+                    crate::DecisionResult::Allow => "allow",
+                    crate::DecisionResult::Deny => "deny",
+                }),
+                q.reason.map(|r| r.as_str()),
+                q.host.as_deref(),
+                q.limit.min(Query::MAX_LIMIT),
+            ],
+        )
+    }
+
     /// Rows with `after < seq <= upto`, oldest first (a verified prefix).
     pub fn range(&self, after: i64, upto: i64) -> anyhow::Result<Vec<StoredEvent>> {
         self.query("WHERE seq > ?1 AND seq <= ?2 ORDER BY seq", params![after, upto])
@@ -170,6 +194,22 @@ impl SqliteRecorder {
         }
         Ok(out)
     }
+}
+
+/// An `audit.query` filter. `host` must already be canonical.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Query {
+    pub after_seq: i64,
+    pub session: Option<String>,
+    pub kind: Option<crate::EventKind>,
+    pub decision: Option<crate::DecisionResult>,
+    pub reason: Option<crate::Reason>,
+    pub host: Option<String>,
+    pub limit: u32,
+}
+
+impl Query {
+    pub const MAX_LIMIT: u32 = 1000;
 }
 
 /// The hashed body: the event plus its sequence number.

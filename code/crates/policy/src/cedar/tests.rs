@@ -374,3 +374,26 @@ proptest! {
         }
     }
 }
+
+/// ADR-027: a plain grant never widens a host another rule terminates.
+#[test]
+fn plain_grants_carry_no_l7_authority() {
+    let p = policy(
+        "version = 1\n[[egress]]\nhost = \"api.example.org\"\nid = \"plain\"\n[[egress]]\nhost = \"api.example.org\"\nid = \"ro\"\nmethods = [\"GET\"]\n[[egress]]\nhost = \"*.example.org\"\nid = \"wild\"\n",
+    );
+    let mut g = p.admit_host(&h("api.example.org"), 443).unwrap();
+    p.admit_addrs(&mut g, &["93.184.216.34".parse().unwrap()]).unwrap();
+    assert_eq!(p.path_choice(&g), PathChoice::L7);
+    let get = p.authorize_l7(&g, &[Action::Http { method: "GET".into(), path: "/x".into() }]);
+    assert_eq!(get.result, Ok(()));
+    assert_eq!(get.policy_ids, vec!["user:ro#http"]);
+    let del = p.authorize_l7(&g, &[Action::Http { method: "DELETE".into(), path: "/x".into() }]);
+    assert_eq!(del.result, Err(Reason::L7NoRuleMatched));
+    let push = p.authorize_l7(&g, &[push("api.example.org/a/b", "refs/heads/agent/x", true)]);
+    assert!(push.result.is_err());
+    // A host only plain grants admit is spliced, never evaluated at L7.
+    let mut w = p.admit_host(&h("other.example.org"), 443).unwrap();
+    p.admit_addrs(&mut w, &["93.184.216.34".parse().unwrap()]).unwrap();
+    assert_eq!(p.path_choice(&w), PathChoice::L4);
+    assert!(p.engine().base().policies().all(|x| !x.id().to_string().ends_with("#any")));
+}

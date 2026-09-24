@@ -632,7 +632,8 @@ pub fn explain<'a>(grants: impl IntoIterator<Item = (&'a str, Option<&'a L7Rules
         let mut best: Option<Reason> = None;
         let mut ok = false;
         for (id, rules) in &grants {
-            match rules.map(|r| r.allows(a)).unwrap_or(Ok(())) {
+            // A plain grant (no rules) carries no L7 authority (ADR-027).
+            match rules.map(|r| r.allows(a)).unwrap_or(Err(Reason::L7NoRuleMatched)) {
                 Ok(()) => {
                     ok = true;
                     allowing.insert(id);

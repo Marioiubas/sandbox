@@ -153,3 +153,13 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Tests:** `m2_shadow::a_shadow_candidate_is_logged_but_never_decides`; 227 passing on macOS 26.5 with the solver required.
 - **ADRs:** [[ADR-026 Shadow Mode as Built]].
 - **Next step:** M2 CI matrix; milestone review (C1 over 3 real repos × 3 real agents needs Codex and Gemini CLI logins).
+
+### 2026-09-24: M2 step 7, audit query, a same-host over-grant, plan reconciled
+
+- **Milestone:** [[M2 Policy Audit and Learn]] (in progress).
+- **Built:** `audit.query` on the control socket and `broker audit query` (every filter validated at the boundary; hosts through the canonicaliser).
+- **Found and fixed:** a plain `[[egress]]` entry compiled to an `#any` permit; with a `methods = ["GET"]` entry for the same host, the host was terminated and `DELETE` was allowed through the plain entry. Plain entries are now L4 admission only ([[ADR-027 Plain Host Grants Carry No L7 Authority]]).
+- **Reconciled:** the M2 task list against the code ([[ADR-028 M2 Plan Items Built Differently or Deferred]]); [[Audit Recorder and Event Schema]], [[Policy Learning Loop]], [[Policy Miner Safeguards]] and [[broker.toml Human Policy Layer]] set to `built` for their M2 scope.
+- **CI:** steps 1-6 green on macOS 15/26 and Ubuntu 22.04/24.04 (lint, tests, fuzz smoke).
+- **Open for M2:** C1 over 3 repositories × 3 real agents (needs Codex and Gemini CLI signed in).
+- **Next step:** M3 work that needs no external accounts (MCP Guard with pinned tool descriptions against local MCP servers; the GitHub MCP toxic-flow replay against a fake GitHub).

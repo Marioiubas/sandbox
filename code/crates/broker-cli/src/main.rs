@@ -108,6 +108,31 @@ pub enum AuditCmd {
         #[arg(short = 'n', default_value_t = 20)]
         n: u32,
     },
+    /// Filtered rows via the daemon's `audit.query` (every filter is
+    /// validated; hosts go through the canonicaliser).
+    Query {
+        #[arg(long)]
+        session: Option<String>,
+        /// Event kind, e.g. request.decision or session.start.
+        #[arg(long)]
+        kind: Option<String>,
+        /// allow or deny.
+        #[arg(long)]
+        decision: Option<String>,
+        /// A deny reason code, e.g. host_not_allowed.
+        #[arg(long)]
+        reason: Option<String>,
+        #[arg(long)]
+        host: Option<String>,
+        /// Only rows after this sequence number.
+        #[arg(long)]
+        after: Option<i64>,
+        #[arg(long)]
+        limit: Option<u32>,
+        /// One JSON object per row (with seq and chain hash).
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -183,6 +208,22 @@ fn main() {
         Command::Why { request_id } => cmd::why::why(&request_id),
         Command::Audit { action: AuditCmd::Verify } => cmd::audit::verify(),
         Command::Audit { action: AuditCmd::Tail { n } } => cmd::audit::tail(n),
+        Command::Audit { action: AuditCmd::Query { session, kind, decision, reason, host, after, limit, json } } => {
+            let mut p = serde_json::Map::new();
+            let mut put = |k: &str, v: Option<serde_json::Value>| {
+                if let Some(v) = v {
+                    p.insert(k.into(), v);
+                }
+            };
+            put("session", session.map(Into::into));
+            put("kind", kind.map(Into::into));
+            put("decision", decision.map(Into::into));
+            put("reason", reason.map(Into::into));
+            put("host", host.map(Into::into));
+            put("after_seq", after.map(Into::into));
+            put("limit", limit.map(Into::into));
+            cmd::audit::query(serde_json::Value::Object(p), json)
+        }
         Command::Audit { action: AuditCmd::Export { format, to, token, from_seq } } => {
             cmd::export::export(cmd::export::Args { format, to, token, from_seq })
         }

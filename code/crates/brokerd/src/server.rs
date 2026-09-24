@@ -145,6 +145,18 @@ impl Server {
                     Err(e) => proto::err(id, codes::INVALID_PARAMS, e, None),
                 }
             }
+            "audit.query" => match crate::audit_query::parse(&req.params) {
+                Ok(q) => match d.recorder.query_filtered(&q) {
+                    Ok(rows) => proto::ok(
+                        id,
+                        rows.into_iter()
+                            .map(|e| json!({"seq": e.seq, "hash": e.hash.to_hex(), "event": e.event}))
+                            .collect::<Vec<_>>(),
+                    ),
+                    Err(e) => proto::err(id, codes::NOT_FOUND, format!("{e:#}"), None),
+                },
+                Err(e) => proto::err(id, codes::INVALID_PARAMS, e, None),
+            },
             other => proto::err(id, codes::METHOD_NOT_FOUND, format!("unknown method {other}"), None),
         }
     }

@@ -55,7 +55,9 @@ A grant with any of `protocol`, `methods`, `paths`, `allow` or `credential`
 makes the broker terminate TLS for that host (with a per-session CA the
 sandbox trusts through `SSL_CERT_FILE` and friends) and authorize every
 request. Everything else is spliced without decryption. Within a terminated
-host, a request no rule matches is **denied**.
+host, a request no rule matches is **denied**. A plain entry (only `host`,
+`ports`, address keys) admits the connection and nothing more: if another
+rule terminates the same host, the plain entry allows no request there.
 
 ```toml
 # An LLM API: only these calls, with a key the sandbox never sees.
@@ -141,9 +143,8 @@ broker policy check --repo                                # with .broker/ policy
 - **Hard gates** (exit 1 on failure; no override): the org ceiling holds;
   each brokered credential is used only for its declared hosts; no policy
   can hit an evaluation error; every deny rule can fire, publishing and
-  merging need approval, and a forced push needs a `force = true` rule (or
-  a plain host grant, whose traffic is not inspected); a repository layer
-  only narrows.
+  merging need approval, and a forced push needs a `force = true` rule; a
+  repository layer only narrows.
 - **Narrowing** (exit 2): with `--baseline`, every request the new policy
   allows must be allowed by the old one. Otherwise the report shows the
   requests it newly permits; that is a change for a human to approve.
