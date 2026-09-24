@@ -107,3 +107,7 @@ From the report's request life ([[Request and Session Lifecycle]]):
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-24: GitHub App installation-token minting built in `creds::issuers::github_app` with scope-digest caching in `creds::session`; tested against a fake GitHub token endpoint that verifies the RS256 JWT (`b2_push_to_agent_branch_succeeds_with_scoped_token` asserts one mint with exactly `repositories: ["web"]`, `permissions: {contents: write}`). AWS STS remains M3.

@@ -214,3 +214,4 @@ Implemented by (each of these notes carries `implements:: [[Core Trait Contracts
 ## Build log
 
 - 2026-09-24: `SandboxBackend` (`code/crates/launcher/src/lib.rs`) and `Recorder` (`code/crates/audit/src/lib.rs`) implemented with the documented contracts. `launch` takes the spec by value (it owns the stdio descriptors). `ProtocolAdapter` and `CredentialIssuer` arrive with their first implementations in M1. `CanonicalHost` has private fields and only `netguard::canon` constructs it.
+- 2026-09-24 (M1): `CredentialIssuer` is realised as `creds::SessionCreds::get(&AllowedBinding)` plus `creds::attach`; issuers reach their APIs through the `creds::issuers::Transport` trait (implemented by brokerd). `ProtocolAdapter` is realised as `l7::classify::{plan, actions}` returning `policy::Action`s; adapters never touch credentials.

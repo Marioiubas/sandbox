@@ -6,18 +6,33 @@
 
 use crate::config::EgressEntry;
 use crate::doh::is_doh_endpoint;
+use crate::l7::{self, Action, CompileEnv, CredentialDef, L7Decision, L7Rules, Protocol};
 use audit::Reason;
 use netguard::{AddrClass, CanonicalHost, HostPattern, classify_addr};
 use std::collections::BTreeSet;
 use std::net::IpAddr;
+use std::sync::Arc;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Grant {
     pub id: String,
     pub pattern: HostPattern,
     pub ports: Vec<u16>,
     pub allow_classes: BTreeSet<AddrClass>,
     pub pinned: Vec<IpAddr>,
+    /// L7 rules; `None` for a plain host grant.
+    pub l7: Option<Arc<L7Rules>>,
+    /// Never terminate TLS for this host (certificate-pinning clients).
+    pub passthrough: bool,
+}
+
+/// How an admitted connection is handled.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PathChoice {
+    /// Splice bytes after the SNI check; nothing is decrypted or attached.
+    L4,
+    /// Terminate TLS, authorize each request, attach credentials.
+    L7,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -36,6 +51,8 @@ pub struct Admission {
     /// Addresses pinned by the matching grants; when non-empty the broker
     /// uses them instead of DNS.
     pub pinned: Vec<IpAddr>,
+    /// Indices of the grants that admitted the host on this port.
+    grants: Vec<usize>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -50,14 +67,28 @@ pub enum CompileError {
     DuplicateId(String),
     #[error("{id}: pinned address {addr:?} is not a canonical IP literal")]
     BadPinnedAddr { id: String, addr: String },
+    #[error("{0}")]
+    L7(String),
+    #[error("duplicate credential id {0}")]
+    DuplicateCredential(String),
 }
 
 impl EgressPolicy {
     /// Compile entries from one or more trusted layers (built-in profile,
     /// user, org). `scope` prefixes generated IDs, e.g. `user:egress[2]`.
     pub fn compile<'a>(layers: impl IntoIterator<Item = (&'a str, &'a [EgressEntry])>) -> Result<Self, CompileError> {
+        Self::compile_with(layers, &CompileEnv::default())
+    }
+
+    /// As [`compile`](Self::compile), with `${repo_remote}` and the issuer
+    /// names from the user/org layers available.
+    pub fn compile_with<'a>(
+        layers: impl IntoIterator<Item = (&'a str, &'a [EgressEntry])>,
+        env: &CompileEnv,
+    ) -> Result<Self, CompileError> {
         let mut grants = Vec::new();
         let mut ids = BTreeSet::new();
+        let mut cred_ids = BTreeSet::new();
         for (scope, entries) in layers {
             for (i, e) in entries.iter().enumerate() {
                 let id = match &e.id {
@@ -88,7 +119,13 @@ impl EgressPolicy {
                 if !ids.insert(id.clone()) {
                     return Err(CompileError::DuplicateId(id));
                 }
-                grants.push(Grant { id, pattern, ports, allow_classes, pinned });
+                let l7 = l7::compile_rules(&id, e, &pattern, env).map_err(CompileError::L7)?.map(Arc::new);
+                if let Some(c) = l7.as_ref().and_then(|r| r.credential.as_ref())
+                    && !cred_ids.insert(c.id.clone())
+                {
+                    return Err(CompileError::DuplicateCredential(c.id.clone()));
+                }
+                grants.push(Grant { id, pattern, ports, allow_classes, pinned, l7, passthrough: e.passthrough });
             }
         }
         Ok(EgressPolicy { grants })
@@ -121,7 +158,42 @@ impl EgressPolicy {
             allow_classes: on_port.iter().flat_map(|g| g.allow_classes.iter().copied()).collect(),
             exact_ip: host.ip(),
             pinned: on_port.iter().flat_map(|g| g.pinned.iter().copied()).collect(),
+            grants: self
+                .grants
+                .iter()
+                .enumerate()
+                .filter(|(_, g)| g.pattern.matches(host) && g.ports.contains(&port))
+                .map(|(i, _)| i)
+                .collect(),
         })
+    }
+
+    fn admitted<'a>(&'a self, adm: &'a Admission) -> impl Iterator<Item = &'a Grant> + 'a {
+        adm.grants.iter().filter_map(|&i| self.grants.get(i))
+    }
+
+    /// L4 unless some admitting grant has L7 rules; a passthrough grant
+    /// forces L4 (and therefore no credential) for the host.
+    pub fn path_choice(&self, adm: &Admission) -> PathChoice {
+        if self.admitted(adm).any(|g| g.passthrough) {
+            return PathChoice::L4;
+        }
+        if self.admitted(adm).any(|g| g.l7.is_some()) { PathChoice::L7 } else { PathChoice::L4 }
+    }
+
+    /// Protocols the admitting grants declare (selects the adapter).
+    pub fn protocols(&self, adm: &Admission) -> BTreeSet<Protocol> {
+        self.admitted(adm).filter_map(|g| g.l7.as_ref().map(|r| r.protocol)).collect()
+    }
+
+    /// Authorize the actions of one terminated request.
+    pub fn authorize_l7(&self, adm: &Admission, actions: &[Action]) -> L7Decision {
+        l7::authorize(self.admitted(adm).map(|g| (g.id.as_str(), g.l7.as_deref())), actions)
+    }
+
+    /// Every declared credential (for sentinels at session start).
+    pub fn credentials(&self) -> Vec<Arc<CredentialDef>> {
+        self.grants.iter().filter_map(|g| g.l7.as_ref().and_then(|r| r.credential.clone())).collect()
     }
 
     /// Address admission over the broker-resolved set: all must pass.

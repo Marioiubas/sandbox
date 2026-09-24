@@ -2,6 +2,8 @@
 .vault-import.tar.gz
 .claude-flow/
 .claude/settings.local.json
+.claude/proven-config.json
+.claude/.proven-config-version
 .obsidian/workspace*.json
 .obsidian/cache
 .DS_Store

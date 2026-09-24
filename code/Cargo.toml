@@ -49,6 +49,24 @@ toml = "1"
 getrandom = "0.3"
 zeroize = "1.9.0"
 
+# M1: TLS termination, HTTP/1.1, credentials, git (pinned 2026-09-24)
+bytes = "1"
+flate2 = "1.1"
+http = "1"
+http-body = "1"
+http-body-util = "0.1.5"
+hyper = { version = "1.11", features = ["http1", "server", "client"] }
+hyper-util = { version = "0.1.20", features = ["tokio"] }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem", "crypto"] }
+ring = "0.17.14"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-pki-types = { version = "1", features = ["std"] }
+sha1 = "0.10"
+time = { version = "0.3", default-features = false, features = ["std", "parsing", "formatting"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+webpki-root-certs = "1"
+webpki-roots = "1"
+
 # dev
 proptest = "1.11.0"
 tempfile = "3.27.0"

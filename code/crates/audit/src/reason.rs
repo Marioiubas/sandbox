@@ -72,8 +72,45 @@ pub enum Reason {
     /// SNI does not canonicalise to the admitted CONNECT host.
     ConnectSniMismatch,
 
+    // ---- L7 (terminated hosts, M1) ----
+    /// The Host header or absolute-form authority differs from CONNECT/SNI.
+    HostHeaderMismatch,
+    /// The host is granted, but no method/path or protocol rule allows the
+    /// request (ADR-006: unmatched L7 requests deny).
+    L7NoRuleMatched,
+    /// WebSocket or other protocol upgrade on a terminated host.
+    UpgradeNotAllowed,
+    /// The request head exceeded the broker's size or field-count limit.
+    HeadTooLarge,
+    /// The request body exceeded the inspection limit.
+    BodyTooLarge,
+    /// A content encoding the broker cannot inspect.
+    UnsupportedEncoding,
+    /// A git smart-HTTP request that could not be parsed strictly.
+    GitParseError,
+    /// git: the repository is not granted for this operation.
+    GitRepoNotAllowed,
+    /// git: the ref is not granted for push.
+    GitRefNotAllowed,
+    /// git: a force update (non-fast-forward, delete or undeterminable).
+    GitForcePush,
+
+    // ---- credentials (M1, I1/I7) ----
+    /// A credential the broker did not issue (I7).
+    ForeignCredential,
+    /// A broker sentinel sent to a host it is not bound to.
+    SentinelWrongHost,
+    /// More than one credential rule allowed the request.
+    AmbiguousCredential,
+    /// The credential could not be minted or loaded; nothing was forwarded.
+    MintFailed,
+    /// The response contained an injected secret and was cut (I1).
+    SecretReflected,
+
     // ---- upstream ----
     UpstreamConnectFailed,
+    /// The upstream certificate failed verification.
+    UpstreamTls,
 
     // ---- audit ----
     /// The audit append failed, so the decision became a deny (I9).
@@ -119,7 +156,23 @@ impl Reason {
         Reason::BadSentinel,
         Reason::SniLess,
         Reason::ConnectSniMismatch,
+        Reason::HostHeaderMismatch,
+        Reason::L7NoRuleMatched,
+        Reason::UpgradeNotAllowed,
+        Reason::HeadTooLarge,
+        Reason::BodyTooLarge,
+        Reason::UnsupportedEncoding,
+        Reason::GitParseError,
+        Reason::GitRepoNotAllowed,
+        Reason::GitRefNotAllowed,
+        Reason::GitForcePush,
+        Reason::ForeignCredential,
+        Reason::SentinelWrongHost,
+        Reason::AmbiguousCredential,
+        Reason::MintFailed,
+        Reason::SecretReflected,
         Reason::UpstreamConnectFailed,
+        Reason::UpstreamTls,
         Reason::AuditUnavailable,
         Reason::LaunchRefused,
     ];
@@ -159,7 +212,23 @@ impl Reason {
             Reason::BadSentinel => "bad_sentinel",
             Reason::SniLess => "sni_less",
             Reason::ConnectSniMismatch => "connect_sni_mismatch",
+            Reason::HostHeaderMismatch => "host_header_mismatch",
+            Reason::L7NoRuleMatched => "l7_no_rule_matched",
+            Reason::UpgradeNotAllowed => "upgrade_not_allowed",
+            Reason::HeadTooLarge => "head_too_large",
+            Reason::BodyTooLarge => "body_too_large",
+            Reason::UnsupportedEncoding => "unsupported_encoding",
+            Reason::GitParseError => "git_parse_error",
+            Reason::GitRepoNotAllowed => "git_repo_not_allowed",
+            Reason::GitRefNotAllowed => "git_ref_not_allowed",
+            Reason::GitForcePush => "git_force_push",
+            Reason::ForeignCredential => "foreign_credential",
+            Reason::SentinelWrongHost => "sentinel_wrong_host",
+            Reason::AmbiguousCredential => "ambiguous_credential",
+            Reason::MintFailed => "mint_failed",
+            Reason::SecretReflected => "secret_reflected",
             Reason::UpstreamConnectFailed => "upstream_connect_failed",
+            Reason::UpstreamTls => "upstream_tls",
             Reason::AuditUnavailable => "audit_unavailable",
             Reason::LaunchRefused => "launch_refused",
         }
@@ -183,7 +252,10 @@ impl Reason {
             | ProxyAuthRequired
             | BadSentinel => "ingress",
             SniLess | ConnectSniMismatch => "tls",
-            UpstreamConnectFailed => "upstream",
+            HostHeaderMismatch | L7NoRuleMatched | UpgradeNotAllowed | HeadTooLarge | BodyTooLarge
+            | UnsupportedEncoding | GitParseError | GitRepoNotAllowed | GitRefNotAllowed | GitForcePush => "l7",
+            ForeignCredential | SentinelWrongHost | AmbiguousCredential | MintFailed | SecretReflected => "credentials",
+            UpstreamConnectFailed | UpstreamTls => "upstream",
             AuditUnavailable => "audit",
             LaunchRefused => "launcher",
         }
@@ -193,7 +265,11 @@ impl Reason {
     pub fn boundary(&self) -> &'static str {
         match self {
             Reason::LaunchRefused => "TB2",
-            Reason::UpstreamConnectFailed => "TB4",
+            Reason::UpstreamConnectFailed
+            | Reason::UpstreamTls
+            | Reason::MintFailed
+            | Reason::AmbiguousCredential
+            | Reason::SecretReflected => "TB4",
             _ => "TB3",
         }
     }
@@ -235,7 +311,25 @@ impl Reason {
             BadSentinel => "the proxy credential is not this session's sentinel",
             SniLess => "the tunnel did not start with a TLS ClientHello carrying SNI",
             ConnectSniMismatch => "the TLS SNI does not match the admitted CONNECT host",
+            HostHeaderMismatch => "the Host header or request authority differs from the CONNECT host and SNI",
+            L7NoRuleMatched => "the host is granted, but no method/path or protocol rule allows this request",
+            UpgradeNotAllowed => "protocol upgrades (WebSocket, h2c) are not brokered on terminated hosts",
+            HeadTooLarge => "the request head exceeded the broker's limit (64 KiB, 128 fields)",
+            BodyTooLarge => "the request body exceeded the broker's inspection limit",
+            UnsupportedEncoding => "the body used a content encoding the broker cannot inspect",
+            GitParseError => "the git smart-HTTP request could not be parsed strictly",
+            GitRepoNotAllowed => "the repository is not granted for this git operation",
+            GitRefNotAllowed => "the ref is not granted for push",
+            GitForcePush => {
+                "the update is a force push (non-fast-forward, delete or undeterminable) and force is not granted"
+            }
+            ForeignCredential => "the request carried a credential the broker did not issue",
+            SentinelWrongHost => "a broker sentinel was sent to a host it is not bound to",
+            AmbiguousCredential => "more than one credential rule allowed the request",
+            MintFailed => "the broker could not mint or load the credential, so nothing was forwarded",
+            SecretReflected => "the response contained an injected secret and was cut",
             UpstreamConnectFailed => "the broker could not connect to the resolved address",
+            UpstreamTls => "the upstream certificate failed verification",
             AuditUnavailable => "the audit log could not record the decision, so it was denied",
             LaunchRefused => "a required isolation layer or the proxy was not available",
         }

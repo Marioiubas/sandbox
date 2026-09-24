@@ -27,7 +27,8 @@ fn usage() -> ! {
     exit(2)
 }
 
-/// `\xHH` and `\\` escapes, so NUL and other bytes can travel in argv.
+/// `\xHH`, `\r`, `\n`, `\t` and `\\` escapes, so NUL, CRLF and other
+/// bytes can travel in argv.
 fn unescape(s: &str) -> Vec<u8> {
     let b = s.as_bytes();
     let mut out = Vec::new();
@@ -36,6 +37,17 @@ fn unescape(s: &str) -> Vec<u8> {
         if b[i] == b'\\' && i + 1 < b.len() {
             if b[i + 1] == b'\\' {
                 out.push(b'\\');
+                i += 2;
+                continue;
+            }
+            let named = match b[i + 1] {
+                b'r' => Some(b'\r'),
+                b'n' => Some(b'\n'),
+                b't' => Some(b'\t'),
+                _ => None,
+            };
+            if let Some(v) = named {
+                out.push(v);
                 i += 2;
                 continue;
             }
@@ -177,6 +189,62 @@ fn probe_proxy(args: &[String]) -> ! {
     }
 }
 
+/// tls-raw <host> <port> <escaped request> [sni]: a CONNECT tunnel, TLS
+/// trusting only the session bundle (`SSL_CERT_FILE`), then the raw bytes
+/// (so framing attacks can be sent exactly). Prints the raw response.
+fn probe_tls_raw(args: &[String]) -> ! {
+    if args.len() < 3 {
+        usage()
+    }
+    let host = args[0].clone();
+    let port: u16 = args[1].parse().unwrap_or_else(|_| usage());
+    // `@path` reads the request from a file (argv length limits).
+    let payload = match args[2].strip_prefix('@') {
+        Some(f) => std::fs::read(f).unwrap_or_else(|_| usage()),
+        None => unescape(&args[2]),
+    };
+    let sni = args.get(3).cloned().unwrap_or_else(|| host.clone());
+    let p = proxy_from_env();
+    let (s, r) = open_tunnel("connect", host.as_bytes(), port, &p);
+    if let Err(e) = r {
+        denied(format!("tunnel refused: {e}"));
+    }
+    use rustls::pki_types::pem::PemObject;
+    let bundle = std::env::var("SSL_CERT_FILE").unwrap_or_else(|_| inconclusive("no SSL_CERT_FILE"));
+    let mut roots = rustls::RootCertStore::empty();
+    for c in
+        rustls::pki_types::CertificateDer::pem_file_iter(&bundle).unwrap_or_else(|_| inconclusive("bundle")).flatten()
+    {
+        let _ = roots.add(c);
+    }
+    let cfg = rustls::ClientConfig::builder_with_provider(tls::session_ca::provider())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    let name = rustls::pki_types::ServerName::try_from(sni).unwrap_or_else(|_| usage());
+    let conn = rustls::ClientConnection::new(std::sync::Arc::new(cfg), name).unwrap();
+    let mut tls = rustls::StreamOwned::new(conn, s);
+    tls.sock.set_read_timeout(Some(Duration::from_secs(5))).ok();
+    if let Err(e) = tls.write_all(&payload) {
+        denied(format!("TLS failed: {e}"));
+    }
+    let mut out = Vec::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        match tls.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => out.extend_from_slice(&buf[..n]),
+            Err(_) => break,
+        }
+    }
+    if out.is_empty() {
+        denied("no response (connection closed)");
+    }
+    println!("{}", String::from_utf8_lossy(&out));
+    exit(0)
+}
+
 fn errno_str(e: &std::io::Error) -> String {
     format!("{e} (errno {:?})", e.raw_os_error())
 }
@@ -187,6 +255,7 @@ fn main() {
     let rest = &args[1..];
     match cmd.as_str() {
         "proxy" => probe_proxy(rest),
+        "tls-raw" => probe_tls_raw(rest),
         "tcp" => {
             let addr = SocketAddr::new(
                 rest.first().unwrap_or_else(|| usage()).parse().unwrap_or_else(|_| usage()),
@@ -401,6 +470,71 @@ fn main() {
                 }
             }
             denied("canary not visible")
+        }
+        "secret-scan" => {
+            // secret-scan <hex canary> <path[:depth]>...: env, /proc (Linux) and
+            // bounded file walks. Prints CLEAN (exit 0) or FOUND (exit 1).
+            let needle = hex::decode(rest.first().unwrap_or_else(|| usage())).unwrap_or_else(|_| usage());
+            let hit = |b: &[u8]| b.windows(needle.len()).any(|w| w == needle.as_slice());
+            let found = |w: String| -> ! {
+                println!("FOUND canary in {w}");
+                exit(1)
+            };
+            for (k, v) in std::env::vars_os() {
+                if hit(k.as_encoded_bytes()) || hit(v.as_encoded_bytes()) {
+                    found(format!("env var {}", k.to_string_lossy()));
+                }
+            }
+            let mut procs = 0;
+            if let Ok(rd) = std::fs::read_dir("/proc") {
+                for e in rd.flatten() {
+                    for f in ["environ", "cmdline"] {
+                        if let Ok(b) = std::fs::read(e.path().join(f)) {
+                            procs += 1;
+                            if hit(&b) {
+                                found(format!("{}", e.path().join(f).display()));
+                            }
+                        }
+                    }
+                }
+            }
+            let (mut files, mut unreadable, mut bytes) = (0u64, 0u64, 0u64);
+            let mut stack: Vec<(std::path::PathBuf, u32)> = rest[1..]
+                .iter()
+                .map(|a| match a.rsplit_once(':') {
+                    Some((p, d)) if d.parse::<u32>().is_ok() => (p.into(), d.parse().unwrap_or(6)),
+                    _ => (a.into(), 6),
+                })
+                .collect();
+            while let Some((p, depth)) = stack.pop() {
+                if files > 50_000 || bytes > (512 << 20) {
+                    break;
+                }
+                let Ok(m) = std::fs::symlink_metadata(&p) else {
+                    unreadable += 1;
+                    continue;
+                };
+                if m.is_dir() {
+                    match std::fs::read_dir(&p) {
+                        Ok(rd) if depth > 0 => stack.extend(rd.flatten().map(|e| (e.path(), depth - 1))),
+                        Ok(_) => {}
+                        Err(_) => unreadable += 1,
+                    }
+                } else if m.is_file() && m.len() <= 8 << 20 {
+                    match std::fs::read(&p) {
+                        Ok(b) => {
+                            files += 1;
+                            bytes += b.len() as u64;
+                            if hit(&b) {
+                                found(format!("file {}", p.display()));
+                            }
+                        }
+                        Err(_) => unreadable += 1,
+                    }
+                }
+            }
+            println!("CLEAN env, {procs} /proc entries, {files} files ({bytes} bytes); {unreadable} unreadable");
+            exit(0)
         }
         "ptrace" => {
             #[cfg(target_os = "linux")]

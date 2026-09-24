@@ -1,6 +1,6 @@
 [package]
 name = "tls"
-description = "TLS helpers: ClientHello SNI peek (M0); per-session CA and leaf cache (M1)"
+description = "TLS: ClientHello SNI peek, per-session CA, leaf certificates, trust bundle, verified upstream TLS"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,9 +8,21 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+anyhow.workspace = true
+base64.workspace = true
+netguard.workspace = true
+rcgen.workspace = true
+rustls.workspace = true
+rustls-pki-types.workspace = true
+time.workspace = true
+webpki-root-certs.workspace = true
+webpki-roots.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
 
 [lints]
 workspace = true

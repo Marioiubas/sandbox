@@ -1,11 +1,14 @@
-//! The human policy layer as accepted in M0: a strict subset of
+//! The human policy layer as accepted through M1: a strict subset of
 //! `broker.toml` (see the broker.toml Human Policy Layer note).
 //!
-//! Keys that need later milestones (`protocol`, `methods`, `allow`,
-//! `credential`) are rejected as unknown keys rather than silently ignored,
-//! so a policy never appears to grant something the broker cannot enforce.
+//! Every key is known; anything else is a parse error rather than silently
+//! ignored, so a policy never appears to grant something the broker cannot
+//! enforce. M1 adds the L7 keys (`protocol`, `methods`, `paths`, `allow`,
+//! `credential`, `passthrough`) and the user-only `[issuers]` and `[tls]`
+//! tables.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 pub const SUPPORTED_VERSION: u32 = 1;
@@ -27,6 +30,132 @@ pub struct EgressEntry {
     /// query DNS for this host. Address-class rules still apply.
     #[serde(default)]
     pub addrs: Vec<String>,
+    /// `http` (default when any L7 key is set), `git` or `registry`.
+    pub protocol: Option<String>,
+    /// Allowed HTTP methods on a terminated host; absent means any, empty none.
+    pub methods: Option<Vec<String>>,
+    /// Allowed path globs (`*` within a segment, `**` any number of
+    /// segments); absent means any, empty none.
+    pub paths: Option<Vec<String>>,
+    /// `protocol = "git"`: fetch and push rules.
+    pub allow: Option<GitAllow>,
+    /// A credential the broker attaches to requests this entry allows.
+    pub credential: Option<CredentialSpec>,
+    /// Certificate-pinning clients: never terminate TLS for this host, and
+    /// therefore never attach a credential. Incompatible with L7 keys.
+    #[serde(default)]
+    pub passthrough: bool,
+}
+
+impl EgressEntry {
+    /// Whether this entry needs TLS termination (L7).
+    pub fn wants_l7(&self) -> bool {
+        self.protocol.is_some()
+            || self.methods.is_some()
+            || self.paths.is_some()
+            || self.allow.is_some()
+            || self.credential.is_some()
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GitAllow {
+    /// Repositories that may be fetched (`host/owner/repo`, `host/owner/*`
+    /// or `${repo_remote}`).
+    #[serde(default)]
+    pub fetch: Vec<String>,
+    /// Push rules; a single table or an array of tables.
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub push: Vec<PushRule>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PushRule {
+    pub repo: String,
+    /// Ref globs; `agent/*` means `refs/heads/agent/*`.
+    pub refs: Vec<String>,
+    /// Allow non-fast-forward updates and deletes (default false).
+    #[serde(default)]
+    pub force: bool,
+}
+
+fn one_or_many<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<PushRule>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(PushRule),
+        Many(Vec<PushRule>),
+    }
+    Ok(match OneOrMany::deserialize(d)? {
+        OneOrMany::One(r) => vec![r],
+        OneOrMany::Many(v) => v,
+    })
+}
+
+/// `credential = { ... }` on an egress entry.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialSpec {
+    /// `static` or `github_app`.
+    pub kind: String,
+    /// Stable credential ID for audit rows (default: the grant ID).
+    pub id: Option<String>,
+    /// `static`: where the secret lives (`keychain:<service>[/<account>]`,
+    /// `env:<VAR>` of brokerd, `file:<name>` in the broker config dir),
+    /// optionally `#json.path` to select a field of a JSON secret.
+    #[serde(rename = "ref")]
+    pub secret_ref: Option<String>,
+    /// Header to set; default `authorization`.
+    pub header: Option<String>,
+    /// For `authorization`: `bearer` (default), `token` or `basic`.
+    pub scheme: Option<String>,
+    /// For `scheme = "basic"`: the user name (the secret is the password).
+    pub username: Option<String>,
+    /// Sandbox environment variable that receives this credential's sentinel.
+    pub env: Option<String>,
+    /// Swap the sentinel for the secret inside request bodies too.
+    #[serde(default)]
+    pub swap_body: bool,
+    /// `github_app`: the `[issuers.github_app.<name>]` to mint with.
+    pub issuer: Option<String>,
+    /// `github_app`: installation-token permissions (always sent).
+    pub permissions: Option<BTreeMap<String, String>>,
+    /// `github_app`: repositories the token is limited to (always sent).
+    pub repos: Option<Vec<String>>,
+    /// Upper bound on reuse of a minted token (`30m`, `1h`, `900s`).
+    pub ttl: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GitHubAppIssuerSpec {
+    pub app_id: String,
+    pub installation_id: String,
+    /// Secret reference to the app's private key (PEM).
+    pub private_key: String,
+    /// Default `https://api.github.com`.
+    pub api_base: Option<String>,
+    /// Pinned addresses for the API host (tests, GHES); no DNS query then.
+    #[serde(default)]
+    pub api_addrs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct IssuersSection {
+    #[serde(default)]
+    pub github_app: BTreeMap<String, GitHubAppIssuerSpec>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TlsSection {
+    /// Extra PEM roots trusted for upstream verification (private CAs).
+    /// Never added to the host trust store.
+    #[serde(default)]
+    pub extra_roots: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -49,6 +178,12 @@ pub struct PolicyFile {
     pub egress: Vec<EgressEntry>,
     #[serde(default)]
     pub filesystem: FsSection,
+    /// User/org scope only: credential issuers.
+    #[serde(default)]
+    pub issuers: IssuersSection,
+    /// User/org scope only: upstream trust additions.
+    #[serde(default)]
+    pub tls: TlsSection,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -65,10 +200,6 @@ pub struct AgentSection {
     /// Extra non-secret environment variables to pass through by name.
     #[serde(default)]
     pub env_passthrough: Vec<String>,
-    /// macOS: the agent keeps its own credentials in the login keychain.
-    /// Grants securityd access until M1 moves credentials out (ADR-016).
-    #[serde(default)]
-    pub macos_keychain: bool,
 }
 
 /// A built-in agent profile (`profiles/<name>.toml`).
@@ -133,13 +264,41 @@ mod tests {
     #[test]
     fn strict_keys() {
         assert!(parse_policy_str("version = 1\n[[egress]]\nhost = \"a.com\"\n").is_ok());
-        let e = parse_policy_str("version = 1\n[[egress]]\nhost = \"a.com\"\nmethods = [\"GET\"]\n");
-        assert!(e.is_err(), "methods is an M1 key and must not be silently ignored");
-        let e = parse_policy_str("version = 1\n[[egress]]\nhost = \"a.com\"\ncredential = { kind = \"static\" }\n");
+        let p = parse_policy_str("version = 1\n[[egress]]\nhost = \"a.com\"\nmethods = [\"GET\"]\n").unwrap();
+        assert!(p.egress[0].wants_l7());
+        let e = parse_policy_str("version = 1\n[[egress]]\nhost = \"a.com\"\nmethod = [\"GET\"]\n");
+        assert!(e.is_err(), "a misspelt key must not be silently ignored");
+        let e = parse_policy_str(
+            "version = 1\n[[egress]]\nhost = \"a.com\"\ncredential = { kind = \"static\", bogus = 1 }\n",
+        );
         assert!(e.is_err());
         assert!(parse_policy_str("version = 2\n").is_err());
         assert!(parse_policy_str("egress = []\n").is_err(), "version is required");
         assert!(parse_policy_str("version = 1\nbogus = 1\n").is_err());
+    }
+
+    #[test]
+    fn git_push_accepts_table_or_array() {
+        let one = r#"
+version = 1
+[[egress]]
+host = "github.com"
+protocol = "git"
+allow = { fetch = ["${repo_remote}"], push = { repo = "${repo_remote}", refs = ["agent/*"], force = false } }
+credential = { kind = "github_app", issuer = "acme", permissions = { contents = "write" }, repos = ["${repo_remote}"], ttl = "30m" }
+[issuers.github_app.acme]
+app_id = "1"
+installation_id = "2"
+private_key = "keychain:gh-app"
+"#;
+        let p = parse_policy_str(one).unwrap();
+        let a = p.egress[0].allow.as_ref().unwrap();
+        assert_eq!(a.push.len(), 1);
+        assert_eq!(a.push[0].refs, vec!["agent/*"]);
+        assert_eq!(p.issuers.github_app["acme"].installation_id, "2");
+        let many = "version = 1\n[[egress]]\nhost = \"github.com\"\nprotocol = \"git\"\n\
+                    allow = { push = [{ repo = \"a/b\", refs = [\"x\"] }, { repo = \"a/c\", refs = [\"y\"], force = true }] }\n";
+        assert_eq!(parse_policy_str(many).unwrap().egress[0].allow.as_ref().unwrap().push.len(), 2);
     }
 
     #[test]

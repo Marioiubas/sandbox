@@ -6,6 +6,7 @@ use crate::dirs::{BrokerDirs, passwd_user};
 use crate::pipeline::{self, PipelineCtx, Stats};
 use crate::profiles;
 use crate::proto::{Exited, StartParams, StartResult};
+use crate::session_util::*;
 use audit::{AuditEvent, EventKind, Reason, Recorder, SessionId, SqliteRecorder};
 use launcher::{EgressEndpoint, FsInputs, LayerStatus, SandboxBackend, SandboxSpec};
 use netguard::ingress::ChannelAuth;
@@ -13,36 +14,10 @@ use netguard::resolver::PolicyResolver;
 use policy::{EgressPolicy, PolicyFile};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
-use std::os::fd::{AsRawFd, OwnedFd};
+use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-
-/// Non-secret variables copied from the client's environment.
-pub const ENV_ALLOW: &[&str] = &[
-    "PATH",
-    "TERM",
-    "COLORTERM",
-    "LANG",
-    "LANGUAGE",
-    "LC_ALL",
-    "LC_CTYPE",
-    "LC_MESSAGES",
-    "LC_COLLATE",
-    "LC_NUMERIC",
-    "LC_TIME",
-    "TZ",
-    "NO_COLOR",
-    "FORCE_COLOR",
-    "CLICOLOR",
-    "TERM_PROGRAM",
-    "TERM_PROGRAM_VERSION",
-    "EDITOR",
-    "VISUAL",
-    "PAGER",
-    "COLUMNS",
-    "LINES",
-];
 
 pub struct Daemon {
     pub dirs: BrokerDirs,
@@ -106,63 +81,6 @@ pub struct Running {
     enduser: String,
 }
 
-fn expand_home(p: &str, home: &Path) -> PathBuf {
-    match p.strip_prefix("~/") {
-        Some(rest) => home.join(rest),
-        None => PathBuf::from(p),
-    }
-}
-
-/// `cwd` with every non-alphanumeric byte replaced by `-` (the per-project
-/// directory naming some agents use for scratch space).
-pub fn cwd_slug(cwd: &Path) -> String {
-    cwd.to_string_lossy().chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
-}
-
-/// Profile path variables: `~/`, `${uid}` and `${cwd_slug}`. The result must
-/// be absolute; the filesystem compiler rejects anything else.
-pub fn expand_profile_path(p: &str, home: &Path, cwd: &Path) -> PathBuf {
-    let uid = nix::unistd::getuid().as_raw().to_string();
-    let s = p.replace("${uid}", &uid).replace("${cwd_slug}", &cwd_slug(cwd));
-    expand_home(&s, home)
-}
-
-/// The nearest ancestor of `cwd` containing `.git`, else `cwd`. Never runs
-/// git on the host: repo config can execute code (core.fsmonitor).
-pub fn repo_root(cwd: &Path) -> PathBuf {
-    let mut cur = Some(cwd);
-    while let Some(d) = cur {
-        if std::fs::symlink_metadata(d.join(".git")).is_ok() {
-            return d.to_path_buf();
-        }
-        cur = d.parent();
-    }
-    cwd.to_path_buf()
-}
-
-fn new_sentinel() -> String {
-    let mut b = [0u8; 32];
-    getrandom::fill(&mut b).expect("OS randomness");
-    format!("bks1_{}", hex::encode(b))
-}
-
-fn resolve_command(argv0: &str, path: Option<&str>, cwd: &Path) -> Option<PathBuf> {
-    if argv0.contains('/') {
-        let p = if argv0.starts_with('/') { PathBuf::from(argv0) } else { cwd.join(argv0) };
-        return p.canonicalize().ok();
-    }
-    for dir in path.unwrap_or("/usr/bin:/bin").split(':').filter(|d| d.starts_with('/')) {
-        let p = Path::new(dir).join(argv0);
-        if let Ok(m) = std::fs::metadata(&p) {
-            use std::os::unix::fs::PermissionsExt;
-            if m.is_file() && m.permissions().mode() & 0o111 != 0 {
-                return p.canonicalize().ok();
-            }
-        }
-    }
-    None
-}
-
 impl Daemon {
     fn hash_binary(&self, p: &Path) -> Option<String> {
         use std::os::unix::fs::MetadataExt;
@@ -181,36 +99,6 @@ impl Daemon {
         self.hash_cache.lock().ok()?.insert(key, hex.clone());
         Some(hex)
     }
-}
-
-#[cfg(target_os = "macos")]
-fn darwin_user_temp_dir() -> Option<PathBuf> {
-    let mut buf = vec![0u8; 1024];
-    // SAFETY: confstr writes at most buf.len() bytes including the NUL.
-    let n = unsafe { libc::confstr(libc::_CS_DARWIN_USER_TEMP_DIR, buf.as_mut_ptr().cast(), buf.len()) };
-    if n == 0 || n > buf.len() {
-        return None;
-    }
-    buf.truncate(n - 1);
-    String::from_utf8(buf).ok().map(PathBuf::from).and_then(|p| p.canonicalize().ok())
-}
-
-fn tty_path(fds: &[OwnedFd]) -> Option<PathBuf> {
-    for fd in fds {
-        let mut buf = [0u8; 256];
-        // SAFETY: ttyname_r writes a NUL-terminated name into buf.
-        let r = unsafe { libc::ttyname_r(fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) };
-        if r == 0 {
-            let end = buf.iter().position(|b| *b == 0)?;
-            return std::str::from_utf8(&buf[..end]).ok().map(PathBuf::from);
-        }
-    }
-    None
-}
-
-fn load_user_policy(dirs: &BrokerDirs) -> anyhow::Result<PolicyFile> {
-    let f = dirs.config_file();
-    if f.exists() { policy::load_policy_file(&f) } else { Ok(PolicyFile { version: 1, ..Default::default() }) }
 }
 
 impl Daemon {
@@ -261,21 +149,26 @@ impl Daemon {
         };
         let user_policy = load_user_policy(&self.dirs)?;
         let scope = format!("profile:{}", profile.name);
-        let egress = EgressPolicy::compile([
-            (scope.as_str(), profile.egress.as_slice()),
-            ("user", user_policy.egress.as_slice()),
-        ])?;
+        // `${repo_remote}` comes from the checkout's own config file, read
+        // without running git; unresolved, rules that use it grant nothing.
+        let compile_env = policy::CompileEnv {
+            repo_remote: origin_remote(&repo_root(&cwd)),
+            github_app_issuers: user_policy.issuers.github_app.keys().cloned().collect(),
+        };
+        let egress = EgressPolicy::compile_with(
+            [(scope.as_str(), profile.egress.as_slice()), ("user", user_policy.egress.as_slice())],
+            &compile_env,
+        )?;
         let grants: Vec<String> =
             egress.grants().iter().map(|g| format!("{} {}:{:?}", g.id, g.pattern, g.ports)).collect();
         let mut warnings = Vec::new();
         if egress.is_empty() {
             warnings.push("no egress grants: every network request will be denied (empty lists deny)".into());
         }
-        if cfg!(target_os = "macos") && profile.agent.macos_keychain {
-            warnings.push(format!(
-                "profile {} can read the login keychain so the agent can use its own credentials; this M0 exception ends when M1 moves credentials out of the sandbox (ADR-016)",
-                profile.name
-            ));
+        if compile_env.repo_remote.is_none()
+            && egress.credentials().iter().any(|c| matches!(c.kind, policy::CredKind::GitHubApp { .. }))
+        {
+            warnings.push("no origin remote found: rules using ${repo_remote} grant nothing in this session".into());
         }
 
         // Session directories.
@@ -351,7 +244,7 @@ impl Daemon {
             }
             extra_write.push(p);
         }
-        for w in &user_policy.filesystem.write {
+        for w in profile.filesystem.write.iter().chain(&user_policy.filesystem.write) {
             extra_write.push(expand_home(w, home));
         }
         let path_var = params.env.get("PATH").cloned();
@@ -361,12 +254,17 @@ impl Daemon {
             session_tmp: session_tmp.to_path_buf(),
             platform_tmp,
             extra_write,
-            extra_deny_read: user_policy.filesystem.deny_read.iter().map(|p| expand_home(p, home)).collect(),
+            extra_deny_read: profile
+                .filesystem
+                .deny_read
+                .iter()
+                .chain(&user_policy.filesystem.deny_read)
+                .map(|p| expand_home(p, home))
+                .collect(),
             agent_config_readonly: profile.agent.config_readonly.iter().map(|p| expand_home(p, home)).collect(),
             path_dirs: path_var.as_deref().unwrap_or("").split(':').map(PathBuf::from).collect(),
             broker_dirs: self.dirs.all(),
             install_dir: self.shim.parent().map(Path::to_path_buf),
-            allow_keychain: cfg!(target_os = "macos") && profile.agent.macos_keychain,
         })?;
 
         let faults = launcher::injected_faults();
@@ -425,6 +323,26 @@ impl Daemon {
         env.insert("GIT_CONFIG_KEY_1".into(), "url.https://github.com/.insteadof".into());
         env.insert("GIT_CONFIG_VALUE_1".into(), "ssh://git@github.com/".into());
 
+        // M1: session CA, trust bundle and credential sentinels (never secrets).
+        let channel_sentinel = match &auth {
+            ChannelAuth::Sentinel(b) => Some(b.clone()),
+            _ => None,
+        };
+        let l7 = crate::session_l7::setup(
+            id,
+            &egress,
+            user_policy,
+            &self.dirs,
+            home,
+            self.resolver.clone(),
+            session_tmp,
+            channel_sentinel,
+        )
+        .map_err(|e| format!("L7 setup: {e:#}"))?;
+        for (k, v) in &l7.env {
+            env.insert(k.clone(), v.clone());
+        }
+
         let tty = tty_path(&stdio);
         let agent_path = resolve_command(&params.argv[0], path_var.as_deref(), cwd);
         let agent_sha = agent_path.as_deref().and_then(|p| self.hash_binary(p));
@@ -435,12 +353,11 @@ impl Daemon {
             env,
             fs: fs.clone(),
             egress: egress_ep.clone(),
-            ca_bundle: None,
+            ca_bundle: Some(l7.bundle.bundle_file.clone()),
             stdio,
             tty_path: tty,
             session_dir: session_dir.to_path_buf(),
             shim: self.shim.clone(),
-            macos_keychain: cfg!(target_os = "macos") && profile.agent.macos_keychain,
         };
 
         // Start the data plane before the agent, so its first request has a
@@ -459,6 +376,7 @@ impl Daemon {
             stats: stats.clone(),
             connect_timeout: Duration::from_secs(10),
             sni_timeout: Duration::from_secs(15),
+            l7: Some(l7.ctx.clone()),
         });
         // Write-ahead (I9): the session is on record before the agent can run;
         // if the log cannot take it, the agent never starts (I2).
@@ -477,7 +395,8 @@ impl Daemon {
             .detail("grants", grants.clone())
             .detail("writable", fs.writable.iter().map(|p| p.display().to_string()).collect::<Vec<_>>())
             .detail("layers", serde_json::to_value(&probe_layers).unwrap_or_default())
-            .detail("macos_keychain", cfg!(target_os = "macos") && profile.agent.macos_keychain);
+            .detail("credentials", l7.credentials.clone())
+            .detail("trust_bundle", tls::trust_bundle::describe(&l7.bundle));
         ev.enduser = Some(enduser.clone());
         ev.agent = Some(params.argv[0].clone());
         ev.agent_sha256 = agent_sha;
@@ -590,46 +509,6 @@ async fn accept_loop(l: Listener, ctx: Arc<PipelineCtx>) {
     }
 }
 
-/// On Linux the child is bwrap; signals for the agent go to the process
-/// whose innermost PID is 2 (bwrap's init is 1) among bwrap's descendants.
-#[cfg(target_os = "linux")]
-pub fn signal_target(root: u32) -> u32 {
-    let mut parent_of = HashMap::new();
-    let mut inner_pid = HashMap::new();
-    if let Ok(rd) = std::fs::read_dir("/proc") {
-        for e in rd.flatten() {
-            let Ok(pid) = e.file_name().to_string_lossy().parse::<u32>() else { continue };
-            let Ok(st) = std::fs::read_to_string(format!("/proc/{pid}/status")) else { continue };
-            for line in st.lines() {
-                if let Some(v) = line.strip_prefix("PPid:") {
-                    parent_of.insert(pid, v.trim().parse::<u32>().unwrap_or(0));
-                }
-                if let Some(v) = line.strip_prefix("NSpid:")
-                    && let Some(last) = v.split_whitespace().last()
-                {
-                    inner_pid.insert(pid, last.parse::<u32>().unwrap_or(0));
-                }
-            }
-        }
-    }
-    let descends = |mut p: u32| {
-        for _ in 0..16 {
-            match parent_of.get(&p) {
-                Some(&pp) if pp == root => return true,
-                Some(&pp) if pp > 1 => p = pp,
-                _ => return false,
-            }
-        }
-        false
-    };
-    inner_pid.iter().find(|(pid, inner)| **inner == 2 && descends(**pid)).map(|(p, _)| *p).unwrap_or(root)
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn signal_target(root: u32) -> u32 {
-    root
-}
-
 impl Running {
     /// Forward a signal to the agent. Only a small set is accepted.
     pub fn signal(&self, name: &str) {
@@ -673,58 +552,5 @@ impl Running {
         ev.agent = Some(self.agent);
         ev.sandbox = Some(self.backend_name);
         let _ = self.recorder.append(&ev);
-    }
-}
-
-pub fn exited_from(status: std::io::Result<std::process::ExitStatus>) -> Exited {
-    use std::os::unix::process::ExitStatusExt;
-    match status {
-        Ok(s) => Exited { code: s.code(), signal: s.signal() },
-        Err(_) => Exited { code: None, signal: None },
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn repo_root_walks_up() {
-        let d = tempfile::tempdir().unwrap();
-        let r = d.path().canonicalize().unwrap();
-        std::fs::create_dir_all(r.join("proj/.git")).unwrap();
-        std::fs::create_dir_all(r.join("proj/src/deep")).unwrap();
-        assert_eq!(repo_root(&r.join("proj/src/deep")), r.join("proj"));
-        assert_eq!(repo_root(&r), r);
-    }
-
-    #[test]
-    fn profile_path_variables() {
-        // Matches the directory Claude Code 2.1.268 created for this cwd.
-        assert_eq!(
-            cwd_slug(Path::new("/private/tmp/claude-501/-Users-x/repo1")),
-            "-private-tmp-claude-501--Users-x-repo1"
-        );
-        let p = expand_profile_path("/tmp/claude-${uid}/${cwd_slug}", Path::new("/home/u"), Path::new("/src/a.b"));
-        let uid = nix::unistd::getuid().as_raw();
-        assert_eq!(p, PathBuf::from(format!("/tmp/claude-{uid}/-src-a-b")));
-        assert_eq!(
-            expand_profile_path("~/.claude/projects", Path::new("/home/u"), Path::new("/x")),
-            PathBuf::from("/home/u/.claude/projects")
-        );
-    }
-
-    #[test]
-    fn sentinel_shape() {
-        let s = new_sentinel();
-        assert!(s.starts_with("bks1_") && s.len() == 5 + 64);
-        assert_ne!(s, new_sentinel());
-    }
-
-    #[test]
-    fn env_allowlist_has_no_secrets() {
-        for k in ENV_ALLOW {
-            assert!(!policy::config::env_name_is_secretish(k), "{k}");
-        }
     }
 }

@@ -1,13 +1,16 @@
 #!/bin/sh
-# M0 acceptance A1: `broker run -- <agent>` finishes a "fix failing test" task.
+# M0 acceptance A1: `broker run -- <agent>` finishes a "fix failing test" task,
+# and (M1) the agent's credential stays outside the sandbox.
 #
 # usage: tests/e2e/fix_failing_test.sh <claude|codex> [path-to-broker]
 #
 # Creates a throwaway repository with one failing Python unittest, runs the
 # agent headless inside a broker session, then checks ON THE HOST that the
 # test passes, that the test file was not modified, and that the audit chain
-# verifies. The agent uses its own credentials (unchanged until M1).
-# Exit 0 = pass. Needs python3 and the agent CLI on PATH.
+# verifies. For claude it then checks from inside a claude-code session that
+# the credential variable holds only a sentinel and that the keychain item
+# and credentials file are unreadable (I1).
+# Exit 0 = pass. Needs python3 and the agent CLI on PATH, logged in.
 set -eu
 
 agent="${1:?usage: fix_failing_test.sh <claude|codex> [broker]}"
@@ -56,4 +59,17 @@ after="$(shasum test_calc.py | cut -d' ' -f1)"
 [ "$before" = "$after" ] && echo "PASS: test file unchanged" || { echo "FAIL: test file modified"; status=1; }
 [ ! -e .git/hooks/post-commit ] && [ -z "$(git config --get core.fsmonitor || true)" ] && echo "PASS: git config and hooks untouched" || { echo "FAIL: git config or hooks changed"; status=1; }
 "$broker" audit verify || status=1
+
+if [ "$agent" = claude ]; then
+  inside="$("$broker" run --profile claude-code -- /bin/sh -c '
+    case "$CLAUDE_CODE_OAUTH_TOKEN" in brk_s_*) echo sentinel-only;; *) echo NOT-A-SENTINEL;; esac
+    /usr/bin/security find-generic-password -s "Claude Code-credentials" >/dev/null 2>&1 && echo KEYCHAIN-READABLE
+    cat "$HOME/.claude/.credentials.json" >/dev/null 2>&1 && echo CREDFILE-READABLE
+    true' 2>/dev/null)"
+  case "$inside" in
+    *NOT-A-SENTINEL*|*READABLE*) echo "FAIL: credential reachable in the sandbox: $inside"; status=1 ;;
+    *sentinel-only*) echo "PASS: only a sentinel in the sandbox; keychain and credential file unreadable" ;;
+    *) echo "FAIL: credential check did not run"; status=1 ;;
+  esac
+fi
 exit $status

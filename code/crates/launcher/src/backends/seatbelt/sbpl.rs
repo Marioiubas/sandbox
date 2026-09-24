@@ -18,7 +18,6 @@ pub struct SbplInputs<'a> {
     pub fs: &'a CompiledFsPolicy,
     pub broker_port: u16,
     pub tty: Option<&'a Path>,
-    pub keychain: bool,
 }
 
 /// Mach services every session may reach.
@@ -30,10 +29,6 @@ pub const MACH_ALLOW: &[&str] = &[
     "com.apple.cfprefsd.agent",
     "com.apple.cfprefsd.daemon",
 ];
-
-/// Mach services added only for profiles that keep agent credentials in the
-/// login keychain until M1 (ADR-016).
-pub const MACH_KEYCHAIN: &[&str] = &["com.apple.SecurityServer", "com.apple.securityd.xpc"];
 
 /// Never allowed, listed explicitly for reviewers (deny default covers them).
 pub const MACH_NEVER: &[&str] = &[
@@ -84,7 +79,7 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
     }
     s.push_str("(allow file-write-data file-ioctl (literal \"/dev/null\") (literal \"/dev/zero\") (literal \"/dev/dtracehelper\"))\n");
     s.push_str("; mach services (allowlist)\n(allow mach-lookup");
-    for m in MACH_ALLOW.iter().chain(if i.keychain { MACH_KEYCHAIN } else { &[] }) {
+    for m in MACH_ALLOW {
         let _ = write!(s, " (global-name \"{m}\")");
     }
     s.push_str(")\n");
@@ -137,9 +132,7 @@ mod tests {
     #[test]
     fn golden_shape() {
         let f = fs();
-        let p =
-            generate(&SbplInputs { fs: &f, broker_port: 54017, tty: Some(Path::new("/dev/ttys003")), keychain: false })
-                .unwrap();
+        let p = generate(&SbplInputs { fs: &f, broker_port: 54017, tty: Some(Path::new("/dev/ttys003")) }).unwrap();
         assert!(p.starts_with("(version 1)\n(deny default)\n"));
         assert!(p.contains("(deny file-read* (subpath \"/Users/dev/.ssh\"))"));
         assert!(p.contains("(allow network-outbound (remote ip \"localhost:54017\"))"));
@@ -151,8 +144,6 @@ mod tests {
         let deny = p.find("(deny file-write*").unwrap();
         assert!(deny > allow);
         assert!(p.contains("(deny file-write* (literal \"/Users/dev/src/web/.git\"))"));
-        let with_kc = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, keychain: true }).unwrap();
-        assert!(with_kc.contains("com.apple.SecurityServer"));
     }
 
     #[test]
@@ -161,13 +152,13 @@ mod tests {
         assert!(quote(Path::new("/a\nb")).is_none());
         let mut f = fs();
         f.writable.push("/x\n(allow default)".into());
-        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, keychain: false }).is_err());
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None }).is_err());
     }
 
     #[test]
     fn only_one_network_allow() {
         let f = fs();
-        let p = generate(&SbplInputs { fs: &f, broker_port: 4242, tty: None, keychain: false }).unwrap();
+        let p = generate(&SbplInputs { fs: &f, broker_port: 4242, tty: None }).unwrap();
         assert_eq!(p.matches("(allow network").count(), 1);
     }
 }

@@ -121,3 +121,4 @@ See `sources:` in the frontmatter; every URL is cited inline above.
 ## Build log
 
 - 2026-09-24: M0 slice built (deny-read of credential stores, writable repository and session temp, mandatory deny-write compiled to SBPL, bwrap re-binds and Landlock allowlists); rollback deferred. See [[ADR-019 Mandatory Deny-Write List Additions]] for the `.git` rename-and-replant escape found and closed while building.
+- 2026-09-24 (M1): default deny-read gains the agents' own login-token files (`~/.claude/.credentials.json`, `~/.codex/auth.json`, `~/.gemini/oauth_creds.json`); `~/Library/Keychains` can no longer be exempted; a profile's own `filesystem.deny_read`/`write` are now applied (they were ignored in M0).

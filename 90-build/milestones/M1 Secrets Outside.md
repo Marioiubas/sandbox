@@ -12,6 +12,7 @@ summary: AUTO
 related: AUTO
 sources: AUTO
 milestone: M1
+code: ["code/crates/tls", "code/crates/creds", "code/crates/l7", "code/crates/brokerd/src/l7_pipeline.rs", "code/tests/conformance/tests/m1_secrets.rs", "code/tests/conformance/tests/m1_git.rs", "code/tests/conformance/tests/m1_redirect_fronting.rs"]
 ---
 
 # M1 Secrets Outside
@@ -170,3 +171,17 @@ Next milestone: [[M2 Policy Audit and Learn]], which replaces the interim rule t
 
 - Report: milestone table row "Weeks 3-4 M1 Secrets outside"; "L4 by default, L7 only where credentials or verbs matter"; protocol adapters; native provider downscoping table.
 - Research note 05 section 5.2 M1 row (LLM API calls succeed with injected key).
+
+## Build log
+
+- 2026-09-24: implemented. Acceptance status:
+  - B1 only sentinels: pass locally on macOS 26 (`b1_i1_only_sentinels_inside_the_sandbox`); e2e with Claude Code: sentinel only, keychain and credential file unreadable.
+  - B2 push to `agent/x` succeeds with a minted repo-scoped token: pass against a fake GitHub (`b2_push_to_agent_branch_succeeds_with_scoped_token`). **Pending:** the same run against a real throwaway GitHub App (needs the app's key in the keychain or CI secrets).
+  - B3 other repo, `main`, force (and delete) denied and explained by `broker why`: pass (`b3_main_force_delete_and_other_repo_are_denied_and_explained`, `cat1_push_to_attacker_repo_mints_nothing`); same real-GitHub caveat.
+  - B4 planted key rejected: pass (`b4_i7_planted_key_to_allowed_host_is_rejected`).
+  - B5 sentinel off-host useless: pass (`b5_sentinel_copied_off_host_is_useless`).
+  - B6 LLM call with injected key: pass against the fake API (`b6_llm_call_succeeds_with_injected_key`) and against the real `api.anthropic.com` with Claude Code's brokered OAuth token (e2e, macOS 26).
+  - B7 nothing reflected: pass (`b7_injected_secret_is_never_reflected`, plain, gzip and header reflections).
+  - B8 redirect and fronting rules: pass (`cat6_redirects_are_reevaluated_and_drop_credentials`, `cat7_host_sni_connect_must_agree`, `cat8_ambiguous_framing_never_desyncs` (`tests/conformance/tests/m1_redirect_fronting.rs`)).
+- 2026-09-24: decisions: [[ADR-020 Brokered Agent Credentials End the Keychain Exception]], [[ADR-021 L7 Path Choices for M1]]. Fuzz targets `pktline`, `pack`, `delta`, `filter`, `remote_url`, `foreign` ran 60 s each without crashes (0.7-2.9 M executions). CI status recorded in [[Build Log]].
+- 2026-09-24: not `built` yet: B2/B3 against a real GitHub App and the CI run on the four OS cells are the remaining items.

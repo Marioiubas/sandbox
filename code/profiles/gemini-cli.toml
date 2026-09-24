@@ -6,6 +6,10 @@ binaries = ["gemini"]
 [[egress]]
 id = "gemini-api"
 host = "generativelanguage.googleapis.com"
+# API-key mode, brokered (I1): the sandbox sees a sentinel in GEMINI_API_KEY.
+# Google-login mode (~/.gemini/oauth_creds.json) is not brokered yet
+# (ADR-020) and fails closed.
+credential = { kind = "static", id = "gemini-api-key", ref = "keychain:broker-gemini-api-key|env:GEMINI_API_KEY", header = "x-goog-api-key", env = "GEMINI_API_KEY" }
 
 [[egress]]
 id = "code-assist"

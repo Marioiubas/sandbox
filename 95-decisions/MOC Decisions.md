@@ -44,6 +44,8 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-017 Landlock Filesystem Layer Required]] | The Landlock filesystem layer is a required Linux layer; only its TCP rules degrade below ABI 4, where the empty netns remains the boundary. |
 | [[ADR-018 seccomp Filter Shape for M0]] | Keep the proposed seccomp denials, add io_uring, clone3, x32 and TIOCSTI, and allow socketpair(AF_UNIX) and AF_NETLINK. |
 | [[ADR-019 Mandatory Deny-Write List Additions]] | Protect the .git entry itself (rename-and-replant escape), .mcp.json, .envrc, .gemini, .broker and PATH dirs; placeholders for missing names on Linux. |
+| [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] | Agents' own credentials are held by brokerd behind sentinels; agent token files are deny-read; the macOS keychain switch of ADR-016 is removed. |
+| [[ADR-021 L7 Path Choices for M1]] | Per-session CA only, HTTP/1.1 only, no broker-followed redirects, no cookies on terminated hosts, rule-driven attachment, buffered push inspection, fail-closed force detection. |
 
 ## Where the value is
 
@@ -87,6 +89,11 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-017 Landlock Filesystem Layer Required]] — The Landlock filesystem layer is a required Linux layer; only its TCP rules degrade below ABI 4, where the empty netns remains the boundary.
 - [[ADR-018 seccomp Filter Shape for M0]] — Keep the proposed seccomp denials, add io_uring, clone3, x32 and TIOCSTI, and allow socketpair(AF_UNIX) and AF_NETLINK.
 - [[ADR-019 Mandatory Deny-Write List Additions]] — Protect the .git entry itself (rename-and-replant escape), .mcp.json, .envrc, .gemini, .broker and PATH dirs; placeholders for missing names on Linux.
+
+## Built during M1
+
+- [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] — Agents' own credentials are held by brokerd behind sentinels; agent token files are deny-read; the macOS keychain switch of ADR-016 is removed.
+- [[ADR-021 L7 Path Choices for M1]] — Per-session CA only, HTTP/1.1 only, no broker-followed redirects, no cookies on terminated hosts, rule-driven attachment, buffered push inspection, fail-closed force detection.
 
 ## How this section connects
 

@@ -9,17 +9,20 @@
 //! 6. append the allow decision to the audit chain *before* connecting (I9);
 //! 7. connect to exactly an admitted address;
 //! 8. require a TLS ClientHello whose SNI canonicalises to the same host;
-//! 9. splice, then append the outcome.
+//! 9. splice, then append the outcome — or, when a grant for the host has
+//!    L7 rules or a credential, hand the tunnel to the L7 path
+//!    (`l7_pipeline`), which terminates TLS and authorizes each request.
 //!
 //! Every deny is appended with a reason before the client gets the reply,
 //! and an audit failure turns an allow into a deny.
 
+use crate::l7_pipeline::{self, L7Ctx};
 use audit::event::describe_raw_host;
 use audit::{AuditEvent, Dest, EventKind, Reason, Recorder, RequestId, SessionId};
 use netguard::ingress::{self, ChannelAuth, IngressKind, IngressReject};
 use netguard::resolver::PolicyResolver;
 use netguard::{CanonicalHost, canon_host};
-use policy::EgressPolicy;
+use policy::{EgressPolicy, PathChoice};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -61,17 +64,32 @@ pub struct PipelineCtx {
     pub stats: Arc<Stats>,
     pub connect_timeout: Duration,
     pub sni_timeout: Duration,
+    /// Session CA, credentials and upstream TLS for terminated hosts. When
+    /// absent, a host that needs L7 is denied (never spliced unchecked).
+    pub l7: Option<Arc<L7Ctx>>,
 }
 
 /// What happened to one connection (returned for tests).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
-    Denied { request_id: RequestId, reason: Reason },
-    Spliced { request_id: RequestId, bytes_out: u64, bytes_in: u64 },
+    Denied {
+        request_id: RequestId,
+        reason: Reason,
+    },
+    Spliced {
+        request_id: RequestId,
+        bytes_out: u64,
+        bytes_in: u64,
+    },
+    /// Terminated on the L7 path; each request has its own decision row.
+    Terminated {
+        request_id: RequestId,
+        requests: u64,
+    },
 }
 
 impl PipelineCtx {
-    fn event(&self, kind: EventKind, rid: &RequestId) -> AuditEvent {
+    pub(crate) fn event(&self, kind: EventKind, rid: &RequestId) -> AuditEvent {
         let mut ev = AuditEvent::new(kind).session(&self.session).request(rid);
         ev.enduser = Some(self.enduser.clone());
         ev.agent = Some(self.agent.clone());
@@ -115,9 +133,9 @@ async fn deny<S: AsyncWrite + Unpin>(
     Outcome::Denied { request_id: rid, reason }
 }
 
-pub async fn handle<S>(ctx: &PipelineCtx, mut client: S) -> Outcome
+pub async fn handle<S>(ctx: &Arc<PipelineCtx>, mut client: S) -> Outcome
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     ctx.stats.connections.fetch_add(1, Ordering::Relaxed);
     let rid = RequestId::new();
@@ -239,7 +257,22 @@ where
         return Outcome::Denied { request_id: rid, reason };
     }
 
-    // 9. Splice and record the outcome.
+    // 9a. Hosts with L7 rules or credentials are terminated, never spliced.
+    if ctx.policy.path_choice(&adm) == PathChoice::L7 {
+        let Some(l7) = ctx.l7.clone() else {
+            ctx.stats.denied.fetch_add(1, Ordering::Relaxed);
+            let ev = ctx
+                .event(EventKind::RequestDecision, &rid)
+                .deny(Reason::L7NoRuleMatched, adm.policy_ids.clone())
+                .dest(dest)
+                .detail("l7", "unavailable");
+            let _ = ctx.recorder.append(&ev);
+            return Outcome::Denied { request_id: rid, reason: Reason::L7NoRuleMatched };
+        };
+        return l7_pipeline::serve(ctx.clone(), l7, client, buf, upstream, host, raw.port, adm, addrs, dest, rid).await;
+    }
+
+    // 9b. Splice and record the outcome.
     ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
     let stats = netguard::splice::splice(&mut client, &mut upstream, &buf).await.unwrap_or_default();
     ctx.stats.bytes_out.fetch_add(stats.bytes_out, Ordering::Relaxed);

@@ -1,0 +1,69 @@
+# Claude Code with an Anthropic API key. Egress: the Anthropic API and its
+# auth and telemetry hosts. Agent configuration (settings, hooks, commands,
+# MCP definitions) is read-only (I5); session transcripts and caches are
+# writable agent state. Validate against each Claude Code release: paths
+# are version-dependent.
+#
+# The key stays outside the sandbox (I1, M1): brokerd reads it from the
+# keychain item `broker-anthropic-api-key` (macOS Keychain or libsecret), or
+# from ANTHROPIC_API_KEY in brokerd's own environment, and attaches it as
+# x-api-key on api.anthropic.com. The agent sees only a sentinel in
+# ANTHROPIC_API_KEY.
+version = 1
+name = "claude-code-apikey"
+# Selected with --profile; `claude` itself maps to the OAuth profile.
+binaries = []
+
+[[egress]]
+id = "anthropic-api"
+host = "api.anthropic.com"
+credential = { kind = "static", id = "anthropic-api-key", ref = "keychain:broker-anthropic-api-key|env:ANTHROPIC_API_KEY", header = "x-api-key", env = "ANTHROPIC_API_KEY" }
+
+[[egress]]
+id = "anthropic-telemetry"
+host = "statsig.anthropic.com"
+
+[[egress]]
+id = "anthropic-console"
+host = "console.anthropic.com"
+
+[[egress]]
+id = "claude-ai"
+host = "claude.ai"
+
+[[egress]]
+id = "claude-platform"
+host = "platform.claude.com"
+
+[agent]
+config_readonly = [
+    "~/.claude/settings.json",
+    "~/.claude/settings.local.json",
+    "~/.claude/CLAUDE.md",
+    "~/.claude/commands",
+    "~/.claude/agents",
+    "~/.claude/hooks",
+    "~/.claude/plugins",
+    "~/.claude/skills",
+    "~/.claude/output-styles",
+]
+state_write = [
+    "~/.claude/projects",
+    "~/.claude/todos",
+    "~/.claude/statsig",
+    "~/.claude/shell-snapshots",
+    "~/.claude/session-env",
+    "~/.claude/file-history",
+    "~/.claude/debug",
+    "~/.claude/plans",
+    "~/.claude/ide",
+    # The Bash tool's per-project scratch directory (hard-coded under /tmp,
+    # independent of TMPDIR). Only this project's directory, not its parent,
+    # which other Claude Code sessions share.
+    "/tmp/claude-${uid}/${cwd_slug}",
+]
+# No keychain access: the credential is brokered (ADR-020 ends the M0
+# keychain exception of ADR-016).
+
+[filesystem]
+deny_read = ["~/.claude/.credentials.json"]

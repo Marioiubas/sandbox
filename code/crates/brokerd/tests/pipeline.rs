@@ -94,6 +94,7 @@ fn fx(
         stats: Arc::new(Stats::default()),
         connect_timeout: Duration::from_secs(2),
         sni_timeout: Duration::from_secs(2),
+        l7: None,
     });
     Fx { ctx, rec, resolver }
 }
@@ -104,7 +105,7 @@ fn grant(host: &str, port: u16, addrs: &[&str], classes: &[&str]) -> EgressEntry
         ports: Some(vec![port]),
         addrs: addrs.iter().map(|s| s.to_string()).collect(),
         allow_addr_classes: classes.iter().map(|s| s.to_string()).collect(),
-        id: None,
+        ..Default::default()
     }
 }
 

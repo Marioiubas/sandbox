@@ -4,7 +4,7 @@ aliases: ["git adapter", "pkt-line Parser"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/git, topic/egress, topic/credentials, control/task-tok, control/egress, boundary/tb4, invariant/i6, milestone/m1]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "Protocol adapter that rewrites SSH remotes to HTTPS, denies port 22, p
 related: ["[[GitHub App Installation Tokens]]", "[[Example Cedar Policies]]", "[[Core Trait Contracts]]", "[[M1 Secrets Outside]]", "[[Gap Analysis]]", "[[Filesystem Control and Rollback]]", "[[Broker Cedar Schema]]", "[[L1 Conformance Suite]]", "[[TLS Termination and Per-Session CA]]", "[[Credential Injector and Issuers]]", "[[Hostname Canonicaliser]]", "[[Policy Engine and Entity Builder]]", "[[GitHub API Adapter]]", "[[GitHub MCP Toxic Flow]]", "[[Nx s1ngularity Supply-Chain Attack]]", "[[Sandbox Launcher]]", "[[Conformance Probe Matrix]]", "[[Docker Sandboxes]]", "[[Claude Code and sandbox-runtime]]", "[[broker.toml Human Policy Layer]]", "[[Trifecta Session Labels]]", "[[Open Questions and Unverified Claims]]", "[[I5 Config Outside Writable Mounts]]"]
 sources: ["https://www.anthropic.com/engineering/claude-code-sandboxing", "https://andrewlock.net/running-ai-agents-safely-in-a-microvm-using-docker-sandbox/", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://www.wiz.io/blog/s1ngularity-supply-chain-attack"]
 milestone: M1
+code: ["code/crates/l7/src/git", "code/crates/l7/src/classify.rs", "code/crates/policy/src/repo.rs"]
 ---
 
 # Git Smart-HTTP Adapter
@@ -172,3 +173,14 @@ No git library is chosen in the record; a minimal in-house pkt-line reader plus 
 - https://invariantlabs.ai/blog/mcp-github-vulnerability
 - https://www.wiz.io/blog/s1ngularity-supply-chain-attack
 - Report: "Protocol adapters are the moat" (git smart-HTTP), schema and example policies, `broker.toml`, M1 acceptance; research notes 03 Q1 and Q4, 05 sections 1 and 3.2.
+
+## Implementation notes
+
+- 2026-09-24: force detection is fail-closed per [[ADR-021 L7 Path Choices for M1]]: only an update whose new tip reaches the old tip through parents inside the pushed pack is a fast-forward; deletes, unreadable packs, SHA-256 repositories and ancestry outside the pack count as force. Denied pushes answer with `report-status` so git prints `! [remote rejected] <ref> (broker denied: <reason> (broker why req-…))`.
+- 2026-09-24: the repository comes from the canonical request path; `${repo_remote}` is read from the checkout's `.git/config` (worktrees via `commondir`) without running git; the same `RepoId` type names repositories in policy, remotes and requests.
+
+## Build log
+
+- 2026-09-24: built: `l7::git` (`route`, `actions`), `pktline`, `receive_pack` (strict command list, shallow lines, push options, push certificates refused, git-native `report-status` rejection with side-band), `pack` (commit graph from the pushed pack: OFS/REF deltas resolved when their base is a commit in the pack, SHA-1 trailer verified, limits). One `git.push` per ref update; one denied ref denies the push. SSH remotes are rewritten to HTTPS through `GIT_CONFIG_*` in the session env (M0).
+- 2026-09-24: tests: `l7::git::*` unit/property tests on real `git pack-objects` output (fast-forward, rewrite, merge, deltified commits, corrupt packs); conformance `b2_push_to_agent_branch_succeeds_with_scoped_token`, `b3_main_force_delete_and_other_repo_are_denied_and_explained`, `cat1_push_to_attacker_repo_mints_nothing` (`tests/conformance/tests/m1_git.rs`) against a fake GitHub running `git http-backend`; fuzz targets `pktline`, `pack`, `delta`.
+- 2026-09-24: not built: broker-side commit signing (not an M1 checklist item). Remaining acceptance: B2/B3 against a real throwaway GitHub App (see [[M1 Secrets Outside]]).

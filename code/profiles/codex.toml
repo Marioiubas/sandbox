@@ -6,6 +6,10 @@ binaries = ["codex"]
 [[egress]]
 id = "openai-api"
 host = "api.openai.com"
+# API-key mode, brokered (I1): the sandbox sees a sentinel in OPENAI_API_KEY.
+# ChatGPT-login mode keeps tokens in ~/.codex/auth.json, which the sandbox
+# cannot read; it is not brokered yet (ADR-020) and fails closed.
+credential = { kind = "static", id = "openai-api-key", ref = "keychain:broker-openai-api-key|env:OPENAI_API_KEY", header = "authorization", scheme = "bearer", env = "OPENAI_API_KEY" }
 
 [[egress]]
 id = "chatgpt"

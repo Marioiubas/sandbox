@@ -16,7 +16,19 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 audit.workspace = true
+bytes.workspace = true
+creds.workspace = true
+flate2.workspace = true
+http.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+l7.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 launcher.workspace = true

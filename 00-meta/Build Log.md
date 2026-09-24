@@ -40,7 +40,7 @@ Copy this block for each session:
 | Milestone | Status | Date built | Evidence (test run, commit) |
 |---|---|---|---|
 | [[M0 Contained Run]] | in progress: implemented; A1 verified on macOS 26 with Claude Code only | | CI run 35999705456 (commit 9a63853): 109 tests green on macOS 15/26 and Ubuntu 22.04/24.04 runners |
-| [[M1 Secrets Outside]] | not started |  |  |
+| [[M1 Secrets Outside]] | in progress: implemented; B1-B8 pass against local fakes on macOS 26; e2e with Claude Code's brokered login passes; real GitHub App run pending |  | see entry "M1 secrets outside implemented" |
 | [[M2 Policy Audit and Learn]] | not started |  |  |
 | [[M3 CI Identity and MCP]] | not started |  |  |
 | [[M4 Harden and Ship]] | not started |  |  |
@@ -79,3 +79,17 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Tests:** CI run 35999705456 (commit 9a63853): lint, fuzz smoke and 109 tests green on macOS 15, macOS 26, Ubuntu 22.04 (Landlock ABI 4) and Ubuntu 24.04 (Landlock ABI 7). The first run (35998906834) had already passed the tests on macOS 15/26 and Ubuntu 24.04.
 - **Notes updated:** [[M0 Contained Run]], [[Landlock]], [[bubblewrap]], [[Open Questions and Unverified Claims]].
 - **Next step:** A1 for Codex and for Claude Code on macOS 15 and Ubuntu (agent CLIs and credentials are not available on the runners); then mark M0 `built` and start [[M1 Secrets Outside]].
+
+### 2026-09-24: M1 secrets outside implemented
+
+- **Milestone:** [[M1 Secrets Outside]] (in progress; [[M0 Contained Run]] still has open A1 cells).
+- **Goal of the session:** move every credential out of the sandbox: per-session CA and selective TLS termination, sentinels, foreign-credential rejection, GitHub App minting, git push scoping, method/path rules, response filtering.
+- **Built:** `tls` (session CA, trust bundle, verified upstream client); `creds` (secrets, sentinels, foreign-credential inspection, static and `github_app` issuers, scope-digest cache); `l7` (head checks, response filter, git pkt-line / receive-pack / pack parsers and adapter, request classification); `policy` M1 keys (`protocol`, `methods`, `paths`, `allow`, `credential`, `passthrough`, `[issuers]`, `[tls]`, `${repo_remote}`) with `AllowedBinding`; `brokerd` L7 pipeline (`l7_pipeline.rs`, hyper 1.11) and per-session setup; `broker why` shows adapter verbs and credential IDs; built-in profiles broker the agents' own keys; conformance fixtures (test CA, fake API, fake GitHub with `git http-backend`), probes `tls-raw` and `secret-scan`; six fuzz targets.
+- **Tests:** 190 passing on macOS 26.5 (unit, property, pipeline, M0 and M1 conformance, invariants); clippy `-D warnings` clean; fuzz targets `pktline`, `pack`, `delta`, `filter`, `remote_url`, `foreign` 60 s each without crashes. M1 acceptance: B1, B4, B5, B6, B7, B8 pass; B2 and B3 pass against a fake GitHub. E2E `tests/e2e/fix_failing_test.sh claude` passes on macOS 26 with Claude Code's OAuth token held only by the broker (15/15 API requests carried the brokered credential; keychain unreachable).
+- **Invariants touched:** I1 now has its canonical scan test and the M0 keychain weakening is closed ([[ADR-020 Brokered Agent Credentials End the Keychain Exception]]); I7 is built with its canonical planted-key test; I6 covers Host, absolute-form authority, path and repository; I9 now records every L7 decision, including requests hyper refuses to parse.
+- **Findings while building:** the `Claude Code-credentials` keychain item also holds ~40 MCP OAuth tokens, all readable under the M0 exception; hyper's `max_buf_size` does not bound request heads on a TLS stream (explicit 64 KiB limit added); a profile's own `filesystem` section was ignored in M0 (fixed); the M0 policy reference showed a rejected pattern (`*.githubusercontent.com`; now a docs test); the conformance probe could not send CRLF (escape handling fixed before trusting the framing tests).
+- **Notes updated:** [[TLS Termination and Per-Session CA]], [[Credential Injector and Issuers]], [[Git Smart-HTTP Adapter]], [[Registry and LLM API Adapters]], [[I1 No Secrets in the Sandbox]], [[I7 Reject Foreign Credentials]], [[ADR-006 Deny Unmatched L7 Requests]] set to `built`; build logs on [[Sentinel Swap Pattern]], [[Just-in-Time Credential Minting]], [[GitHub App Installation Tokens]], [[Broker CLI and Daemon]], [[Sandbox Launcher]], [[Filesystem Control and Rollback]], [[Core Trait Contracts]], [[broker.toml Human Policy Layer]], [[Tech Stack]], [[Repository Layout]], [[Conformance Probe Matrix]], [[L1 Conformance Suite]], [[M1 Secrets Outside]]; [[Risk Register]] R17 closed, R18-R20 added.
+- **ADRs created or changed:** [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] (supersedes the keychain half of [[ADR-016 macOS M0 Compatibility Exceptions]]), [[ADR-021 L7 Path Choices for M1]].
+- **Open questions resolved or raised:** hyper/rustls/rcgen pinned and exercised; GitHub branch scope still absent upstream (broker-enforced); ECH still unmeasured ([[Open Questions and Unverified Claims]]).
+- **Next step:** CI on macOS 15/26 and Ubuntu 22.04/24.04; B2/B3 against a real throwaway GitHub App (needs the user's app key); then mark M1 `built`.
+

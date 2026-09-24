@@ -11,7 +11,7 @@ updated: 2026-09-24
 summary: "On macOS in M0, keep the per-user temp dir writable (Apple toolchain shims reset TMPDIR to it) and let only profiles that declare it (claude-code) read the login keychain so agents keep their own credentials until M1; both are announced, audited and time-boxed."
 related: ["[[Seatbelt]]", "[[Sandbox Launcher]]", "[[Filesystem Control and Rollback]]", "[[I1 No Secrets in the Sandbox]]", "[[I5 Config Outside Writable Mounts]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[Sentinel Swap Pattern]]", "[[Risk Register]]", "[[MOC Decisions]]", "[[Build Log]]"]
 sources: []
-superseded_by:
+superseded_by: "[[ADR-020 Brokered Agent Credentials End the Keychain Exception]]"
 code: ["code/crates/brokerd/src/session.rs", "code/crates/launcher/src/fs_compile.rs", "code/crates/launcher/src/backends/seatbelt/sbpl.rs", "code/profiles/claude-code.toml"]
 ---
 
@@ -20,6 +20,8 @@ code: ["code/crates/brokerd/src/session.rs", "code/crates/launcher/src/fs_compil
 > On macOS in M0, keep the per-user temp dir writable and let only profiles that declare it read the login keychain, so unmodified agents run; both are announced, audited and time-boxed.
 
 ## Status
+
+Superseded in part: the keychain exception (decision 2 and 3) is superseded by [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] (2026-09-24); the temp-dir exception (decision 1) stands.
 
 Built (2026-09-24) for [[M0 Contained Run]]. The keychain exception ends when [[M1 Secrets Outside]] moves credentials out of the sandbox; the temp-dir exception is reviewed then.
 
@@ -67,3 +69,4 @@ Measured on macOS 26.5 (build log of [[Seatbelt]]):
 ## Build log
 
 - 2026-09-24: created and built with M0; evidence and measurements in [[Build Log]] and the [[Seatbelt]] build log.
+- 2026-09-24: keychain exception removed by [[ADR-020 Brokered Agent Credentials End the Keychain Exception]]; `macos_keychain` no longer exists in profiles, the launcher or the SBPL generator.

@@ -44,7 +44,7 @@ Agent flags such as `--dangerously-skip-permissions`, `--yolo` or
 `--full-auto` change only how often the agent asks its user for approval
 inside the sandbox. They never change the sandbox, the proxy or the audit.
 
-## What is enforced today (milestone M0)
+## What is enforced today (milestones M0 and M1)
 
 | Control | macOS (Seatbelt) | Linux (bubblewrap) |
 |---|---|---|
@@ -56,13 +56,20 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
 | Kernel attack surface | Apple Events, Launch Services, trustd, DNS service unreachable | seccomp: no new Unix sockets, raw or packet sockets, ptrace, bpf, keyctl, mount, namespaces, io_uring |
 | Fail closed | launch refused if any layer, the proxy or the audit log is unavailable; the in-sandbox shim verifies every layer before the agent starts | same |
 | Audit | hash-chained SQLite log outside every sandbox; `broker why`, `broker audit verify` | same |
+| Credentials (M1) | the sandbox holds only per-session sentinels; the broker attaches real credentials after authorization, only on the credential's hosts; foreign credentials and cookies are rejected; injected secrets are cut from responses; agents' own login stores (keychain, token files) are unreadable | same |
+| L7 rules (M1) | terminated hosts: Host = SNI = CONNECT, method/path rules deny by default, git pushes authorized per repository, ref and force | same |
 
-## Known M0 residual risks
+## Known residual risks
 
-- **Credentials are unchanged in M0.** Agents still use their own
-  credentials. On macOS the `claude-code` profile may read the login keychain
-  so Claude Code can authenticate; this exception ends in M1, when
-  credentials move out of the sandbox behind per-session sentinels (ADR-016).
+- **Brokered authority is still authority.** An injected agent can use a
+  credential for every request its rules allow; the broker narrows that
+  authority and logs it, it does not judge intent.
+- **Brokered agent tokens are read once per session.** If Claude Code's
+  OAuth token expires mid-session, requests fail until the agent is run once
+  outside the broker to refresh it (ADR-020). Codex and Gemini account-login
+  modes are not brokered and fail closed.
+- **Some legitimate pushes are denied as force** when the pushed commits do
+  not reach the old tip inside the pushed pack (ADR-021); `broker why` says so.
 - **macOS per-user temp directory is writable** (`DARWIN_USER_TEMP_DIR`),
   because Apple's toolchain shims reset `TMPDIR` to it (ADR-016). A
   sandboxed agent could tamper with other programs' temporary files there.

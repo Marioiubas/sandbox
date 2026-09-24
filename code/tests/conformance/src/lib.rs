@@ -8,6 +8,8 @@
 //!
 //! The broker binaries must be built first: `cargo build --workspace --bins`.
 
+pub mod m1;
+
 use audit::{AuditEvent, DecisionResult, Reason, SqliteRecorder};
 use std::io::{Read, Write};
 use std::net::{TcpListener, UdpSocket};
@@ -78,12 +80,17 @@ impl Harness {
 
     /// `daemon_env` reaches brokerd because `broker run` starts it on demand.
     pub fn with_daemon_env(config: &str, daemon_env: &[(&str, &str)]) -> Self {
+        Self::custom(config, daemon_env, init_repo)
+    }
+
+    /// As `with_daemon_env`, with `init` preparing the session repository.
+    pub fn custom(config: &str, daemon_env: &[(&str, &str)], init: impl FnOnce(&Path)) -> Self {
         let home = short_tmp("bkc.");
         std::fs::create_dir_all(home.path().join("config")).unwrap();
         std::fs::write(home.path().join("config/broker.toml"), config).unwrap();
         // Outside the macOS per-user temp dir, which sandboxes may write (ADR-016).
         let repo = short_tmp("repo.");
-        init_repo(repo.path());
+        init(repo.path());
         Harness {
             home,
             repo,
@@ -161,6 +168,65 @@ impl Harness {
     pub fn audit_db(&self) -> PathBuf {
         self.home.path().join("state/audit.db")
     }
+
+    pub fn config_dir(&self) -> PathBuf {
+        self.home.path().join("config")
+    }
+
+    /// A `file:` secret in the broker config dir (mode 0600), outside
+    /// every sandbox mount.
+    pub fn write_secret(&self, name: &str, value: &[u8]) {
+        use std::os::unix::fs::PermissionsExt;
+        let p = self.config_dir().join(name);
+        std::fs::write(&p, value).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    /// Rewrite broker.toml (for fixtures whose ports are known late).
+    pub fn set_config(&self, config: &str) {
+        std::fs::write(self.config_dir().join("broker.toml"), config).unwrap();
+    }
+
+    /// Run a shell script inside a session.
+    pub fn sh(&self, script: &str) -> ProbeResult {
+        self.run_argv(None, &["/bin/sh".to_string(), "-c".to_string(), script.to_string()], &[])
+    }
+
+    /// `broker why <id>` on the host.
+    pub fn why(&self, rid: &str) -> String {
+        let out = Command::new(&self.bins.broker)
+            .args(["why", rid])
+            .env("BROKER_HOME", self.home.path())
+            .output()
+            .expect("broker why");
+        String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr)
+    }
+
+    /// Raw bytes of the audit database files (the canary check reads them).
+    pub fn audit_bytes(&self) -> Vec<u8> {
+        let mut v = Vec::new();
+        for suffix in ["", "-wal", "-shm"] {
+            let p = PathBuf::from(format!("{}{suffix}", self.audit_db().display()));
+            if let Ok(b) = std::fs::read(p) {
+                v.extend(b);
+            }
+        }
+        v
+    }
+}
+
+/// Request IDs (`req-...`) mentioned in text, in order.
+pub fn request_ids(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("req-") {
+        let id: String = rest[i..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-').collect();
+        if id.len() > 8 && !out.contains(&id) {
+            out.push(id.clone());
+        }
+        rest = &rest[i + 4..];
+    }
+    out
 }
 
 impl Drop for Harness {
@@ -174,7 +240,7 @@ impl Drop for Harness {
     }
 }
 
-fn init_repo(p: &Path) {
+pub fn init_repo(p: &Path) {
     let ok = Command::new("git")
         .args(["init", "-q", "."])
         .current_dir(p)

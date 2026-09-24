@@ -14,12 +14,26 @@ path = "src/bin/conformance-probe.rs"
 [dependencies]
 audit.workspace = true
 base64.workspace = true
+bytes.workspace = true
+creds.workspace = true
+flate2.workspace = true
+getrandom.workspace = true
 hex.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
 libc.workspace = true
+netguard.workspace = true
+ring.workspace = true
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
+time.workspace = true
 tls.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
 toml.workspace = true
 
 [lints]

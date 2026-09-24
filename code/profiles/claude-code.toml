@@ -1,7 +1,14 @@
-# Claude Code. Egress: the Anthropic API and its auth and telemetry hosts.
-# Agent configuration (settings, hooks, commands, MCP definitions) is
-# read-only (I5); session transcripts and caches are writable agent state.
-# Validate against each Claude Code release: paths are version-dependent.
+# Claude Code (subscription / OAuth login). Egress: the Anthropic API and its
+# auth and telemetry hosts. Agent configuration (settings, hooks, commands,
+# MCP definitions) is read-only (I5); session transcripts and caches are
+# writable agent state. Validate against each Claude Code release: paths
+# are version-dependent.
+#
+# Credentials stay outside the sandbox (I1, M1): brokerd reads the OAuth
+# access token Claude Code keeps in the macOS keychain (or, on Linux, in
+# ~/.claude/.credentials.json, which the sandbox cannot read) and attaches it
+# on api.anthropic.com. The agent sees only a sentinel in
+# CLAUDE_CODE_OAUTH_TOKEN. API-key users: `--profile claude-code-apikey`.
 version = 1
 name = "claude-code"
 binaries = ["claude"]
@@ -9,6 +16,7 @@ binaries = ["claude"]
 [[egress]]
 id = "anthropic-api"
 host = "api.anthropic.com"
+credential = { kind = "static", id = "claude-oauth", ref = "keychain:Claude Code-credentials#claudeAiOauth.accessToken|file:~/.claude/.credentials.json#claudeAiOauth.accessToken", header = "authorization", scheme = "bearer", env = "CLAUDE_CODE_OAUTH_TOKEN" }
 
 [[egress]]
 id = "anthropic-telemetry"
@@ -53,6 +61,8 @@ state_write = [
     # which other Claude Code sessions share.
     "/tmp/claude-${uid}/${cwd_slug}",
 ]
-# Until M1 swaps credentials for sentinels, Claude Code reads its own OAuth
-# credentials from the login keychain on macOS (ADR-016).
-macos_keychain = true
+# No keychain access: the credential is brokered (ADR-020 ends the M0
+# keychain exception of ADR-016).
+
+[filesystem]
+deny_read = ["~/.claude/.credentials.json"]

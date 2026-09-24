@@ -4,13 +4,14 @@ aliases: ["ADR-006"]
 type: decision
 section: decisions
 tags: [sandbox/decisions, decision, topic/egress, topic/policy, topic/tls, control/egress, boundary/tb4, invariant/i4, invariant/i6, invariant/i7, invariant/i9, milestone/m1, milestone/m2]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
 updated: 2026-09-24
 summary: "Within an allowed domain, method and path rules are authorization: unmatched L7 requests are denied, rejecting Vercel's pass-without-credential semantics."
 related: ["[[Vercel Sandbox]]", "[[TLS Termination and Per-Session CA]]", "[[Cedar]]", "[[Example Cedar Policies]]", "[[broker.toml Human Policy Layer]]", "[[ADR-004 Selective TLS Termination with Per-Session CA]]", "[[Local Credential Proxies]]", "[[NVIDIA OpenShell]]", "[[OpenAI Codex CLI]]", "[[GitHub MCP Toxic Flow]]", "[[GitLost GitHub Agentic Workflows Leak]]", "[[Claude Cowork Allowed-Domain Abuse]]", "[[sandbox-runtime Empty Allowlist Bypass]]", "[[July 2026 Artifactory Egress Incident]]", "[[Policy Engine and Entity Builder]]", "[[GitHub API Adapter]]", "[[Git Smart-HTTP Adapter]]", "[[Policy Learning Loop]]", "[[SymCC CI Gates]]", "[[Conformance Probe Matrix]]", "[[L3 Real-Work Utility]]", "[[Fatigue-Resistant Approval Interfaces]]", "[[I4 Repo Policy Only Narrows]]", "[[I6 Single Canonicaliser]]", "[[I7 Reject Foreign Credentials]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[ADR-007 Cedar with a TOML Front-End]]", "[[ADR-011 Verified Policy Learning Loop]]", "[[M1 Secrets Outside]]", "[[Risk Register]]"]
 sources: ["https://vercel.com/docs/sandbox/concepts/firewall", "https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://thehackernews.com/2026/07/public-github-issue-could-trick-github.html", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://axeploit.com/blog/the-hugging-face-sandbox-escape-everyone-watched-the-proxy-nobody-watched-port-53", "https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://github.com/Infisical/agent-vault", "https://docs.nvidia.com/openshell/latest/tutorials/first-network-policy.html", "https://codex.danielvaughan.com/2026/03/31/codex-cli-network-security-requirements-toml/", "https://github.com/advisories/GHSA-9gqj-5w7c-vx47", "https://anthropic.com/engineering/claude-code-auto-mode"]
+code: ["code/crates/policy/src/l7.rs"]
 ---
 
 # ADR-006 Deny Unmatched L7 Requests
@@ -153,3 +154,7 @@ Testable form:
 - https://github.com/advisories/GHSA-9gqj-5w7c-vx47
 - https://anthropic.com/engineering/claude-code-auto-mode
 - Report: "L4 by default, L7 only where credentials or verbs matter" ("Vercel's matchers never block semantics are the anti-pattern to avoid"), conformance probe matrix, decision table row "Unmatched L7 requests". Research note 03 Q3 anti-patterns.
+
+## Build log
+
+- 2026-09-24: built: `policy::l7::authorize` denies any action no grant rule matches (`l7_no_rule_matched`); tested by `methods_paths_and_default_deny` and `cat2_unmatched_paths_and_methods_deny`.

@@ -4,7 +4,7 @@ aliases: ["npm adapter", "LLM API adapter", "Package Registry Adapter"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/egress, topic/credentials, topic/supply-chain, control/egress, control/cred-out, boundary/tb4, invariant/i1, invariant/i4, invariant/i7, milestone/m1, evidence/conflict]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "Package-registry adapters (npm, PyPI, crates, Go proxy read-only via G
 related: ["[[Claude Code Pre-Trust Config Execution]]", "[[Credential Injector and Issuers]]", "[[Core Trait Contracts]]", "[[broker.toml Human Policy Layer]]", "[[July 2026 Artifactory Egress Incident]]", "[[Audit Recorder and Event Schema]]", "[[M1 Secrets Outside]]", "[[Sentinel Swap Pattern]]", "[[TLS Termination and Per-Session CA]]", "[[Policy Engine and Entity Builder]]", "[[Broker Cedar Schema]]", "[[I1 No Secrets in the Sandbox]]", "[[I4 Repo Policy Only Narrows]]", "[[I7 Reject Foreign Credentials]]", "[[Claude Cowork Allowed-Domain Abuse]]", "[[Nx s1ngularity Supply-Chain Attack]]", "[[SymCC CI Gates]]", "[[Conformance Probe Matrix]]", "[[Hostname Canonicaliser]]", "[[Sandbox Launcher]]", "[[Open Questions and Unverified Claims]]", "[[ADR-006 Deny Unmatched L7 Requests]]", "[[Policy Learning Loop]]"]
 sources: ["https://nvd.nist.gov/vuln/detail/CVE-2026-21852", "https://nvd.nist.gov/vuln/detail/CVE-2025-59536", "https://axeploit.com/blog/the-hugging-face-sandbox-escape-everyone-watched-the-proxy-nobody-watched-port-53", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://vercel.com/docs/sandbox/concepts/firewall", "https://developers.openai.com/codex/cloud/internet-access", "https://www.wiz.io/blog/s1ngularity-supply-chain-attack"]
 milestone: M1
+code: ["code/crates/policy/src/l7.rs", "code/profiles/claude-code.toml", "code/profiles/claude-code-apikey.toml", "code/profiles/codex.toml", "code/profiles/gemini-cli.toml"]
 ---
 
 # Registry and LLM API Adapters
@@ -202,3 +203,8 @@ Classification is a host lookup plus method check (sub-microsecond) and one Ceda
 - https://developers.openai.com/codex/cloud/internet-access
 - https://www.wiz.io/blog/s1ngularity-supply-chain-attack
 - Report: "Protocol adapters are the moat" (package registries, LLM APIs, gRPC/WebSocket), `broker.toml` example, SymCC gates; research notes 03 Q4 (package registries, gRPC/WebSocket), 01 (remaining exfil channels), 05 §3.2 (pkg-registries, llm-apis).
+
+## Build log
+
+- 2026-09-24: built as policy, not separate adapters: `protocol = "registry"` (GET/HEAD unless `methods` says otherwise), method/path rules for any terminated host, and static credentials for LLM APIs. Built-in profiles broker the agents' keys: Claude Code OAuth token or API key, `OPENAI_API_KEY` (codex), `GEMINI_API_KEY` (gemini-cli) ([[ADR-020 Brokered Agent Credentials End the Keychain Exception]]). A key is attached only on its declared host, so a base-URL redirect (the CVE-2026-21852 class) reaches a host with no credential.
+- 2026-09-24: tests: `policy::l7::tests::methods_paths_and_default_deny` (registry publish denied), conformance `b1_i1_only_sentinels_inside_the_sandbox`, `b4_i7_planted_key_to_allowed_host_is_rejected`, `b5_sentinel_copied_off_host_is_useless`, `b6_llm_call_succeeds_with_injected_key`, `b7_injected_secret_is_never_reflected`, `cat2_unmatched_paths_and_methods_deny` (`tests/conformance/tests/m1_secrets.rs`); e2e `tests/e2e/fix_failing_test.sh claude` on macOS 26 (real `api.anthropic.com`, brokered OAuth token).

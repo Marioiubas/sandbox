@@ -13,6 +13,10 @@ libfuzzer-sys = "0.4"
 netguard = { path = "../../crates/netguard" }
 tls = { path = "../../crates/tls" }
 brokerd = { path = "../../crates/brokerd" }
+creds = { path = "../../crates/creds" }
+l7 = { path = "../../crates/l7" }
+policy = { path = "../../crates/policy" }
+http = "1"
 serde_json = "1"
 
 # Not part of the main workspace: built with `cargo +nightly fuzz`.
@@ -49,6 +53,48 @@ bench = false
 [[bin]]
 name = "jsonrpc"
 path = "fuzz_targets/jsonrpc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pktline"
+path = "fuzz_targets/pktline.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pack"
+path = "fuzz_targets/pack.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "delta"
+path = "fuzz_targets/delta.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter"
+path = "fuzz_targets/filter.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "remote_url"
+path = "fuzz_targets/remote_url.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "foreign"
+path = "fuzz_targets/foreign.rs"
 test = false
 doc = false
 bench = false

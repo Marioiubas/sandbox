@@ -37,8 +37,19 @@ pub fn render(events: &[StoredEvent]) -> String {
                 if d.addrs.is_empty() { String::new() } else { format!(" -> {}", d.addrs.join(", ")) }
             ));
         }
-        if !e.detail.is_empty() {
-            out.push_str(&format!("  detail    {}\n", serde_json::Value::Object(e.detail.clone())));
+        let mut detail = e.detail.clone();
+        // The adapter's verbs (one per action: `git.push <repo> <ref> force=..`).
+        if let Some(v) = detail.remove("verb").and_then(|v| v.as_str().map(str::to_string)) {
+            for part in v.split("; ") {
+                out.push_str(&format!("  verb      {part}\n"));
+            }
+        }
+        if let Some(c) = detail.get("credential_id").and_then(|v| v.as_str()) {
+            let origin = detail.get("credential_origin").and_then(|v| v.as_str()).unwrap_or("-");
+            out.push_str(&format!("  credential {c} ({origin}; the value is never logged)\n"));
+        }
+        if !detail.is_empty() {
+            out.push_str(&format!("  detail    {}\n", serde_json::Value::Object(detail)));
         }
         out.push_str(&format!("  at        {}  (audit seq {}, chain {}…)\n", e.ts, s.seq, &s.hash.to_hex()[..16]));
     }

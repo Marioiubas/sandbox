@@ -4,7 +4,7 @@ aliases: ["Foreign Credential Rejection"]
 type: concept
 section: architecture
 tags: [sandbox/architecture, concept, invariant/i7, topic/credentials, topic/tls, control/cred-out, control/egress, boundary/tb4, milestone/m1]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "The proxy strips every client-supplied Authorization, x-api-key, cooki
 related: ["[[Claude Cowork Allowed-Domain Abuse]]", "[[TLS Termination and Per-Session CA]]", "[[Credential Injector and Issuers]]", "[[Conformance Probe Matrix]]", "[[M1 Secrets Outside]]", "[[Policy Miner Safeguards]]", "[[I1 No Secrets in the Sandbox]]", "[[Sentinel Swap Pattern]]", "[[Registry and LLM API Adapters]]", "[[Audit Recorder and Event Schema]]", "[[Vercel Sandbox]]", "[[L1 Conformance Suite]]", "[[ADR-004 Selective TLS Termination with Per-Session CA]]"]
 sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://vercel.com/docs/sandbox/concepts/firewall"]
 milestone: M1
+code: ["code/crates/creds/src/foreign.rs"]
 ---
 
 # I7 Reject Foreign Credentials
@@ -96,3 +97,7 @@ This is the [[M1 Secrets Outside]] acceptance criterion "an attacker-planted API
 - https://www.anthropic.com/engineering/how-we-contain-claude
 - https://vercel.com/docs/sandbox/concepts/firewall
 - Report: invariant I7, L7 step 5, M1 acceptance, probe category 1, learning-loop mitigations; research note 03 Q3 inference.
+
+## Build log
+
+- 2026-09-24: built in `creds::foreign` (called before authorization on every terminated request). Canonical test `b4_i7_planted_key_to_allowed_host_is_rejected` (planted `x-api-key`, Bearer, Basic and cookie to the allowed host: 403 `foreign_credential`, nothing reaches the upstream, `broker why` explains); property tests `random_values_are_foreign`, `strip_removes_every_credential_header`; fuzz target `foreign`.

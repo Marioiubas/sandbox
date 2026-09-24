@@ -4,7 +4,7 @@ aliases: ["No Secrets Invariant"]
 type: concept
 section: architecture
 tags: [sandbox/architecture, concept, invariant/i1, topic/credentials, control/cred-out, boundary/tb3, boundary/tb4, milestone/m1]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
 updated: 2026-09-24
@@ -117,3 +117,4 @@ This is the [[M1 Secrets Outside]] acceptance criterion ("automated scan finds o
 ## Build log
 
 - 2026-09-24: M0 partial test `i1_host_secrets_in_the_client_environment_never_reach_the_sandbox`: canary values in `GITHUB_TOKEN`, `AWS_SECRET_ACCESS_KEY`, `ANTHROPIC_API_KEY` and an unlisted variable are absent from env, argv and every visible `/proc/*/environ|cmdline` inside the sandbox (probe `env-scan`). The environment is an allowlist; secret-looking names are refused even in profiles. The full canary scan, sentinel swap and response filter are M1. Weakened on macOS for `claude-code` sessions in M0 by [[ADR-016 macOS M0 Compatibility Exceptions]] (keychain readable) until M1.
+- 2026-09-24: canonical M1 test `b1_i1_only_sentinels_inside_the_sandbox`: a canary key is used through the broker (the upstream receives it), then `conformance-probe secret-scan` walks env, `/proc/*/environ|cmdline` (Linux) and files under `$HOME` (depth 3), `$TMPDIR`, the repository and the broker config dir: only the sentinel is found; the audit database bytes never contain the canary. Also `b7_injected_secret_is_never_reflected` (response filter) and the e2e check that `CLAUDE_CODE_OAUTH_TOKEN` is a sentinel and the keychain item and credentials file are unreadable. The M0 weakening (ADR-016 keychain exception) is closed by [[ADR-020 Brokered Agent Credentials End the Keychain Exception]].

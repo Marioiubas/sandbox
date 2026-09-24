@@ -30,9 +30,6 @@ pub struct FsInputs {
     pub broker_dirs: Vec<PathBuf>,
     /// Directory holding the broker binaries: never writable.
     pub install_dir: Option<PathBuf>,
-    /// macOS profiles whose agent keeps its own credentials in the login
-    /// keychain until M1 (ADR-016): the keychain files stay readable.
-    pub allow_keychain: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +86,10 @@ pub const DEFAULT_DENY_READ: &[&str] = &[
     ".config/hub",
     ".password-store",
     ".terraform.d/credentials.tfrc.json",
+    // Coding agents' own login tokens (M1: brokered, never read in-sandbox).
+    ".claude/.credentials.json",
+    ".codex/auth.json",
+    ".gemini/oauth_creds.json",
     ".local/share/keyrings",
     ".mozilla",
     ".config/google-chrome",
@@ -234,11 +235,7 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         broker.insert(inst);
     }
 
-    let mut deny_read: BTreeSet<PathBuf> = DEFAULT_DENY_READ
-        .iter()
-        .filter(|r| !(i.allow_keychain && **r == "Library/Keychains"))
-        .map(|r| home.join(r))
-        .collect();
+    let mut deny_read: BTreeSet<PathBuf> = DEFAULT_DENY_READ.iter().map(|r| home.join(r)).collect();
     for d in &i.extra_deny_read {
         deny_read.insert(resolve(d)?);
     }

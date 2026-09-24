@@ -1,5 +1,6 @@
 [package]
 name = "l7"
+description = "L7: request head checks, protocol adapters (git smart-HTTP, HTTP rules), pkt-line and pack parsers, response filter"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,6 +8,21 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+audit.workspace = true
+bytes.workspace = true
+flate2.workspace = true
+hex.workspace = true
+http.workspace = true
+http-body.workspace = true
+netguard.workspace = true
+policy.workspace = true
+sha1.workspace = true
+
+[dev-dependencies]
+http-body-util.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

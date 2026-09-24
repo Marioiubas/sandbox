@@ -4152,5 +4152,43 @@
     "aliases": [
       "ADR-019"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-020 Brokered Agent Credentials End the Keychain Exception.md",
+    "title": "ADR-020 Brokered Agent Credentials End the Keychain Exception",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Coding agents' own credentials are held by brokerd and attached at egress behind sentinels (Claude Code OAuth token, API keys); agent token files are deny-read for every session; the macOS keychain switch of ADR-016 is removed.",
+    "links_to": [
+      "ADR-016 macOS M0 Compatibility Exceptions",
+      "I1 No Secrets in the Sandbox",
+      "Credential Injector and Issuers",
+      "Sentinel Swap Pattern",
+      "M1 Secrets Outside",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M1 build (2026-09-24) from the e2e run and keychain-item inspection recorded in the Build Log.",
+    "aliases": [
+      "ADR-020"
+    ]
+  },
+  {
+    "file": "95-decisions/ADR-021 L7 Path Choices for M1.md",
+    "title": "ADR-021 L7 Path Choices for M1",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "M1's L7 path: per-session CA only, HTTP/1.1 via hyper (h2 deferred), no broker-followed redirects, cookies rejected on terminated hosts, rule-driven credential attachment, buffered push inspection, fail-closed force detection, explicit head limit.",
+    "links_to": [
+      "TLS Termination and Per-Session CA",
+      "Git Smart-HTTP Adapter",
+      "Credential Injector and Issuers",
+      "ADR-006 Deny Unmatched L7 Requests",
+      "M1 Secrets Outside",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M1 build (2026-09-24) from measurements and tests recorded in the Build Log.",
+    "aliases": [
+      "ADR-021"
+    ]
   }
 ]

@@ -160,3 +160,7 @@ plus a `Credential` entity with `allowed_hosts = ["github.com"]` and `risk = "hi
 - [NVD CVE-2026-21852](https://nvd.nist.gov/vuln/detail/CVE-2026-21852); [GHSA-xrxf-jgv3-qmrm](https://github.com/advisories/GHSA-xrxf-jgv3-qmrm)
 - [Vercel firewall docs](https://vercel.com/docs/sandbox/concepts/firewall)
 - [GitHub REST: installation tokens](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)
+
+## Build log
+
+- 2026-09-24: M1 keys implemented in `policy::config`/`policy::l7`: `protocol` (`http`, `git`, `registry`), `methods`, `paths` (`*` within a segment, `**` any segments), `allow = { fetch, push = { repo, refs, force } }`, `credential = { kind = static|github_app, … }`, `passthrough`, and user/org-only `[issuers.github_app.<name>]` and `[tls] extra_roots`. Absent `methods`/`paths` mean any; empty lists mean none; `${repo_remote}` unresolved grants nothing. Reference: `code/docs/policy-reference.md`.

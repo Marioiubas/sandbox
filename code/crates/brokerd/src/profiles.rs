@@ -6,6 +6,7 @@ use policy::ProfileFile;
 pub const BUILTIN: &[(&str, &str)] = &[
     ("default", include_str!("../../../profiles/default.toml")),
     ("claude-code", include_str!("../../../profiles/claude-code.toml")),
+    ("claude-code-apikey", include_str!("../../../profiles/claude-code-apikey.toml")),
     ("codex", include_str!("../../../profiles/codex.toml")),
     ("gemini-cli", include_str!("../../../profiles/gemini-cli.toml")),
     ("cursor-agent", include_str!("../../../profiles/cursor-agent.toml")),

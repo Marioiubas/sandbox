@@ -1,7 +1,8 @@
 //! The `ctl.sock` server: accept, check the peer's UID, dispatch.
 
 use crate::proto::{self, Request, StartParams, codes};
-use crate::session::{Daemon, exited_from};
+use crate::session::Daemon;
+use crate::session_util::exited_from;
 use serde_json::{Value, json};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::Arc;

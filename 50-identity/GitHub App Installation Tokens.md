@@ -111,3 +111,7 @@ The policy miner derives the `permissions` object from the operations actually o
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-24: the issuer always sends both `repositories` and `permissions` and rejects responses whose permissions exceed the request (except the implicit `metadata: read`), whose `repository_selection` is `all`, or that list an unrequested repository (`responses_beyond_the_request_are_refused`). Branch scope is still enforced only by the [[Git Smart-HTTP Adapter]].

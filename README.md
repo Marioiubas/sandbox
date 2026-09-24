@@ -24,10 +24,13 @@ authority the task legitimately holds. See
 
 ## Status
 
-Milestone **M0 (contained run)** is implemented and tested; see
-[`00-meta/Build Log.md`](00-meta/Build%20Log.md) for exactly what is and is
-not verified yet. Credentials are not brokered until M1: in M0 agents still
-use their own logins.
+Milestones **M0 (contained run)** and **M1 (secrets outside)** are
+implemented and tested; see [`00-meta/Build Log.md`](00-meta/Build%20Log.md)
+for exactly what is and is not verified yet. Since M1 the sandbox holds only
+per-session sentinels: the broker terminates TLS where rules or credentials
+apply, attaches real credentials after authorization (including Claude
+Code's own login), rejects credentials it did not issue, and scopes git
+pushes per repository, branch and force.
 
 ## Quick start
 
@@ -54,5 +57,9 @@ cargo test --workspace
 
 The conformance suite runs deterministic probes inside real sessions
 (name resolution, IP literals, alternate protocols, proxy bypass,
-filesystem) plus invariant tests, and replays the public bypass corpus in
-`code/tests/bypass-corpus/` through every ingress mode.
+filesystem, credential exposure, planted keys, redirects, Host/SNI
+mismatch, HTTP framing, git push scoping against a fake GitHub) plus
+invariant tests, and replays the public bypass corpus in
+`code/tests/bypass-corpus/` through every ingress mode. The end-to-end
+check `code/tests/e2e/fix_failing_test.sh claude` needs a logged-in Claude
+Code.

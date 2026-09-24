@@ -62,10 +62,6 @@ pub struct SandboxSpec {
     pub session_dir: PathBuf,
     /// Absolute path of `broker-sandbox-shim`; must be outside writable mounts (I5).
     pub shim: PathBuf,
-    /// macOS only: allow the agent to reach the login keychain via
-    /// securityd. Set only by built-in profiles whose agent keeps its own
-    /// credentials there until M1 moves credentials out (see ADR-016).
-    pub macos_keychain: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

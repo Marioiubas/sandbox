@@ -4,7 +4,7 @@ aliases: ["L4 Fast Path", "L7 Path", "Per-Session CA", "tls crate", "l7 crate", 
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/tls, topic/egress, topic/credentials, control/egress, control/cred-out, boundary/tb3, boundary/tb4, invariant/i1, invariant/i6, invariant/i7, milestone/m1, evidence/conflict]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "Per-connection path choice: the L4 fast path splices bytes after an SN
 related: ["[[ADR-004 Selective TLS Termination with Per-Session CA]]", "[[ADR-006 Deny Unmatched L7 Requests]]", "[[I7 Reject Foreign Credentials]]", "[[Credential Injector and Issuers]]", "[[Policy Engine and Entity Builder]]", "[[Netguard Ingress]]", "[[Vercel Sandbox]]", "[[Risk Register]]", "[[M1 Secrets Outside]]", "[[Request and Session Lifecycle]]", "[[Hostname Canonicaliser]]", "[[I1 No Secrets in the Sandbox]]", "[[I6 Single Canonicaliser]]", "[[Core Trait Contracts]]", "[[Git Smart-HTTP Adapter]]", "[[GitHub API Adapter]]", "[[Registry and LLM API Adapters]]", "[[MCP Guard]]", "[[Sandbox Launcher]]", "[[Audit Recorder and Event Schema]]", "[[Conformance Probe Matrix]]", "[[L4 Product Metrics]]", "[[Cloud Sandbox Runtimes]]", "[[Docker Sandboxes]]", "[[Sentinel Swap Pattern]]", "[[Open Questions and Unverified Claims]]", "[[ADR-015 Rust for the Endpoint and Custom Proxy]]"]
 sources: ["https://vercel.com/docs/sandbox/concepts/firewall", "https://blog.cloudflare.com/sandbox-auth/", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://docs.e2b.dev/network/internet-access.md", "https://dev.to/skwuwu/controlling-ai-agent-outbound-traffic-at-the-kernel-level14ms-overhead-2p8o", "https://github.com/omjadas/hudsucker", "https://github.com/craigbalding/safeyolo/issues/620", "https://docs.docker.com/ai/sandboxes/network-policies/", "https://www.memorysafety.org/blog/rustls-performance/", "https://arxiv.org/abs/2405.17737"]
 milestone: M1
+code: ["code/crates/tls/src/session_ca.rs", "code/crates/tls/src/trust_bundle.rs", "code/crates/tls/src/upstream.rs", "code/crates/brokerd/src/l7_pipeline.rs", "code/crates/brokerd/src/upstream.rs", "code/crates/brokerd/src/rewind.rs", "code/crates/l7/src/head.rs", "code/crates/l7/src/filter.rs"]
 ---
 
 # TLS Termination and Per-Session CA
@@ -194,3 +195,13 @@ Warm connection added latency p50 ≤5 ms and p95 ≤25 ms; new terminated conne
 - https://www.memorysafety.org/blog/rustls-performance/
 - https://arxiv.org/abs/2405.17737
 - Report: "L4 by default, L7 only where credentials or verbs matter", "Implementation choice", deployment modes, risk "TLS breakage"; research notes 03 Q4 and 05 sections 3.2 and 3.6.
+
+## Implementation notes
+
+- 2026-09-24: hyper's `max_buf_size` did not bound a 300 KB request head on a TLS stream (measured: the request was forwarded); the explicit `l7::head::MAX_HEAD_BYTES` check closes it. Ambiguous CL+TE requests: hyper applies chunked, drops CL and closes the connection after the response, so a smuggled second request is never processed (measured, `cat8_ambiguous_framing_never_desyncs`).
+
+## Build log
+
+- 2026-09-24: built. `tls::session_ca` (per-session CA with `rcgen` 0.14/ring, key only in brokerd memory, 48 h CA / 24 h leaves, per-host leaf cache, ALPN `http/1.1`), `tls::trust_bundle` (session CA + `[tls] extra_roots` + Mozilla roots written to `$TMPDIR/broker-ca/`, env vars `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`, `PIP_CERT`, npm/cargo/AWS/Deno, `NODE_EXTRA_CA_CERTS`), `tls::upstream` (verified rustls client, Mozilla roots + extra roots). The eight-step pipeline is `brokerd::l7_pipeline` (hyper 1.11 server and client, re-serialised requests). Path choice in `policy::EgressPolicy::path_choice`.
+- 2026-09-24: tests: `session_ca::tests::{leaf_verifies_only_for_its_host, another_sessions_ca_is_not_trusted}`, `trust_bundle::tests::pem_round_trip_and_bundle`, `l7::head::tests::*` (fronting, paths, upgrades, head limits), `l7::filter::tests::*` (split secrets, gzip bodies, chunking property); conformance `b1_i1_only_sentinels_inside_the_sandbox`, `b4_i7_planted_key_to_allowed_host_is_rejected`, `b5_sentinel_copied_off_host_is_useless`, `b6_llm_call_succeeds_with_injected_key`, `b7_injected_secret_is_never_reflected`, `cat2_unmatched_paths_and_methods_deny` (`tests/conformance/tests/m1_secrets.rs`); `cat6_redirects_are_reevaluated_and_drop_credentials`, `cat7_host_sni_connect_must_agree`, `cat8_ambiguous_framing_never_desyncs` (`tests/conformance/tests/m1_redirect_fronting.rs`). Verified compatible inside the sandbox: curl 8.7.1 (LibreSSL), Apple git 2.50.1, Claude Code (Node) on macOS 26.
+- 2026-09-24: deviations recorded in [[ADR-021 L7 Path Choices for M1]]: HTTP/1.1 only (h2 deferred), no broker-followed redirects, cookies rejected and `Set-Cookie` stripped, per-session CA only (the conflict callout is resolved in favour of the per-session CA), explicit 64 KiB head limit, parser refusals logged as `malformed_request`.

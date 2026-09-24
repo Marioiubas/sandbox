@@ -88,3 +88,7 @@ Inside the sandbox, every secret is replaced by a per-session sentinel value; th
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-24: implemented in `creds::sentinel` and the L7 pipeline: per-session sentinels bound to the credential's hosts; a sentinel on a bound host is replaced by the broker's credential, on any other host it is `sentinel_wrong_host`; body swap is opt-in per credential (`swap_body`). Off-host uselessness tested by `b5_sentinel_copied_off_host_is_useless`.
