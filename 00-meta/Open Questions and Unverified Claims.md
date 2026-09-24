@@ -23,7 +23,7 @@ Source keys: **R** = the report; **N01-N05** = research notes (01 isolation, 02 
 
 ## Build-blocking technical unknowns
 
-- [ ] ⚙ Landlock ABI 10 (UDP) and ABI 11 are documented on kernel.org but the UDP series was still at v5 in June 2026; assume neither is in a released stable kernel; probe the ABI at runtime. → [[Landlock]] (R, N01 Q3) — 2026-09-24: the runtime probe is built; measured ABI 6 on Linux 6.12. ABI 10/11 still unverified; nothing depends on them ([[ADR-017 Landlock Filesystem Layer Required]]).
+- [ ] ⚙ Landlock ABI 10 (UDP) and ABI 11 are documented on kernel.org but the UDP series was still at v5 in June 2026; assume neither is in a released stable kernel; probe the ABI at runtime. → [[Landlock]] (R, N01 Q3) — 2026-09-24: the runtime probe is built; measured ABI 6 on Linux 6.12 (Docker Desktop), ABI 4 on GitHub's Ubuntu 22.04 runner and ABI 7 on its Ubuntu 24.04 runner. ABI 10/11 still unverified; nothing depends on them ([[ADR-017 Landlock Filesystem Layer Required]]).
 - [ ] ⚙ Kernel version that enables unprivileged overlayfs inside a user namespace (believed ≥5.11, background knowledge) and APFS `clonefile` behaviour for the macOS clone mode. → [[Filesystem Control and Rollback]] (R, N01 Q6)
 - [ ] ⚙ Cedar `datetime`/`duration` availability across SDKs; the schema models time as epoch seconds until verified. The schema sketch has **not been compiled**. → [[Broker Cedar Schema]] (R, N03 Q5)
 - [ ] ⚙ Exact OCSF class names and IDs (e.g. HTTP Activity 4002, API Activity 6003 are unverified) and the current OpenTelemetry GenAI/agent semantic conventions. → [[Audit Recorder and Event Schema]] (R, N03 Q5, N05 section 3)

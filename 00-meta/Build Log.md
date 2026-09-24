@@ -39,7 +39,7 @@ Copy this block for each session:
 
 | Milestone | Status | Date built | Evidence (test run, commit) |
 |---|---|---|---|
-| [[M0 Contained Run]] | in progress: implemented; A1 verified on macOS 26 with Claude Code only | | 109 tests green on macOS 26 and Linux 6.12 (2026-09-24) |
+| [[M0 Contained Run]] | in progress: implemented; A1 verified on macOS 26 with Claude Code only | | CI run 35999705456 (commit 9a63853): 109 tests green on macOS 15/26 and Ubuntu 22.04/24.04 runners |
 | [[M1 Secrets Outside]] | not started |  |  |
 | [[M2 Policy Audit and Learn]] | not started |  |  |
 | [[M3 CI Identity and MCP]] | not started |  |  |
@@ -71,3 +71,11 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **ADRs created:** [[ADR-016 macOS M0 Compatibility Exceptions]], [[ADR-017 Landlock Filesystem Layer Required]], [[ADR-018 seccomp Filter Shape for M0]], [[ADR-019 Mandatory Deny-Write List Additions]].
 - **Open questions:** Landlock probe built (ABI 6 measured; ABI 10/11 still open); M0 crate pins recorded; macOS proxy-ignoring clients confirmed to fail closed. The I2 Landlock-degradation question is settled by ADR-017.
 - **Next step:** get CI green on macOS 15/26 and Ubuntu 22.04/24.04; run the A1 e2e for Codex and on the Linux and macOS 15 cells; then mark M0 `built` and start [[M1 Secrets Outside]].
+
+### 2026-09-24: M0 CI matrix green
+
+- **Milestone:** [[M0 Contained Run]] (in progress).
+- **Built:** CI fixes only: a Linux-only clippy lint in `brokerd`, and the AppArmor step now installs `packaging/apparmor/broker-bwrap` only when the userns gate is on (GitHub's Ubuntu 22.04 runner has AppArmor 3.x without `abi/4.0`).
+- **Tests:** CI run 35999705456 (commit 9a63853): lint, fuzz smoke and 109 tests green on macOS 15, macOS 26, Ubuntu 22.04 (Landlock ABI 4) and Ubuntu 24.04 (Landlock ABI 7). The first run (35998906834) had already passed the tests on macOS 15/26 and Ubuntu 24.04.
+- **Notes updated:** [[M0 Contained Run]], [[Landlock]], [[bubblewrap]], [[Open Questions and Unverified Claims]].
+- **Next step:** A1 for Codex and for Claude Code on macOS 15 and Ubuntu (agent CLIs and credentials are not available on the runners); then mark M0 `built` and start [[M1 Secrets Outside]].

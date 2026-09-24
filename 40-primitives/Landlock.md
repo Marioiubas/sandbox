@@ -113,3 +113,4 @@ See `sources:` in the frontmatter; every URL is cited inline above.
 ## Build log
 
 - 2026-09-24: applied by the shim inside bwrap with the `landlock` 0.4.7 crate in best-effort mode; filesystem layer required and TCP rules optional below ABI 4 ([[ADR-017 Landlock Filesystem Layer Required]]).
+- 2026-09-24: GitHub-hosted runners (x86_64): Ubuntu 22.04 kernel reports ABI 4, Ubuntu 24.04 reports ABI 7; both enforce the ruleset fully, and the TCP rule is active on both.

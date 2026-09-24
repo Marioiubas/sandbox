@@ -122,3 +122,4 @@ See `sources:` in the frontmatter; every URL is cited inline above.
 ## Build log
 
 - 2026-09-24: the `linux-native` backend is built on bwrap ([[Sandbox Launcher]]); recipe as proposed plus `--unshare-ipc --unshare-uts --unshare-cgroup-try --cap-drop ALL`, a private tmpfs `/tmp`, a masked `$XDG_RUNTIME_DIR`, and `.git` bound onto itself. The installer AppArmor profile is `code/packaging/apparmor/broker-bwrap` (grants `userns` to `/usr/bin/bwrap` only).
+- 2026-09-24: GitHub's Ubuntu 22.04 runner exposes `kernel.apparmor_restrict_unprivileged_userns` but with value 0; its AppArmor 3.x has no `abi/4.0`, so the broker profile cannot load there (and is not needed). Ubuntu 24.04 runners work with the profile. CI installs the profile only when the gate is 1.
