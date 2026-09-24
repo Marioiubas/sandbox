@@ -8,6 +8,7 @@
 //! (Policy Engine and Entity Builder); until then repository `.broker/`
 //! files are never loaded (I4, I5).
 
+pub mod cedar;
 pub mod config;
 pub mod doh;
 pub mod egress;

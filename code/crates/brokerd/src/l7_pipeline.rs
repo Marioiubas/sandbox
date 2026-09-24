@@ -353,6 +353,10 @@ impl Conn {
 
         // Write-ahead audit of the allow (I9): no row, no request.
         let mut ev = self.base_event(EventKind::RequestDecision, &rid, &verbs).allow(dec.policy_ids.clone());
+        if let Some(w) = dec.would_deny {
+            // Record mode: the enforce-mode decision, for the learner.
+            ev = ev.audit_mode().detail("would_deny", w.as_str());
+        }
         if let Some((i, reused, _, _)) = &issued {
             ev = ev
                 .detail("credential_id", i.credential_id.as_str())

@@ -58,6 +58,13 @@ pub enum Action {
 }
 
 impl Action {
+    pub fn method(&self) -> Option<&str> {
+        match self {
+            Action::Http { method, .. } => Some(method),
+            _ => None,
+        }
+    }
+
     /// The audit verb, e.g. `git.push github.com/acme/web refs/heads/main force=false`.
     pub fn verb(&self) -> String {
         match self {
@@ -228,6 +235,11 @@ pub struct AllowedBinding {
 }
 
 impl AllowedBinding {
+    /// Only the policy crate constructs bindings (after a Cedar allow).
+    pub(crate) fn new(cred: Arc<CredentialDef>, grant_id: &str) -> AllowedBinding {
+        AllowedBinding { cred, grant_id: grant_id.to_string() }
+    }
+
     pub fn credential(&self) -> &CredentialDef {
         &self.cred
     }
@@ -237,10 +249,10 @@ impl AllowedBinding {
 }
 
 #[derive(Clone, Debug)]
-struct PushRuleC {
-    repo: RepoPattern,
-    refs: Vec<RefPattern>,
-    force: bool,
+pub struct PushRuleC {
+    pub repo: RepoPattern,
+    pub refs: Vec<RefPattern>,
+    pub force: bool,
 }
 
 /// The L7 part of one grant.
@@ -259,6 +271,8 @@ pub struct L7Rules {
 pub struct CompileEnv {
     pub repo_remote: Option<RepoId>,
     pub github_app_issuers: BTreeSet<String>,
+    /// The session's principal (Task) and mode.
+    pub session: crate::cedar::SessionInfo,
 }
 
 fn env_name_ok(v: &str) -> bool {
@@ -494,6 +508,21 @@ fn rank(r: Reason) -> u8 {
 }
 
 impl L7Rules {
+    pub fn methods(&self) -> Option<&BTreeSet<String>> {
+        self.methods.as_ref()
+    }
+    pub fn paths(&self) -> Option<&[PathPattern]> {
+        self.paths.as_deref()
+    }
+    pub fn fetch(&self) -> &[RepoPattern] {
+        &self.fetch
+    }
+    pub fn push_rules(&self) -> &[PushRuleC] {
+        &self.push
+    }
+
+    /// The reference (explainer) evaluation of one action against this
+    /// grant: Cedar decides; this names the most specific unmet condition.
     pub fn allows(&self, a: &Action) -> Result<(), Reason> {
         match (a, self.protocol) {
             (Action::Http { method, path }, Protocol::Http | Protocol::Registry) => {
@@ -541,16 +570,17 @@ pub struct L7Decision {
     pub binding: Option<AllowedBinding>,
     /// Per action: verb and result.
     pub actions: Vec<(String, Result<(), Reason>)>,
+    /// Record mode: the enforce-mode decision would have denied, and why.
+    pub would_deny: Option<Reason>,
 }
 
-/// Authorize `actions` against the grants that admitted the connection.
-/// Each action must be allowed by some grant (a grant without L7 rules
-/// allows everything on its host); the credential of a grant is attached
-/// only if that grant allowed every action.
-pub fn authorize<'a>(
-    grants: impl IntoIterator<Item = (&'a str, Option<&'a L7Rules>)>,
-    actions: &[Action],
-) -> L7Decision {
+/// The reference evaluation (M1 semantics) of `actions` against the grants
+/// that admitted the connection. Since M2 Cedar makes the decision; this
+/// explains denies with a specific reason and is the differential oracle in
+/// tests. Each action must be allowed by some grant (a grant without L7
+/// rules allows everything on its host); a grant's credential applies only
+/// if that grant allowed every action.
+pub fn explain<'a>(grants: impl IntoIterator<Item = (&'a str, Option<&'a L7Rules>)>, actions: &[Action]) -> L7Decision {
     let grants: Vec<(&str, Option<&L7Rules>)> = grants.into_iter().collect();
     let consulted: Vec<String> = grants.iter().map(|(id, _)| id.to_string()).collect();
     if actions.is_empty() {
@@ -560,6 +590,7 @@ pub fn authorize<'a>(
             policy_ids: consulted,
             binding: None,
             actions: vec![],
+            would_deny: None,
         };
     }
     let mut per_action = Vec::new();
@@ -588,7 +619,13 @@ pub fn authorize<'a>(
         per_action.push((a.verb(), r));
     }
     if let Err(reason) = overall {
-        return L7Decision { result: Err(reason), policy_ids: consulted, binding: None, actions: per_action };
+        return L7Decision {
+            result: Err(reason),
+            policy_ids: consulted,
+            binding: None,
+            actions: per_action,
+            would_deny: None,
+        };
     }
     // Grants that allowed every action.
     let full: Vec<&(&str, Option<&L7Rules>)> = grants
@@ -600,14 +637,21 @@ pub fn authorize<'a>(
     creds.dedup_by(|a, b| a.1.id == b.1.id);
     let policy_ids: Vec<String> = allowing.iter().map(|s| s.to_string()).collect();
     match creds.len() {
-        0 => L7Decision { result: Ok(()), policy_ids, binding: None, actions: per_action },
+        0 => L7Decision { result: Ok(()), policy_ids, binding: None, actions: per_action, would_deny: None },
         1 => L7Decision {
             result: Ok(()),
             policy_ids,
             binding: Some(AllowedBinding { cred: creds[0].1.clone(), grant_id: creds[0].0.to_string() }),
             actions: per_action,
+            would_deny: None,
         },
-        _ => L7Decision { result: Err(Reason::AmbiguousCredential), policy_ids, binding: None, actions: per_action },
+        _ => L7Decision {
+            result: Err(Reason::AmbiguousCredential),
+            policy_ids,
+            binding: None,
+            actions: per_action,
+            would_deny: None,
+        },
     }
 }
 

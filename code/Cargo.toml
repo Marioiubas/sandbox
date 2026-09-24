@@ -67,6 +67,9 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["ring",
 webpki-root-certs = "1"
 webpki-roots = "1"
 
+# M2: Cedar (pinned 2026-09-24 from crates.io)
+cedar-policy = "4.13.0"
+
 # dev
 proptest = "1.11.0"
 tempfile = "3.27.0"

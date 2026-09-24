@@ -8,6 +8,7 @@ fn env() -> CompileEnv {
     CompileEnv {
         repo_remote: RepoId::parse("github.com/acme/web"),
         github_app_issuers: ["acme".to_string()].into_iter().collect(),
+        ..Default::default()
     }
 }
 
@@ -160,7 +161,11 @@ credential = { kind = "static", ref = "env:B" }
 #[test]
 fn unresolved_repo_remote_grants_nothing() {
     let p = parse_policy_str(GIT).unwrap();
-    let env = CompileEnv { repo_remote: None, github_app_issuers: ["acme".to_string()].into_iter().collect() };
+    let env = CompileEnv {
+        repo_remote: None,
+        github_app_issuers: ["acme".to_string()].into_iter().collect(),
+        ..Default::default()
+    };
     let pol = EgressPolicy::compile_with([("user", p.egress.as_slice())], &env).unwrap();
     let adm = pol.admit_host(&canon_host(b"github.com").unwrap(), 443).unwrap();
     let d = pol.authorize_l7(&adm, &[push("github.com/acme/web", "refs/heads/agent/x", false)]);

@@ -4,13 +4,14 @@ aliases: ["Cedar Schema", "Grants as Entities"]
 type: interface
 section: policy
 tags: [sandbox/policy, interface, topic/policy, topic/credentials, invariant/i4, milestone/m2, evidence/unverified]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
 summary: "The Broker namespace schema sketch (Trifecta and Session types; Group, User, Agent, Task, Host, PathPrefix, Repo, Credential, McpServer, Dir, File; HttpCtx, GitCtx, CredCtx, McpCtx; http.*, git.*, credential.use, mcp.call_tool, fs.* actions), with grants as entities and time as epoch seconds."
 related: ["[[Cedar]]", "[[Example Cedar Policies]]", "[[Trifecta Session Labels]]", "[[Policy Engine and Entity Builder]]", "[[broker.toml Human Policy Layer]]", "[[GitHub API Adapter]]", "[[Git Smart-HTTP Adapter]]", "[[MCP Guard]]", "[[Open Questions and Unverified Claims]]", "[[DRIFT]]", "[[Internal Grant JWT]]", "[[Hostname Canonicaliser]]", "[[SymCC CI Gates]]", "[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[Control Plane and Policy Bundles]]", "[[Provenance-Aware Cedar]]", "[[Sandbox Launcher]]", "[[Credential Injector and Issuers]]", "[[Registry and LLM API Adapters]]"]
 sources: ["https://docs.rs/cedar-policy-symcc", "https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://arxiv.org/html/2506.12104v2", "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy-core-concepts.html", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html"]
+code: ["code/crates/policy/src/cedar/schema.cedarschema"]
 ---
 
 # Broker Cedar Schema
@@ -183,3 +184,12 @@ The paper audit's inference that argument provenance, reader sets and trifecta s
 - [GitHub REST: installation tokens](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)
 - [AWS STS AssumeRole](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html)
 - [DRIFT](https://arxiv.org/html/2506.12104v2)
+
+## Implementation notes
+
+- 2026-09-24: `Host in [Domain, HostCategory]` (+ `ip_literal`), `Domain in [Domain]`, `HostCategory`; `Repo in [Host]` with `authority`/`owner`/`full_name`/`visibility`; no `PathPrefix`: HTTP actions target `Host` and carry `Path = {n, s0..s15}` plus `path_str`; `net.resolve`/`net.connect` with `ConnCtx {port, addr_classes}`; `git.advertise`, `http.OTHER`, `pkg.publish`, `pr.create`, `pr.merge`, `issue.comment`, `contents.write`; `port` in `HttpCtx`/`GitCtx`; `Credential.allowed_domains`, `CredCtx.dest_domains`/`port`/`verb`/`path_str`. Rationale in [[ADR-022 Cedar Schema and Engine as Built]].
+- 2026-09-24: `datetime` is a **default feature of the Rust SDK 4.13** (`cedar-policy` features: `ipaddr`, `decimal`, `datetime`); time stays epoch seconds until SymCC support for it is verified.
+
+## Build log
+
+- 2026-09-24: compiled and validated (strict) with `cedar-policy` 4.13.0 as `code/crates/policy/src/cedar/schema.cedarschema`; the default and ceiling policies and every compiler-emitted policy shape validate against it (`schema_and_default_policies_validate`). Changes from the sketch are listed in [[ADR-022 Cedar Schema and Engine as Built]].

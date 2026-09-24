@@ -194,6 +194,7 @@ mod tests {
         let env = CompileEnv {
             repo_remote: RepoId::parse("github.com/acme/web"),
             github_app_issuers: ["acme".to_string()].into_iter().collect(),
+            ..Default::default()
         };
         EgressPolicy::compile_with([("user", p.egress.as_slice())], &env).unwrap()
     }

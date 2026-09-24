@@ -56,6 +56,9 @@ impl PathPattern {
             if seg.contains("**") && seg != "**" {
                 return Err(format!("path pattern {s:?}: ** must be a whole segment"));
             }
+            if seg == "**" && i + 1 != segs.len() {
+                return Err(format!("path pattern {s:?}: ** may only be the last segment"));
+            }
             if seg.is_empty() && i + 1 != segs.len() {
                 return Err(format!("path pattern {s:?} contains an empty segment"));
             }
@@ -73,6 +76,36 @@ impl PathPattern {
     pub fn as_str(&self) -> &str {
         &self.text
     }
+
+    pub fn segments(&self) -> &[String] {
+        &self.segs
+    }
+}
+
+/// Cedar `like` semantics: `*` matches any run of bytes, `/` included.
+pub fn like_glob(pat: &str, s: &str) -> bool {
+    let (p, s) = (pat.as_bytes(), s.as_bytes());
+    let (mut pi, mut si) = (0usize, 0usize);
+    let mut star: Option<(usize, usize)> = None;
+    while si < s.len() {
+        if pi < p.len() && p[pi] == b'*' {
+            star = Some((pi, si));
+            pi += 1;
+        } else if pi < p.len() && p[pi] == s[si] {
+            pi += 1;
+            si += 1;
+        } else if let Some((sp, ss)) = star {
+            pi = sp + 1;
+            si = ss + 1;
+            star = Some((sp, ss + 1));
+        } else {
+            return false;
+        }
+    }
+    while pi < p.len() && p[pi] == b'*' {
+        pi += 1;
+    }
+    pi == p.len()
 }
 
 fn match_segs(p: &[String], s: &[&str]) -> bool {
@@ -118,7 +151,9 @@ mod tests {
         let p = PathPattern::parse("/**").unwrap();
         assert!(p.matches("/"));
         assert!(p.matches("/anything/at/all"));
-        for bad in ["v1", "/a/../b", "/a/**x", "/a//b", "/a?x", "/a%2f", "/a b"] {
+        assert!(like_glob("refs/heads/agent/*", "refs/heads/agent/a/b"));
+        assert!(!like_glob("refs/heads/agent/*", "refs/heads/main"));
+        for bad in ["v1", "/a/../b", "/a/**x", "/a//b", "/a?x", "/a%2f", "/a b", "/a/**/b"] {
             assert!(PathPattern::parse(bad).is_err(), "{bad}");
         }
     }

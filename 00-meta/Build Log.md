@@ -100,3 +100,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Notes updated:** [[M1 Secrets Outside]].
 - **Next step:** B2/B3 against a real throwaway GitHub App on a test org with two repositories (the app key goes into the keychain or CI secrets, never the repository); then mark M1 `built`. M0 still needs A1 for Codex and on macOS 15/Ubuntu.
 
+### 2026-09-24: M2 step 1, Cedar engine
+
+- **Milestone:** [[M2 Policy Audit and Learn]] (in progress).
+- **Built:** the compiled Broker schema, default and ceiling policy sets, the TOML-to-Cedar compiler for egress, L7 and git grants, the entity builder, and `EgressPolicy` deciding every admission and L7 request through `cedar-policy` 4.13.0 with a conjunctive repo layer; `broker learn` (record mode) with would-deny recording; the Task principal (user, agent binary hash, repo, 24 h expiry) built at session start.
+- **Tests:** 37 policy tests including golden worked decisions and a 128-case property test that Cedar agrees with the M1 semantics; every M0/M1 conformance, pipeline and invariant suite passes unchanged on the engine.
+- **Findings:** `cedar-policy` enables serde_json's `preserve_order` workspace-wide, which silently changed the audit's canonical key order; the canonical encoder now sorts keys itself and logs written by M0/M1 still verify. The build disk filled (228 GB volume at 100%); incremental build caches were removed and builds now run with `CARGO_INCREMENTAL=0`.
+- **ADRs:** [[ADR-022 Cedar Schema and Engine as Built]].
+- **Next step:** repository policy with content-hash approval; learning (`broker suggest`); OCSF export and SIEM sink; SymCC gates in CI; native config exporters.
+

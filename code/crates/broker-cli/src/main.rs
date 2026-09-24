@@ -37,6 +37,17 @@ pub enum Command {
         #[arg(last = true, required = true, num_args = 1..)]
         command: Vec<OsString>,
     },
+    /// Run a command in record mode for policy learning: the same sandbox,
+    /// proxy and credential rules; task permits relaxed to the org ceiling;
+    /// every would-be deny recorded (then `broker suggest`).
+    Learn {
+        /// Built-in agent profile (default: detected from the command name).
+        #[arg(long)]
+        profile: Option<String>,
+        /// The command and its arguments, after `--`.
+        #[arg(last = true, required = true, num_args = 1..)]
+        command: Vec<OsString>,
+    },
     /// Check every isolation layer on this host and show the active policy.
     Doctor,
     /// Explain a decision from the audit log.
@@ -77,6 +88,7 @@ fn main() {
     let cli = Cli::parse();
     let code = match cli.command {
         Command::Run { profile, command } => cmd::run::run(profile, command),
+        Command::Learn { profile, command } => cmd::run::learn(profile, command),
         Command::Doctor => cmd::doctor::doctor(),
         Command::Why { request_id } => cmd::why::why(&request_id),
         Command::Audit { action: AuditCmd::Verify } => cmd::audit::verify(),
@@ -128,6 +140,9 @@ mod tests {
         let run = Cli::command().find_subcommand("run").unwrap().clone();
         let longs: Vec<_> = run.get_arguments().filter_map(|a| a.get_long()).collect();
         assert_eq!(longs, vec!["profile"], "run accepts exactly one option; review any addition against I8");
+        let learn = Cli::command().find_subcommand("learn").unwrap().clone();
+        let longs: Vec<_> = learn.get_arguments().filter_map(|a| a.get_long()).collect();
+        assert_eq!(longs, vec!["profile"], "learn accepts exactly one option; review any addition against I8");
     }
 
     #[test]

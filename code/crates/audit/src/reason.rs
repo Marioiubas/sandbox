@@ -107,6 +107,28 @@ pub enum Reason {
     /// The response contained an injected secret and was cut (I1).
     SecretReflected,
 
+    // ---- Cedar policy (M2) ----
+    /// No Cedar permit matched (and no more specific reason applies).
+    PolicyDenied,
+    /// The base policy allowed it, but the approved repo layer did not (I4).
+    RepoPolicyDenied,
+    /// The request could not be evaluated (schema-invalid or an error): deny.
+    PolicyError,
+    /// The task's grants have expired.
+    TaskExpired,
+    /// A credential would be attached outside its declared hosts.
+    CredentialHostCeiling,
+    /// Untrusted input and a sensitive read are both live; writes need approval.
+    RuleOfTwo,
+    /// An MCP server whose tool manifest changed is unpinned.
+    McpUnpinned,
+    /// The action needs an out-of-band approval (publish, merge).
+    NeedsApproval,
+    /// The org ceiling forbids paste sites.
+    CeilingPasteSite,
+    /// The org ceiling forbids tunnel services.
+    CeilingTunnel,
+
     // ---- upstream ----
     UpstreamConnectFailed,
     /// The upstream certificate failed verification.
@@ -171,6 +193,16 @@ impl Reason {
         Reason::AmbiguousCredential,
         Reason::MintFailed,
         Reason::SecretReflected,
+        Reason::PolicyDenied,
+        Reason::RepoPolicyDenied,
+        Reason::PolicyError,
+        Reason::TaskExpired,
+        Reason::CredentialHostCeiling,
+        Reason::RuleOfTwo,
+        Reason::McpUnpinned,
+        Reason::NeedsApproval,
+        Reason::CeilingPasteSite,
+        Reason::CeilingTunnel,
         Reason::UpstreamConnectFailed,
         Reason::UpstreamTls,
         Reason::AuditUnavailable,
@@ -227,6 +259,16 @@ impl Reason {
             Reason::AmbiguousCredential => "ambiguous_credential",
             Reason::MintFailed => "mint_failed",
             Reason::SecretReflected => "secret_reflected",
+            Reason::PolicyDenied => "policy_denied",
+            Reason::RepoPolicyDenied => "repo_policy_denied",
+            Reason::PolicyError => "policy_error",
+            Reason::TaskExpired => "task_expired",
+            Reason::CredentialHostCeiling => "credential_host_ceiling",
+            Reason::RuleOfTwo => "rule_of_two",
+            Reason::McpUnpinned => "mcp_unpinned",
+            Reason::NeedsApproval => "needs_approval",
+            Reason::CeilingPasteSite => "ceiling_paste_site",
+            Reason::CeilingTunnel => "ceiling_tunnel",
             Reason::UpstreamConnectFailed => "upstream_connect_failed",
             Reason::UpstreamTls => "upstream_tls",
             Reason::AuditUnavailable => "audit_unavailable",
@@ -255,6 +297,16 @@ impl Reason {
             HostHeaderMismatch | L7NoRuleMatched | UpgradeNotAllowed | HeadTooLarge | BodyTooLarge
             | UnsupportedEncoding | GitParseError | GitRepoNotAllowed | GitRefNotAllowed | GitForcePush => "l7",
             ForeignCredential | SentinelWrongHost | AmbiguousCredential | MintFailed | SecretReflected => "credentials",
+            PolicyDenied
+            | RepoPolicyDenied
+            | PolicyError
+            | TaskExpired
+            | CredentialHostCeiling
+            | RuleOfTwo
+            | McpUnpinned
+            | NeedsApproval
+            | CeilingPasteSite
+            | CeilingTunnel => "policy",
             UpstreamConnectFailed | UpstreamTls => "upstream",
             AuditUnavailable => "audit",
             LaunchRefused => "launcher",
@@ -328,6 +380,16 @@ impl Reason {
             AmbiguousCredential => "more than one credential rule allowed the request",
             MintFailed => "the broker could not mint or load the credential, so nothing was forwarded",
             SecretReflected => "the response contained an injected secret and was cut",
+            PolicyDenied => "no Cedar permit allows this request (default deny)",
+            RepoPolicyDenied => "user and org policy allow this, but the approved repository policy narrows it away",
+            PolicyError => "the request could not be evaluated against the policy, so it was denied",
+            TaskExpired => "the task's grants have expired",
+            CredentialHostCeiling => "the credential may not be attached to this host (org ceiling)",
+            RuleOfTwo => "untrusted input and a sensitive read are both live; writes need out-of-band approval",
+            McpUnpinned => "the MCP server's tool manifest changed and it is no longer pinned",
+            NeedsApproval => "this action needs an out-of-band approval",
+            CeilingPasteSite => "paste sites are outside the org ceiling",
+            CeilingTunnel => "tunnel services are outside the org ceiling",
             UpstreamConnectFailed => "the broker could not connect to the resolved address",
             UpstreamTls => "the upstream certificate failed verification",
             AuditUnavailable => "the audit log could not record the decision, so it was denied",

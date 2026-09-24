@@ -311,6 +311,17 @@ pub enum AddrClass {
 }
 
 impl AddrClass {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AddrClass::Public => "public",
+            AddrClass::Loopback => "loopback",
+            AddrClass::LinkLocal => "link_local",
+            AddrClass::Metadata => "metadata",
+            AddrClass::Private => "private",
+            AddrClass::Reserved => "reserved",
+        }
+    }
+
     pub fn deny_reason(&self) -> Option<Reason> {
         match self {
             AddrClass::Public => None,

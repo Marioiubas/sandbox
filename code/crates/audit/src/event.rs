@@ -166,6 +166,14 @@ impl AuditEvent {
         self
     }
 
+    /// Mark the decision as recorded in audit (record) mode.
+    pub fn audit_mode(mut self) -> Self {
+        if let Some(d) = self.decision.as_mut() {
+            d.mode = Mode::Audit;
+        }
+        self
+    }
+
     pub fn dest(mut self, d: Dest) -> Self {
         self.dest = Some(d);
         self

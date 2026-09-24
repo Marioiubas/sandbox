@@ -164,7 +164,7 @@ where
     };
 
     // 3. Name and port admission. No network I/O has happened yet.
-    let adm = match ctx.policy.admit_host(&host, raw.port) {
+    let mut adm = match ctx.policy.admit_host(&host, raw.port) {
         Ok(a) => a,
         Err((reason, ids)) => {
             let dest = dest_for(kind, Some(&host), None, Some(raw.port), &[]);
@@ -186,14 +186,18 @@ where
     };
 
     // 5. Every resolved address must be of an admitted class.
-    if let Err((reason, _bad)) = ctx.policy.admit_addrs(&adm, &addrs) {
+    if let Err((reason, _bad)) = ctx.policy.admit_addrs(&mut adm, &addrs) {
         let dest = dest_for(kind, Some(&host), None, Some(raw.port), &addrs);
         return deny(ctx, &mut client, kind, rid, reason, dest, adm.policy_ids.clone()).await;
     }
 
     // 6. Write-ahead audit of the allow.
     let dest = dest_for(kind, Some(&host), None, Some(raw.port), &addrs);
-    let allow_ev = ctx.event(EventKind::RequestDecision, &rid).allow(adm.policy_ids.clone()).dest(dest.clone());
+    let mut allow_ev = ctx.event(EventKind::RequestDecision, &rid).allow(adm.policy_ids.clone()).dest(dest.clone());
+    if let Some(w) = adm.would_deny {
+        // Record mode: what enforce mode would have decided (for the learner).
+        allow_ev = allow_ev.audit_mode().detail("would_deny", w.as_str());
+    }
     if ctx.recorder.append(&allow_ev).is_err() {
         return deny(ctx, &mut client, kind, rid, Reason::AuditUnavailable, dest, adm.policy_ids.clone()).await;
     }

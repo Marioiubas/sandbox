@@ -4,7 +4,7 @@ aliases: ["policy crate", "Entity Builder"]
 type: component
 section: architecture
 tags: [sandbox/architecture, component, topic/policy, topic/ifc, control/egress, control/task-tok, boundary/tb4, invariant/i3, invariant/i4, invariant/i6, milestone/m2]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
@@ -12,6 +12,7 @@ summary: "The policy crate at request time: builds Cedar entities and context fr
 related: ["[[Cedar]]", "[[Broker Cedar Schema]]", "[[Trifecta Session Labels]]", "[[Hostname Canonicaliser]]", "[[Core Trait Contracts]]", "[[Adaptive Evaluation of Deterministic Monitors]]", "[[broker.toml Human Policy Layer]]", "[[Request and Session Lifecycle]]", "[[I6 Single Canonicaliser]]", "[[I4 Repo Policy Only Narrows]]", "[[I3 Probabilistic Components Only Narrow]]", "[[Example Cedar Policies]]", "[[SymCC CI Gates]]", "[[Credential Injector and Issuers]]", "[[Audit Recorder and Event Schema]]", "[[Control Plane and Policy Bundles]]", "[[GitHub API Adapter]]", "[[Git Smart-HTTP Adapter]]", "[[MCP Guard]]", "[[Policy Learning Loop]]", "[[Red-Team Plan]]", "[[Provenance-Aware Cedar]]", "[[ADR-007 Cedar with a TOML Front-End]]", "[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[M2 Policy Audit and Learn]]", "[[Conformance Probe Matrix]]", "[[Open Questions and Unverified Claims]]", "[[I2 Fail-Closed Launch]]", "[[Native Config Exporters]]", "[[Repository Layout]]"]
 sources: ["https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://arxiv.org/html/2403.04651", "https://docs.rs/cedar-policy-symcc", "https://goteleport.com/blog/benchmarking-policy-languages/", "https://aws.amazon.com/blogs/security/why-policy-in-amazon-bedrock-agentcore-chose-cedar-for-securing-agentic-workflows/", "https://arxiv.org/abs/2606.26479", "https://github.com/invariantlabs-ai/invariant", "https://oddguan.com/blog/second-time-same-sandbox-anthropic-claude-code-network-allowlist-bypass-data-exfiltration/"]
 milestone: M2
+code: ["code/crates/policy/src/cedar", "code/crates/policy/src/egress.rs"]
 ---
 
 # Policy Engine and Entity Builder
@@ -204,3 +205,8 @@ Cedar evaluation 4.0–11.0 µs median per request ([arXiv 2403.04651](https://a
 - https://github.com/invariantlabs-ai/invariant
 - https://oddguan.com/blog/second-time-same-sandbox-anthropic-claude-code-network-allowlist-bypass-data-exfiltration/
 - Report: component "policy: entity builder + Cedar authorize (all derived requests must allow)", request-life step 3, "Why Cedar, and where its guarantees stop", schema sketch, sequence rules, red-team human ring; research notes 02 Q4 and 03 Q5.
+
+## Build log
+
+- 2026-09-24: built (M2 step 1): `policy::cedar` (`Engine` with base and optional repo `PolicySet`, strict validation, `authorize` → `Verdict` with determining policy IDs; errors and invalid requests deny), `entities.rs` (Task/User/Agent principal, Host with Domain and category parents, Repo, Credential, Path record), `compile.rs` (grants → permits), `categories.rs` (DoH, paste, tunnel). `EgressPolicy::{admit_host, admit_addrs, authorize_l7}` now decide through Cedar; the M1 tables only explain denies. Record mode (`broker learn`) records the enforce-mode verdict as `would_deny`. Trifecta labels and the sequence automaton are M3 (labels are always false today).
+- 2026-09-24: tests: `cedar::tests::{golden_worked_decisions, admission_semantics_match_m0, record_mode_relaxes_task_permits_but_not_the_ceiling, repo_layer_only_narrows, credential_ceiling_confines_credentials, malformed_requests_deny, cedar_agrees_with_the_reference}`; all M0/M1 conformance and invariant suites unchanged.

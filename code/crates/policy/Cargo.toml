@@ -9,6 +9,8 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+cedar-policy.workspace = true
+serde_json.workspace = true
 audit.workspace = true
 netguard.workspace = true
 serde.workspace = true

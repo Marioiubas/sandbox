@@ -29,6 +29,7 @@ fn policy_reference_examples_compile() {
         let env = CompileEnv {
             repo_remote: RepoId::parse("github.com/acme/web"),
             github_app_issuers: p.issuers.github_app.keys().cloned().collect(),
+            ..Default::default()
         };
         EgressPolicy::compile_with([("user", p.egress.as_slice())], &env).unwrap_or_else(|e| panic!("{e}\n{doc}"));
     }

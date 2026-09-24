@@ -4,13 +4,14 @@ aliases: ["Cedar Policy Examples"]
 type: concept
 section: policy
 tags: [sandbox/policy, concept, topic/policy, topic/git, topic/mcp, topic/credentials, control/task-tok, control/hitl, milestone/m2]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
 summary: "The five sketch policies (credential host ceiling, task expiry, push only to refs/heads/agent/* on the task repo without force, Rule of Two approval gate, pinned MCP servers only) plus the group-push and publish-requires-approval examples."
 related: ["[[Broker Cedar Schema]]", "[[Cedar]]", "[[Trifecta Session Labels]]", "[[Agents Rule of Two]]", "[[Git Smart-HTTP Adapter]]", "[[MCP Guard]]", "[[SymCC CI Gates]]", "[[GitHub MCP Toxic Flow]]", "[[M2 Policy Audit and Learn]]", "[[Claude Cowork Allowed-Domain Abuse]]", "[[GitLost GitHub Agentic Workflows Leak]]", "[[postmark-mcp Rug Pull]]", "[[Cursor CurXecute and MCPoison]]", "[[GitHub API Adapter]]", "[[Registry and LLM API Adapters]]", "[[broker.toml Human Policy Layer]]", "[[I7 Reject Foreign Credentials]]", "[[M1 Secrets Outside]]", "[[M3 CI Identity and MCP]]", "[[Lethal Trifecta]]"]
 sources: ["https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://thehackernews.com/2026/07/public-github-issue-could-trick-github.html", "https://ai.meta.com/blog/practical-ai-agent-security/", "https://simonwillison.net/2025/Nov/2/new-prompt-injection-papers/", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks", "https://www.tenable.com/blog/faq-cve-2025-54135-cve-2025-54136-vulnerabilities-in-cursor-curxecute-mcpoison", "https://www.anthropic.com/engineering/claude-code-sandboxing", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app"]
+code: ["code/policies/default.cedar", "code/policies/ceiling.cedar"]
 ---
 
 # Example Cedar Policies
@@ -169,3 +170,7 @@ Rows 1-4 are the M1 acceptance criteria for push scoping ([[M1 Secrets Outside]]
 - [Anthropic: How we contain Claude](https://www.anthropic.com/engineering/how-we-contain-claude); [Anthropic: Claude Code sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing)
 - [Tenable: CurXecute/MCPoison](https://www.tenable.com/blog/faq-cve-2025-54135-cve-2025-54136-vulnerabilities-in-cursor-curxecute-mcpoison)
 - [GitHub REST: installation tokens](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)
+
+## Build log
+
+- 2026-09-24: the core policies ship as `code/policies/default.cedar` (credential host ceiling, task expiry, Rule of Two, pinned MCP only, publish and merge need approval) and `code/policies/ceiling.cedar`; the worked-decision table rows 1-5 and 8 are the golden test `golden_worked_decisions`. The push permit itself is compiled from `broker.toml` push rules rather than shipped as a fixed policy.

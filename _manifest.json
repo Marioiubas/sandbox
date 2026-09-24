@@ -4190,5 +4190,24 @@
     "aliases": [
       "ADR-021"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-022 Cedar Schema and Engine as Built.md",
+    "title": "ADR-022 Cedar Schema and Engine as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "The compiled Broker schema and engine: Host in Domain/HostCategory, Repo in Host, segmented Path record, net.resolve/net.connect admission, Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies.",
+    "links_to": [
+      "Broker Cedar Schema",
+      "Policy Engine and Entity Builder",
+      "Example Cedar Policies",
+      "I4 Repo Policy Only Narrows",
+      "M2 Policy Audit and Learn",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M2 build (2026-09-24) from the compiled schema and tests recorded in the Build Log.",
+    "aliases": [
+      "ADR-022"
+    ]
   }
 ]

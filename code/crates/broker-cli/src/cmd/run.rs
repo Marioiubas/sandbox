@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-fn start_params(profile: Option<String>, command: Vec<OsString>) -> anyhow::Result<StartParams> {
+fn start_params(profile: Option<String>, command: Vec<OsString>, mode: Option<&str>) -> anyhow::Result<StartParams> {
     let argv = command
         .into_iter()
         .map(|a| a.into_string().map_err(|a| anyhow::anyhow!("argument is not valid UTF-8: {a:?}")))
@@ -15,11 +15,22 @@ fn start_params(profile: Option<String>, command: Vec<OsString>) -> anyhow::Resu
     // Never send anything that looks like a credential, even to brokerd.
     let env: BTreeMap<String, String> =
         std::env::vars().filter(|(k, _)| !policy::config::env_name_is_secretish(k)).collect();
-    Ok(StartParams { argv, cwd, profile, env })
+    Ok(StartParams { argv, cwd, profile, env, mode: mode.map(str::to_string) })
 }
 
 pub fn run(profile: Option<String>, command: Vec<OsString>) -> i32 {
-    match run_inner(profile, command) {
+    run_mode(profile, command, None)
+}
+
+/// `broker learn -- <command>`: a record-mode session (the same sandbox,
+/// proxy and credential rules; task permits relaxed to the org ceiling;
+/// every would-be deny recorded for `broker suggest`).
+pub fn learn(profile: Option<String>, command: Vec<OsString>) -> i32 {
+    run_mode(profile, command, Some("record"))
+}
+
+fn run_mode(profile: Option<String>, command: Vec<OsString>, mode: Option<&str>) -> i32 {
+    match run_inner(profile, command, mode) {
         Ok(code) => code,
         Err(e) => {
             eprintln!("broker: {e:#}");
@@ -47,9 +58,9 @@ fn print_refusal(err: &proto::RpcError) {
     eprintln!("broker: the agent was not started. Run `broker doctor` for details.");
 }
 
-fn run_inner(profile: Option<String>, command: Vec<OsString>) -> anyhow::Result<i32> {
+fn run_inner(profile: Option<String>, command: Vec<OsString>, mode: Option<&str>) -> anyhow::Result<i32> {
     let dirs = ctl::dirs()?;
-    let params = start_params(profile, command)?;
+    let params = start_params(profile, command, mode)?;
     let sock = ctl::connect_or_start(&dirs)?;
     let line = proto::to_line(&Request::new(Some(1), "session.start", serde_json::to_value(&params)?));
     proto::send_with_fds(&sock, &line, &[0, 1, 2])?;

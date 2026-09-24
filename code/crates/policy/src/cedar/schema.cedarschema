@@ -1,0 +1,63 @@
+// Broker Cedar schema (M2). Compiled form of the sketch in the Broker Cedar
+// Schema note; every change from the sketch is recorded there.
+namespace Broker {
+  type Trifecta = { untrusted_input: Bool, sensitive_read: Bool, external_effect: Bool };
+  // mode: "enforce" | "record"
+  type Session  = { id: String, now: Long, approved: Bool, trifecta: Trifecta, mode: String };
+  // A canonical path as segments: n is the segment count; s0..s15 hold the
+  // first sixteen segments (deeper segments are matched only by `**`).
+  type Path = { n: Long, s0?: String, s1?: String, s2?: String, s3?: String, s4?: String,
+                s5?: String, s6?: String, s7?: String, s8?: String, s9?: String, s10?: String,
+                s11?: String, s12?: String, s13?: String, s14?: String, s15?: String };
+
+  entity Group;
+  entity User in [Group] { idp: String, subject: String };
+  entity Agent { vendor: String, binary_sha256: String };
+  entity Task { owner: User, agent: Agent, repo: String, branch_prefix: String, expires_at: Long };
+  // Domain suffixes of a canonical name (label boundaries), for `*.name` grants.
+  entity Domain in [Domain];
+  // Built-in or org categories: "doh", "paste", "tunnel", ...
+  entity HostCategory;
+  entity Host in [Domain, HostCategory] { registrable: String, ip_literal: Bool };
+  entity Repo in [Host] { authority: String, owner: String, full_name: String, visibility: String };
+  // allowed_domains: suffixes from `*.name` grants (label-boundary matches).
+  entity Credential { issuer: String, allowed_hosts: Set<String>, allowed_domains: Set<String>, risk: String };
+  entity McpServer { manifest_sha256: String, pinned: Bool };
+  entity Dir in [Dir];
+  entity File in [Dir];
+
+  type ConnCtx = { session: Session, port: Long, addr_classes: Set<String> };
+  type HttpCtx = { session: Session, port: Long, method: String, path: Path, path_str: String,
+                   sni: String, host_header: String, body_bytes: Long, dest_class: String };
+  type GitCtx  = { session: Session, port: Long, ref: String, force: Bool };
+  type CredCtx = { session: Session, dest_host: String, dest_domains: Set<String>, port: Long, method: String,
+                   path_str: String, verb: String };
+  type McpCtx  = { session: Session, tool: String, args_integrity: String };
+
+  // L4 admission: may the broker resolve the name (before any DNS query),
+  // and connect to the resolved addresses.
+  action "net.resolve", "net.connect"
+    appliesTo { principal: [Task], resource: [Host], context: ConnCtx };
+
+  action "http.read", "http.write";
+  action "http.GET", "http.HEAD", "http.OPTIONS" in ["http.read"]
+    appliesTo { principal: [Task], resource: [Host], context: HttpCtx };
+  action "http.POST", "http.PUT", "http.PATCH", "http.DELETE", "http.OTHER" in ["http.write"]
+    appliesTo { principal: [Task], resource: [Host], context: HttpCtx };
+  // Registry uploads (emitted besides the HTTP method on registry hosts).
+  action "pkg.publish"
+    appliesTo { principal: [Task], resource: [Host], context: HttpCtx };
+
+  action "git.fetch", "git.advertise", "git.push"
+    appliesTo { principal: [Task], resource: [Repo], context: GitCtx };
+  // GitHub semantic verbs (emitted by the GitHub API adapter from M3).
+  action "pr.create", "pr.merge", "issue.comment", "contents.write"
+    appliesTo { principal: [Task], resource: [Repo], context: GitCtx };
+
+  action "credential.use"
+    appliesTo { principal: [Task], resource: [Credential], context: CredCtx };
+  action "mcp.call_tool"
+    appliesTo { principal: [Task], resource: [McpServer], context: McpCtx };
+  action "fs.read", "fs.write"
+    appliesTo { principal: [Task], resource: [Dir, File], context: { session: Session } };
+}

@@ -85,6 +85,11 @@ pub struct StartParams {
     /// The client's non-secret environment (filtered again by brokerd).
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    /// `enforce` (default) or `record` (`broker learn`): record relaxes task
+    /// permits to the org ceiling; the sandbox, proxy and credential rules
+    /// are unchanged (I8).
+    #[serde(default)]
+    pub mode: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]

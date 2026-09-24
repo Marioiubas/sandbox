@@ -46,6 +46,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-019 Mandatory Deny-Write List Additions]] | Protect the .git entry itself (rename-and-replant escape), .mcp.json, .envrc, .gemini, .broker and PATH dirs; placeholders for missing names on Linux. |
 | [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] | Agents' own credentials are held by brokerd behind sentinels; agent token files are deny-read; the macOS keychain switch of ADR-016 is removed. |
 | [[ADR-021 L7 Path Choices for M1]] | Per-session CA only, HTTP/1.1 only, no broker-followed redirects, no cookies on terminated hosts, rule-driven attachment, buffered push inspection, fail-closed force detection. |
+| [[ADR-022 Cedar Schema and Engine as Built]] | Compiled schema (Domain/HostCategory, Repo in Host, segmented Path record, net.* admission), Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies. |
 
 ## Where the value is
 
@@ -94,6 +95,10 @@ Architecture decision records for the fourteen decisions in the report's decisio
 
 - [[ADR-020 Brokered Agent Credentials End the Keychain Exception]] — Agents' own credentials are held by brokerd behind sentinels; agent token files are deny-read; the macOS keychain switch of ADR-016 is removed.
 - [[ADR-021 L7 Path Choices for M1]] — Per-session CA only, HTTP/1.1 only, no broker-followed redirects, no cookies on terminated hosts, rule-driven attachment, buffered push inspection, fail-closed force detection.
+
+## Built during M2
+
+- [[ADR-022 Cedar Schema and Engine as Built]] — Compiled schema (Domain/HostCategory, Repo in Host, segmented Path record, net.* admission), Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies.
 
 ## How this section connects
 

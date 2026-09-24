@@ -150,7 +150,8 @@ impl RepoPattern {
 }
 
 /// A ref glob: `agent/*` means `refs/heads/agent/*`; `refs/...` is taken
-/// as written. `*` matches within one path component.
+/// as written. `*` has Cedar `like` semantics: any characters, `/`
+/// included (so `agent/*` covers `agent/a/b`; ADR-022).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RefPattern(String);
 
@@ -165,7 +166,11 @@ impl RefPattern {
     }
 
     pub fn matches(&self, refname: &str) -> bool {
-        crate::glob::segment_glob(&self.0, refname)
+        crate::glob::like_glob(&self.0, refname)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -242,7 +247,7 @@ mod tests {
     fn refs() {
         let p = RefPattern::parse("agent/*").unwrap();
         assert!(p.matches("refs/heads/agent/fix-1"));
-        assert!(!p.matches("refs/heads/agent/a/b"), "* stays inside one component");
+        assert!(p.matches("refs/heads/agent/a/b"), "Cedar like: * spans components");
         assert!(!p.matches("refs/heads/main"));
         assert!(!p.matches("refs/tags/agent/x"));
         assert!(RefPattern::parse("refs/tags/v*").unwrap().matches("refs/tags/v1.2"));
