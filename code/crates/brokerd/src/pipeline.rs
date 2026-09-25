@@ -258,6 +258,10 @@ where
     for a in &ordered {
         let sa = SocketAddr::new(*a, raw.port);
         if let Ok(Ok(s)) = tokio::time::timeout(ctx.connect_timeout, TcpStream::connect(sa)).await {
+            // Relay writes at once. With Nagle, a small write after another
+            // (TLS handshake records) waits for the upstream's delayed ACK,
+            // which added ~50 ms to every new connection on Linux.
+            let _ = s.set_nodelay(true);
             upstream = Some(s);
             break;
         }
