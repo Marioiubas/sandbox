@@ -7,7 +7,7 @@ tags: [sandbox/build, milestone, milestone/m4, topic/evaluation, topic/supply-ch
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -42,7 +42,7 @@ The hardening emphasis follows the record: the sandbox-runtime NUL-byte parser d
 
 **Fuzzing and differential testing**
 
-- [ ] Run each `tests/fuzz/fuzz_targets/*` for ≥24 h (continuous nightly jobs accumulate toward this); triage and fix every crash; add each crashing input to the corpus.
+- [ ] Run each `tests/fuzz/fuzz_targets/*` for ≥24 h (continuous nightly jobs accumulate toward this); triage and fix every crash; add each crashing input to the corpus. — started: `.github/workflows/fuzz-nightly.yml` runs all 16 targets for 2 h each per night with the corpus cached between runs and crash inputs uploaded.
 - [ ] HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici ([arXiv 2405.17737](https://arxiv.org/abs/2405.17737)); acceptance is 0 decision-changing discrepancies ([[L1 Conformance Suite]]).
 - [ ] Complete all 12 categories of the [[Conformance Probe Matrix]], including category 11 (covert channels: bandwidth measured and reported, not claimed zero) and category 12 (boundary escape).
 
@@ -51,14 +51,14 @@ The hardening emphasis follows the record: the sandbox-runtime NUL-byte parser d
 - [ ] `eval/agentdojo_shim/`: the shim that turns mocked tool side effects into real HTTP through the proxy; run AgentDojo and AgentDyn with ≥2 frontier models; report ASR@k for k=10-100 ([[L2 Injection Benchmarks]]).
 - [ ] `eval/swebench_ab/` and `eval/tbench_ab/`: paired A/B runs, same model and seed, k≥3, SWE-bench Verified (500, or stratified 100 in CI) and Terminal-Bench 2.x via Harbor; tag live-internet tasks separately; bucket every deny ([[L3 Real-Work Utility]]).
 - [ ] `eval/escapebench/`: SandboxEscapeBench scenarios at difficulty 1-3, run nested in VMs ([[SandboxEscapeBench]]).
-- [ ] Latency harness: local echo server under concurrent load; measure warm-connection and new-terminated-connection added latency, per-task wall-clock and sandbox start ([[L4 Product Metrics]]).
+- [x] Latency harness: local echo server under concurrent load; measure warm-connection and new-terminated-connection added latency, per-task wall-clock and sandbox start ([[L4 Product Metrics]]). (`tests/conformance/tests/m4_latency.rs`, run on demand and by the non-gating `latency` CI job on Linux; per-task wall-clock comes with the L3 runs)
 - [ ] Trace replay: prompts per session with and without the broker on the same traces; learned-policy coverage within 3 sessions.
 
 **Threat model and docs**
 
-- [ ] `docs/threat-model.md` stating the four non-goals so buyers are not misled: misuse inside granted scope, text-only manipulation with no side effect, host-kernel zero-days in the standard tier, and operator abuse (only partly addressed) ([[Threat Model Non-Goals]], [[Threat Model Overview]]).
+- [x] `docs/threat-model.md` stating the four non-goals so buyers are not misled: misuse inside granted scope, text-only manipulation with no side effect, host-kernel zero-days in the standard tier, and operator abuse (only partly addressed) ([[Threat Model Non-Goals]], [[Threat Model Overview]]).
 - [ ] `docs/policy-reference.md` and `docs/deployment/` for laptop and CI.
-- [ ] Audit the CLI output and code comments for any claim that the broker stops prompt injection; it does not ([[CLAUDE]] section 2).
+- [x] Audit the CLI output and code comments for any claim that the broker stops prompt injection; it does not ([[CLAUDE]] section 2). (2026-09-25: none found in code, CLI strings, docs or the Action; re-check before release)
 
 **Packaging and supply chain (packaging/)**
 
@@ -154,3 +154,7 @@ All six layers of the [[Evaluation Harness]]: L1 (hard gate), L2 and L3 (first r
 - Report: milestone row "Weeks 9-10 M4 Harden and ship"; six-layer harness thresholds; red-team plan; conclusion.
 - Research note 05 section 5.2 M4 row and section 5.5 (parser differential ~5.5 months exposed).
 - Research note 04a Q2 and Q6.
+
+## Build log
+
+- 2026-09-25: started while M3 waits on outside accounts: nightly fuzzing toward E1 (`fuzz-nightly.yml`); the E3 latency harness (`m4_latency`), first measurement on macOS 26, Apple silicon, debug build, 8 concurrent clients, loopback echo server: splice warm added p50 0.05 ms / p95 0.06 ms; splice new added p50 4.0 ms; terminated warm added p50 2.2 ms / p95 4.5 ms; terminated new added p50 7.5 ms / p95 11.6 ms; `broker run -- /usr/bin/true` p50 58.8 ms / p95 61.9 ms (all within the L4 thresholds); `docs/threat-model.md` brought up to M3 (M2 and M3 controls and residuals); the injection-claims audit found nothing to change.

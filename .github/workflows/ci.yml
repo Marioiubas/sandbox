@@ -141,6 +141,28 @@ jobs:
                     and (.event.detail.identity.claims.run_id == $run))' \
             "$RUNNER_TEMP/starts.jsonl" > /dev/null
 
+  latency:
+    # M4 E3: measured and reported (step summary), not gated; thresholds in
+    # the L4 Product Metrics note. Debug build, loopback echo server.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          gate=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$gate" ] && [ "$(cat "$gate")" = "1" ]; then
+            sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Build
+        run: cargo build --workspace --bins --locked
+      - name: Measure
+        run: |
+          cargo test -p conformance --test m4_latency --locked -- --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/latency.txt"
+          { echo '```'; grep -E "added p50|broker run --" "$RUNNER_TEMP/latency.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   fuzz-smoke:
     # 60 s per target on every push; the >=24 h runs are an M4 exit item.
     runs-on: ubuntu-24.04

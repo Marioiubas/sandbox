@@ -1,0 +1,69 @@
+name: fuzz-nightly
+
+# M4 E1: at least 24 h of fuzzing per target, accumulated by nightly runs.
+# Each target keeps its corpus between runs (Actions cache), so every
+# night continues where the last one stopped. A crash fails the job and
+# its input is uploaded as an artifact for triage (then added to the
+# corpus with the fix).
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "Seconds per target"
+        default: "7200"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: code
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [canon, connect, socks5, sni, jsonrpc, pktline, pack, delta, filter, remote_url, foreign,
+                 github_route, mcp_frame, jwt, s3_route, device_flow]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install nightly and cargo-fuzz
+        run: |
+          rustup toolchain install nightly --profile minimal
+          cargo +nightly install cargo-fuzz --locked
+      - name: Restore this target's corpus
+        uses: actions/cache/restore@v4
+        with:
+          path: code/tests/fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+      - name: Fuzz
+        env:
+          SECONDS_PER_TARGET: ${{ github.event.inputs.seconds || '7200' }}
+        run: |
+          mkdir -p "tests/fuzz/corpus/${{ matrix.target }}"
+          start=$(date +%s)
+          cargo +nightly fuzz run --fuzz-dir tests/fuzz "${{ matrix.target }}" -- \
+            -max_total_time="$SECONDS_PER_TARGET" -rss_limit_mb=2048 -print_final_stats=1
+          echo "${{ matrix.target }}: $(( $(date +%s) - start )) s fuzzed, corpus $(ls "tests/fuzz/corpus/${{ matrix.target }}" | wc -l) inputs" >> "$GITHUB_STEP_SUMMARY"
+      - name: Save the corpus
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: code/tests/fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+      - name: Upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: code/tests/fuzz/artifacts/${{ matrix.target }}

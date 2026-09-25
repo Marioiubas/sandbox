@@ -44,7 +44,7 @@ Agent flags such as `--dangerously-skip-permissions`, `--yolo` or
 `--full-auto` change only how often the agent asks its user for approval
 inside the sandbox. They never change the sandbox, the proxy or the audit.
 
-## What is enforced today (milestones M0 and M1)
+## What is enforced today (milestones M0 to M3)
 
 | Control | macOS (Seatbelt) | Linux (bubblewrap) |
 |---|---|---|
@@ -58,12 +58,28 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
 | Audit | hash-chained SQLite log outside every sandbox; `broker why`, `broker audit verify` | same |
 | Credentials (M1) | the sandbox holds only per-session sentinels; the broker attaches real credentials after authorization, only on the credential's hosts; foreign credentials and cookies are rejected; injected secrets are cut from responses; agents' own login stores (keychain, token files) are unreadable | same |
 | L7 rules (M1) | terminated hosts: Host = SNI = CONNECT, method/path rules deny by default, git pushes authorized per repository, ref and force | same |
+| Policy engine (M2) | every decision is a Cedar authorization; repository policy is approved by content hash and can only narrow; `broker policy check` runs formal gates on a change (narrowing, org ceiling, credential confinement), as CI does | same |
+| Learning (M2) | record mode and `broker suggest` propose least-privilege policy from observed runs; nothing is applied without a human; shadow mode logs what a candidate would decide | same |
+| GitHub API (M3) | each request is a verb (read, PR, merge, comment, contents) on a repository, or denied; GraphQL is denied; merges need approval | same |
+| Session labels (M3) | reading untrusted input and a sensitive source in one session blocks further writes unless approved (Rule of Two); an optional rule blocks public writes after untrusted input alone | same |
+| MCP servers (M3) | servers are pinned in user or org policy, run in their own sandbox with their own grants, and are revoked when their tool list changes; each tool call is authorized and logged | same |
+| Identity (M3) | a CI runner's identity token or a `broker login` names the session and every audit row (with IdP groups); no identity token reaches the agent or an upstream | same |
+| Cloud credentials (M3) | S3 through STS: 15-minute sessions narrowed by a session policy built from the grant; the agent's signature is replaced by the broker's | same |
 
 ## Known residual risks
 
 - **Brokered authority is still authority.** An injected agent can use a
   credential for every request its rules allow; the broker narrows that
   authority and logs it, it does not judge intent.
+- **Session labels are coarse.** Once a session has read untrusted input,
+  every later write is treated as possibly driven by it; a session that never
+  reads anything marked untrusted gets no such protection. Arbitrary web
+  pages are not yet counted as untrusted input.
+- **A login lives in the daemon.** `broker login` keeps the identity and
+  refresh token in the daemon's memory; after a restart, sign in again.
+- **Pinned MCP servers are trusted code within their grants.** Pinning
+  detects changes to their tool list, not what the server does with its own
+  grants.
 - **Brokered agent tokens are read once per session.** If Claude Code's
   OAuth token expires mid-session, requests fail until the agent is run once
   outside the broker to refresh it (ADR-020). Codex and Gemini account-login

@@ -7,7 +7,7 @@ tags: [sandbox/build, eval, topic/evaluation, topic/approval, topic/learning, to
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -91,3 +91,7 @@ Whether developers will keep the broker on. Security that adds prompts, latency 
 - Report: L4 row; ~14 ms reference point.
 - Research note 04a Q3 (84% claim, 93% approval, auto-mode datasets, 24 of 25 retries, violation telemetry, metric definitions) and Q6 L4.
 - Research note 05 section 5.2 M4 row (conflicting phrasing).
+
+## Build log
+
+- 2026-09-25: the latency harness is `code/tests/conformance/tests/m4_latency.rs` (direct, L4 splice and terminated L7 paths; warm and new connections; 8 concurrent curl clients; `broker run -- /usr/bin/true`). First measurement, macOS 26 on Apple silicon, debug build: splice warm added p50 0.05 ms / p95 0.06 ms; splice new added p50 4.0 ms; terminated warm added p50 2.2 ms / p95 4.5 ms; terminated new added p50 7.5 ms / p95 11.6 ms; `broker run -- /usr/bin/true` p50 58.8 ms / p95 61.9 ms. Thresholds met on this machine; release builds and Linux runs (the `latency` CI job) to follow. Added wall-clock per task needs the L3 runs.

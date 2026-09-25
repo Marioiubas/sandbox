@@ -7,7 +7,7 @@ tags: [sandbox/build, eval, topic/evaluation, evidence/single-source]
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -118,3 +118,7 @@ The harness lives under `code/eval/` and `code/tests/` ([[Repository Layout]]).
 
 - Report: "Score utility and containment together, against adaptive attackers" (anchors, six-layer table, reporting rules).
 - Research note 04a Q1, Q3 (metric definitions), Q6 (plan and thresholds) and gaps.
+
+## Build log
+
+- 2026-09-25: L4 latency harness built (`m4_latency`, see [[L4 Product Metrics]]); nightly fuzzing workflow toward E1. L2/L3/L6 harnesses (`eval/…`) not started.
