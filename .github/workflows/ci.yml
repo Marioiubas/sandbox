@@ -143,7 +143,8 @@ jobs:
 
   latency:
     # M4 E3: measured and reported (step summary), not gated; thresholds in
-    # the L4 Product Metrics note. Debug build, loopback echo server.
+    # the L4 Product Metrics note. Release build (what users run), loopback
+    # echo server.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -156,11 +157,11 @@ jobs:
             sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
             sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
-      - name: Build
-        run: cargo build --workspace --bins --locked
+      - name: Build (release)
+        run: cargo build --release --workspace --bins --locked
       - name: Measure
         run: |
-          cargo test -p conformance --test m4_latency --locked -- --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/latency.txt"
+          cargo test --release -p conformance --test m4_latency --locked -- --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/latency.txt"
           { echo '```'; grep -E "added p50|broker run --|audit append" "$RUNNER_TEMP/latency.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   fuzz-smoke:

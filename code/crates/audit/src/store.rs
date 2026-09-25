@@ -52,7 +52,10 @@ struct Inner {
 
 pub struct SqliteRecorder {
     inner: Mutex<Inner>,
+    group: group::Group,
 }
+
+mod group;
 
 fn hash_link(prev: &[u8; 32], body: &[u8]) -> [u8; 32] {
     let mut h = Sha256::new();
@@ -109,7 +112,7 @@ impl SqliteRecorder {
             Some((seq, h)) => (blob32(h)?, seq + 1),
             None => (genesis, 1),
         };
-        Ok(SqliteRecorder { inner: Mutex::new(Inner { conn, prev, next_seq }) })
+        Ok(SqliteRecorder { inner: Mutex::new(Inner { conn, prev, next_seq }), group: Default::default() })
     }
 
     /// Open an existing database read-only (for `broker why` and `broker
@@ -117,7 +120,10 @@ impl SqliteRecorder {
     pub fn open_read_only(path: &Path) -> anyhow::Result<Self> {
         let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        Ok(SqliteRecorder { inner: Mutex::new(Inner { conn, prev: [0; 32], next_seq: i64::MAX }) })
+        Ok(SqliteRecorder {
+            inner: Mutex::new(Inner { conn, prev: [0; 32], next_seq: i64::MAX }),
+            group: Default::default(),
+        })
     }
 
     /// Verify the whole chain of the database at `path` (one read
@@ -262,31 +268,48 @@ fn verify_conn(conn: &Connection) -> Result<u64, VerifyError> {
     Ok(count)
 }
 
-impl Recorder for SqliteRecorder {
-    fn append(&self, ev: &AuditEvent) -> anyhow::Result<ChainHash> {
+impl SqliteRecorder {
+    /// Write a batch in order, in one transaction: one durable commit
+    /// (synchronous=FULL) for all of it. The in-memory chain head moves only
+    /// when the commit succeeds.
+    fn commit_batch(&self, batch: &[AuditEvent]) -> anyhow::Result<Vec<ChainHash>> {
         let mut inner = self.inner.lock().map_err(|_| anyhow::anyhow!("audit lock poisoned"))?;
-        let seq = inner.next_seq;
-        let body = body_for(ev, seq)?;
-        let hash = hash_link(&inner.prev, &body);
-        // One implicit transaction per append; synchronous=FULL makes the
-        // commit durable before we return (write-ahead, I9).
-        inner.conn.execute(
-            "INSERT INTO events (seq, ts, kind, session, request_id, body, prev, hash)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![
-                seq,
-                ev.ts,
-                ev.kind.as_str(),
-                ev.session.as_ref().map(|s| s.as_str().to_string()),
-                ev.request_id.as_ref().map(|r| r.as_str().to_string()),
-                body,
-                inner.prev.to_vec(),
-                hash.to_vec()
-            ],
-        )?;
-        inner.prev = hash;
-        inner.next_seq = seq + 1;
-        Ok(ChainHash(hash))
+        let (mut prev, mut seq) = (inner.prev, inner.next_seq);
+        let mut out = Vec::with_capacity(batch.len());
+        let tx = inner.conn.transaction()?;
+        for ev in batch {
+            let body = body_for(ev, seq)?;
+            let hash = hash_link(&prev, &body);
+            tx.execute(
+                "INSERT INTO events (seq, ts, kind, session, request_id, body, prev, hash)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    seq,
+                    ev.ts,
+                    ev.kind.as_str(),
+                    ev.session.as_ref().map(|s| s.as_str().to_string()),
+                    ev.request_id.as_ref().map(|r| r.as_str().to_string()),
+                    body,
+                    prev.to_vec(),
+                    hash.to_vec()
+                ],
+            )?;
+            prev = hash;
+            seq += 1;
+            out.push(ChainHash(hash));
+        }
+        tx.commit()?;
+        inner.prev = prev;
+        inner.next_seq = seq;
+        Ok(out)
+    }
+}
+
+impl Recorder for SqliteRecorder {
+    /// Durable before it returns (write-ahead, I9); concurrent appends share
+    /// a commit (group commit).
+    fn append(&self, ev: &AuditEvent) -> anyhow::Result<ChainHash> {
+        self.group.append(ev, |batch| self.commit_batch(batch))
     }
 }
 
@@ -313,6 +336,37 @@ mod tests {
             rec.append(&sample(i)).unwrap();
         }
         (dir, path)
+    }
+
+    #[test]
+    fn concurrent_appends_share_commits_and_keep_one_chain() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.db");
+        let rec = std::sync::Arc::new(SqliteRecorder::open(&path).unwrap());
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let r = rec.clone();
+                std::thread::spawn(move || (0..50).map(|i| r.append(&sample(t * 100 + i)).unwrap()).collect::<Vec<_>>())
+            })
+            .collect();
+        let mut hashes: Vec<ChainHash> = threads.into_iter().flat_map(|h| h.join().unwrap()).collect();
+        assert_eq!(SqliteRecorder::verify_path(&path).unwrap(), 400, "one gap-free chain");
+        hashes.sort_by_key(|h| h.to_hex());
+        hashes.dedup();
+        assert_eq!(hashes.len(), 400, "every caller got its own row");
+    }
+
+    #[test]
+    fn a_failed_commit_fails_its_callers_and_leaves_the_chain_intact() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.db");
+        let rec = SqliteRecorder::open(&path).unwrap();
+        rec.append(&sample(1)).unwrap();
+        rec.inner.lock().unwrap().conn.pragma_update(None, "query_only", true).unwrap();
+        assert!(rec.append(&sample(2)).is_err(), "no durable row, no success (I9)");
+        rec.inner.lock().unwrap().conn.pragma_update(None, "query_only", false).unwrap();
+        rec.append(&sample(3)).unwrap();
+        assert_eq!(SqliteRecorder::verify_path(&path).unwrap(), 2);
     }
 
     #[test]
