@@ -16,7 +16,10 @@ connect() { broker run -- sh -c "broker mcp connect github < $1 > $2"; }
 printf '%s\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' "$init" > first.jsonl
 connect first.jsonl first.out || true
 grep -q mcp_manifest_unapproved first.out
-broker mcp approve github | head -2
+# (Output to a file: a closed pipe would stop the command before it records
+# the approval.)
+broker mcp approve github > approve.out
+head -2 approve.out
 
 cat > calls.jsonl <<JSON
 $init
@@ -40,21 +43,24 @@ for l in open("calls.out"):
     if "id" in v:
         replies[v["id"]] = v
 def text(i):
-    r = replies.get(i, {}).get("result") or {}
+    v = replies.get(i, {})
+    if "error" in v or "result" not in v:
+        return "refused: " + str(((v.get("error") or {}).get("data") or {}).get("reason") or v.get("error") or "no reply"), True
+    r = v["result"]
     return (r.get("content") or [{}])[0].get("text", ""), bool(r.get("isError"))
 def reason(i):
     return ((replies.get(i, {}).get("error") or {}).get("data") or {}).get("reason")
 fail = []
 t, err = text(3)
-print("get_me:", "error" if err else "ok"); err and fail.append("get_me: " + t[:200])
+print("get_me:", t[:120] if err else "ok"); err and fail.append("get_me: " + t[:200])
 t, err = text(4)
-print("issue_read #1:", "error" if err else "ok", "(title found)" if "broker MCP test" in t else "")
+print("issue_read #1:", t[:120] if err else "ok", "(title found)" if "broker MCP test" in t else "")
 (err or "broker MCP test" not in t) and fail.append("issue_read: " + t[:200])
 t, err = text(5)
-print("private README:", "error" if err else "ok"); err and fail.append("get_file_contents: " + t[:200])
+print("private README:", t[:120] if err else "ok"); err and fail.append("get_file_contents: " + t[:200])
 print("merge_pull_request:", reason(6)); reason(6) != "mcp_tool_not_allowed" and fail.append("merge was not refused")
 t, err = text(7)
-print("list_issues (GraphQL):", "error, as expected" if err else "ok")
+print("list_issues (GraphQL):", ("error, as expected: " + t[:120]) if err else "ok")
 rows = [json.loads(l)["event"] for l in open("audit.jsonl")]
 hosts = {}
 for e in rows:
