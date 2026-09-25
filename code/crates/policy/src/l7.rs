@@ -25,6 +25,9 @@ pub enum Protocol {
     Registry,
     /// The GitHub REST API: every request maps to a verb (GitHub API Adapter).
     GitHub,
+    /// The Amazon S3 REST API: object reads, listings, writes and deletes
+    /// under granted key prefixes (AWS STS Session Policies).
+    S3,
 }
 
 impl Protocol {
@@ -34,6 +37,7 @@ impl Protocol {
             Protocol::Git => "git",
             Protocol::Registry => "registry",
             Protocol::GitHub => "github",
+            Protocol::S3 => "s3",
         }
     }
 }
@@ -70,6 +74,14 @@ pub enum Action {
         method: String,
         path: String,
     },
+    /// An S3 operation class (`s3.get`, `s3.list`, `s3.put`, `s3.delete`)
+    /// on a bucket and key (for listings, the requested prefix); emitted
+    /// beside the request's `Http` action.
+    S3 {
+        op: String,
+        bucket: String,
+        key: String,
+    },
 }
 
 impl Action {
@@ -88,6 +100,9 @@ impl Action {
             Action::GitPush { repo, refname, force, update } => serde_json::json!({
                 "kind": "git.push", "repo": repo.to_string(), "ref": refname, "force": force, "update": update,
             }),
+            Action::S3 { op, bucket, key } => {
+                serde_json::json!({ "kind": "s3", "op": op, "bucket": bucket, "key": key })
+            }
         }
     }
 
@@ -113,6 +128,7 @@ impl Action {
                 force: v.get("force")?.as_bool()?,
                 update: "replayed",
             },
+            "s3" => Action::S3 { op: s("op").filter(|o| crate::s3::is_op(o))?, bucket: s("bucket")?, key: s("key")? },
             _ => return None,
         })
     }
@@ -135,6 +151,7 @@ impl Action {
             }
             Action::GitHub { verb, repo: Some(r), .. } => format!("github {verb} {r}"),
             Action::GitHub { verb, repo: None, .. } => format!("github {verb}"),
+            Action::S3 { op, bucket, key } => format!("{op} {bucket}/{key}"),
         }
     }
 }
@@ -157,6 +174,8 @@ pub struct L7Rules {
     /// `protocol = "github"`: granted verbs and the repositories they apply to.
     verbs: BTreeSet<String>,
     repos: Vec<RepoPattern>,
+    /// `protocol = "s3"`: the bucket and key prefixes.
+    s3: Option<crate::s3::S3Rules>,
     pub credential: Option<Arc<CredentialDef>>,
 }
 
@@ -165,6 +184,7 @@ pub struct L7Rules {
 pub struct CompileEnv {
     pub repo_remote: Option<RepoId>,
     pub github_app_issuers: BTreeSet<String>,
+    pub aws_sts_issuers: BTreeSet<String>,
     /// The session's principal (Task) and mode.
     pub session: crate::cedar::SessionInfo,
 }
@@ -203,9 +223,11 @@ pub fn compile_rules(
         Some("git") => Protocol::Git,
         Some("registry") => Protocol::Registry,
         Some("github") => Protocol::GitHub,
-        Some(p) => return Err(format!("{grant_id}: unknown protocol {p:?} (http, git, registry, github)")),
+        Some("s3") => Protocol::S3,
+        Some(p) => return Err(format!("{grant_id}: unknown protocol {p:?} (http, git, registry, github, s3)")),
     };
     let (verbs, repos) = crate::github::compile_verbs(grant_id, e, protocol, env)?;
+    let s3 = crate::s3::compile(grant_id, e, protocol, pattern)?;
     let methods = match &e.methods {
         None if protocol == Protocol::Registry => Some(["GET", "HEAD"].iter().map(|s| s.to_string()).collect()),
         None => None,
@@ -228,7 +250,7 @@ pub fn compile_rules(
         .map_err(|m| format!("{grant_id}: {m}"))?;
     let (mut fetch, mut push) = (Vec::new(), Vec::new());
     match (&e.allow, protocol) {
-        (Some(_), Protocol::Http | Protocol::Registry | Protocol::GitHub) => {
+        (Some(_), Protocol::Http | Protocol::Registry | Protocol::GitHub | Protocol::S3) => {
             return Err(format!("{grant_id}: allow = {{ fetch, push }} needs protocol = \"git\""));
         }
         (_, Protocol::Git) if e.methods.is_some() || e.paths.is_some() => {
@@ -261,10 +283,10 @@ pub fn compile_rules(
     let credential = e
         .credential
         .as_ref()
-        .map(|c| credential::compile_credential(grant_id, c, protocol, pattern, env))
+        .map(|c| credential::compile_credential(grant_id, c, protocol, pattern, env, s3.as_ref()))
         .transpose()?
         .map(Arc::new);
-    Ok(Some(L7Rules { protocol, methods, paths, fetch, push, verbs, repos, credential }))
+    Ok(Some(L7Rules { protocol, methods, paths, fetch, push, verbs, repos, s3, credential }))
 }
 
 impl L7Rules {
@@ -286,6 +308,9 @@ impl L7Rules {
     pub fn repos(&self) -> &[RepoPattern] {
         &self.repos
     }
+    pub fn s3(&self) -> Option<&crate::s3::S3Rules> {
+        self.s3.as_ref()
+    }
 
     /// The reference (explainer) evaluation of one action against this
     /// grant: Cedar decides; this names the most specific unmet condition.
@@ -296,8 +321,13 @@ impl L7Rules {
                 let p_ok = self.paths.as_ref().is_none_or(|ps| ps.iter().any(|p| p.matches(path)));
                 if m_ok && p_ok { Ok(()) } else { Err(Reason::L7NoRuleMatched) }
             }
-            // On a GitHub API grant the verb decides; its Http action rides along.
-            (Action::Http { .. }, Protocol::GitHub) => Ok(()),
+            // On GitHub API and S3 grants the verb or operation decides; the
+            // request's Http action rides along.
+            (Action::Http { .. }, Protocol::GitHub | Protocol::S3) => Ok(()),
+            (Action::S3 { op, bucket, key }, Protocol::S3) => match &self.s3 {
+                Some(r) => crate::s3::rule_allows(r, op, bucket, key),
+                None => Err(Reason::S3PrefixNotAllowed),
+            },
             (Action::GitHub { verb, repo, .. }, Protocol::GitHub) => {
                 crate::github::rule_allows(&self.verbs, &self.repos, verb, repo.as_ref())
             }

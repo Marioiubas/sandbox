@@ -102,6 +102,12 @@ pub enum Reason {
     GithubVerbNotAllowed,
     /// GitHub API: the verb is granted, but not on this repository.
     GithubRepoNotAllowed,
+    /// S3: a request the adapter does not map to an object read, listing,
+    /// write or delete (bucket settings, ACLs, copies, presigned URLs,
+    /// signed-chunk uploads).
+    S3RouteUnknown,
+    /// S3: the operation is not granted on this bucket and key prefix.
+    S3PrefixNotAllowed,
     /// MCP: no pinned server by that name in user or org policy.
     McpServerUnknown,
     /// MCP: the server's manifest was never approved.
@@ -216,6 +222,8 @@ impl Reason {
         Reason::GithubGraphqlUnsupported,
         Reason::GithubVerbNotAllowed,
         Reason::GithubRepoNotAllowed,
+        Reason::S3RouteUnknown,
+        Reason::S3PrefixNotAllowed,
         Reason::McpServerUnknown,
         Reason::McpManifestUnapproved,
         Reason::McpManifestChanged,
@@ -294,6 +302,8 @@ impl Reason {
             Reason::GithubGraphqlUnsupported => "github_graphql_unsupported",
             Reason::GithubVerbNotAllowed => "github_verb_not_allowed",
             Reason::GithubRepoNotAllowed => "github_repo_not_allowed",
+            Reason::S3RouteUnknown => "s3_route_unknown",
+            Reason::S3PrefixNotAllowed => "s3_prefix_not_allowed",
             Reason::McpServerUnknown => "mcp_server_unknown",
             Reason::McpManifestUnapproved => "mcp_manifest_unapproved",
             Reason::McpManifestChanged => "mcp_manifest_changed",
@@ -355,7 +365,9 @@ impl Reason {
             | GithubRouteUnknown
             | GithubGraphqlUnsupported
             | GithubVerbNotAllowed
-            | GithubRepoNotAllowed => "l7",
+            | GithubRepoNotAllowed
+            | S3RouteUnknown
+            | S3PrefixNotAllowed => "l7",
             ForeignCredential | SentinelWrongHost | AmbiguousCredential | MintFailed | SecretReflected => "credentials",
             McpServerUnknown
             | McpManifestUnapproved

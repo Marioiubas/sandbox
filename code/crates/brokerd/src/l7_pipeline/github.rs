@@ -108,6 +108,9 @@ impl Conn {
                     raise.push((Label::ExternalEffect, a.verb()))
                 }
                 Action::GitPush { .. } => raise.push((Label::ExternalEffect, a.verb())),
+                Action::S3 { op, .. } => {
+                    raise.extend(policy::s3::labels_for(op).into_iter().map(|l| (l, a.verb())));
+                }
                 _ => {}
             }
         }

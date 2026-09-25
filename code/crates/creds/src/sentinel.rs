@@ -4,16 +4,23 @@
 //! bound to, so a copy taken off-host is useless (M1 acceptance B5).
 
 use netguard::{CanonicalHost, HostPattern};
-use policy::CredentialDef;
+use policy::{CredKind, CredentialDef};
 use std::sync::Arc;
 
 pub const PREFIX: &str = "brk_s_";
+
+/// What an `aws_sts` session's `AWS_SECRET_ACCESS_KEY` holds in the
+/// sandbox: not a secret and not a sentinel. SDKs need a value to sign
+/// with; the broker discards their signature and signs again.
+pub const AWS_SECRET_PLACEHOLDER: &str = "brk_aws_requests_are_signed_by_the_broker";
 
 struct Entry {
     value: String,
     credential_id: String,
     env: Option<String>,
     hosts: Vec<HostPattern>,
+    /// A second, non-secret variable the credential needs in the sandbox.
+    companion: Option<(&'static str, &'static str)>,
 }
 
 /// The sentinels of one session.
@@ -55,6 +62,8 @@ impl Sentinels {
                     credential_id: c.id.clone(),
                     env: c.env.clone(),
                     hosts: c.hosts.clone(),
+                    companion: matches!(c.kind, CredKind::AwsSts { .. })
+                        .then_some(("AWS_SECRET_ACCESS_KEY", AWS_SECRET_PLACEHOLDER)),
                 })
                 .collect(),
         }
@@ -62,7 +71,10 @@ impl Sentinels {
 
     /// `(variable, sentinel)` pairs for the sandbox environment.
     pub fn env(&self) -> Vec<(String, String)> {
-        self.entries.iter().filter_map(|e| e.env.as_ref().map(|v| (v.clone(), e.value.clone()))).collect()
+        let mut out: Vec<(String, String)> =
+            self.entries.iter().filter_map(|e| e.env.as_ref().map(|v| (v.clone(), e.value.clone()))).collect();
+        out.extend(self.entries.iter().filter_map(|e| e.companion).map(|(k, v)| (k.to_string(), v.to_string())));
+        out
     }
 
     /// The sentinel issued for a credential (tests and body swap).

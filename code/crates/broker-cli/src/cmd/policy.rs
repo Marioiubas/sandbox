@@ -131,6 +131,7 @@ fn run_check(a: CheckArgs) -> anyhow::Result<i32> {
     let env = CompileEnv {
         repo_remote: brokerd::session_util::origin_remote(&root),
         github_app_issuers: user.issuers.github_app.keys().cloned().collect(),
+        aws_sts_issuers: user.issuers.aws_sts.keys().cloned().collect(),
         ..Default::default()
     };
     let mut new = compile(profile.as_ref(), &user, &env)?;
@@ -190,8 +191,11 @@ fn run_export(a: ExportArgs) -> anyhow::Result<()> {
         None => brokerd::session_util::load_user_policy(&dirs)?,
     };
     let profile = (format!("profile:{}", a.profile), brokerd::profiles::by_name(&a.profile)?);
-    let env =
-        CompileEnv { github_app_issuers: user.issuers.github_app.keys().cloned().collect(), ..Default::default() };
+    let env = CompileEnv {
+        github_app_issuers: user.issuers.github_app.keys().cloned().collect(),
+        aws_sts_issuers: user.issuers.aws_sts.keys().cloned().collect(),
+        ..Default::default()
+    };
     let egress = compile(Some(&profile), &user, &env)?;
     let mut report = Vec::new();
     let mut paths = |list: &[String]| -> Vec<String> {

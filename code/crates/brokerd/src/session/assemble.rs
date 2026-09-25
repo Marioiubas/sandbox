@@ -95,6 +95,7 @@ impl Daemon {
         let compile_env = policy::CompileEnv {
             repo_remote,
             github_app_issuers: user_policy.issuers.github_app.keys().cloned().collect(),
+            aws_sts_issuers: user_policy.issuers.aws_sts.keys().cloned().collect(),
             session: session_info,
         };
         let mut egress = EgressPolicy::compile_with(

@@ -531,6 +531,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "l7",
  "libc",
  "netguard",
  "ring",

@@ -7,7 +7,7 @@ tags: [sandbox/policy, interface, topic/policy, topic/credentials, invariant/i4,
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: "The Broker namespace schema sketch (Trifecta and Session types; Group, User, Agent, Task, Host, PathPrefix, Repo, Credential, McpServer, Dir, File; HttpCtx, GitCtx, CredCtx, McpCtx; http.*, git.*, credential.use, mcp.call_tool, fs.* actions), with grants as entities and time as epoch seconds."
 related: ["[[Cedar]]", "[[Example Cedar Policies]]", "[[Trifecta Session Labels]]", "[[Policy Engine and Entity Builder]]", "[[broker.toml Human Policy Layer]]", "[[GitHub API Adapter]]", "[[Git Smart-HTTP Adapter]]", "[[MCP Guard]]", "[[Open Questions and Unverified Claims]]", "[[DRIFT]]", "[[Internal Grant JWT]]", "[[Hostname Canonicaliser]]", "[[SymCC CI Gates]]", "[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[Control Plane and Policy Bundles]]", "[[Provenance-Aware Cedar]]", "[[Sandbox Launcher]]", "[[Credential Injector and Issuers]]", "[[Registry and LLM API Adapters]]"]
 sources: ["https://docs.rs/cedar-policy-symcc", "https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://arxiv.org/html/2506.12104v2", "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy-core-concepts.html", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html"]
@@ -195,3 +195,4 @@ The paper audit's inference that argument provenance, reader sets and trifecta s
 - 2026-09-24: compiled and validated (strict) with `cedar-policy` 4.13.0 as `code/crates/policy/src/cedar/schema.cedarschema`; the default and ceiling policies and every compiler-emitted policy shape validate against it (`schema_and_default_policies_validate`). Changes from the sketch are listed in [[ADR-022 Cedar Schema and Engine as Built]].
 - 2026-09-24: `context.session.mode` gains `"shadow"` (enforce semantics for the applied decision; no policy tests for it) ([[ADR-026 Shadow Mode as Built]]).
 - 2026-09-24 (M3): `GitHubCtx { session, port, method, path_str }`; `repo.read`, `pr.create`, `pr.merge`, `issue.comment`, `contents.write` on `Repo`; `github.read`, `gist.create` on `Host`; `Repo.visibility` from the broker's lookup; `Credential.risk` from config ([[ADR-029 GitHub API Adapter and Session Labels as Built]]).
+- 2026-09-25 (M3): `S3Ctx { session, port, bucket, key }`; `s3.get`, `s3.list`, `s3.put`, `s3.delete` on `Host`; grants compile to `context.bucket == B && context.key like "p*"` ([[ADR-032 AWS STS and S3 Adapter as Built]]).

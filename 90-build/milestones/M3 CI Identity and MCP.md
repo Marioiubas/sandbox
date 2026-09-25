@@ -7,7 +7,7 @@ tags: [sandbox/build, milestone, milestone/m3, topic/identity, topic/mcp, topic/
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -70,8 +70,8 @@ The motivating incidents: a public issue drove an agent to read private repos wi
 
 **AWS (crate `creds`)**
 
-- [ ] `crates/creds/src/issuers/aws_sts.rs`: `AssumeRole` with an inline session policy compiled from the Cedar grant (≤2,048 chars inline plus up to 10 ARNs), `DurationSeconds` 900 s by default, `SourceIdentity` set to the user or agent ID ([AWS STS](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html)).
-- [ ] `crates/creds/src/issuers/sigv4.rs`: re-sign requests with the minted session credentials at egress.
+- [x] `crates/creds/src/issuers/aws_sts.rs`: `AssumeRole` with an inline session policy compiled from the Cedar grant (≤2,048 chars inline plus up to 10 ARNs), `DurationSeconds` 900 s by default, `SourceIdentity` set to the user or agent ID ([AWS STS](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html)).
+- [x] `crates/creds/src/issuers/sigv4.rs`: re-sign requests with the minted session credentials at egress. (S3 only; the operation map is `crates/l7/src/s3.rs`, the grant and session-policy compiler `crates/policy/src/s3.rs`: [[ADR-032 AWS STS and S3 Adapter as Built]])
 
 **Trifecta and GitHub verbs**
 
@@ -164,3 +164,4 @@ Next milestone: [[M4 Harden and Ship]].
 - 2026-09-24: step 1 built: the GitHub API adapter and session trifecta labels ([[ADR-029 GitHub API Adapter and Session Labels as Built]]). D5 passes against a fake GitHub API: `m3_github::d5_toxic_flow_is_stopped_at_the_public_write` (public issue → private read → public PR denied by the Rule of Two, both labels logged); ADR-010's benign case passes (`a_public_issue_then_a_pr_on_that_public_repo_is_allowed`). Remaining: CI mode (D1), identity (D2, needs Okta/Entra dev tenants), MCP Guard (D3, D4), AWS STS (D6), and D7 across them.
 - 2026-09-25: step 2 built: MCP Guard for stdio servers ([[ADR-030 MCP Guard as Built]]). D3 and D4 pass against a fake server and API (`m3_mcp::d3_d4_pinned_server_is_approved_confined_and_revoked_on_change`), with I1 and I5 extended to the server principal. The real GitHub MCP server run needs a GitHub token (user). Remaining: CI mode (D1), identity (D2), AWS STS (D6).
 - 2026-09-25: step 3 built: CI identity ([[ADR-031 CI Identity as Built]]). D1 runs in the `ci-mode` CI job (untrusted-issue fixture under the GitHub Action with the real runner token); attribution and refusal are tested locally (`m3_identity::*`). D2 (Okta/Entra) needs the dev tenants; D6 (AWS) remains.
+- 2026-09-25: step 4 built: AWS STS and the S3 adapter ([[ADR-032 AWS STS and S3 Adapter as Built]]). D6 passes against a fake STS and a fake S3 that verify every SigV4 signature and evaluate the session policy (`m3_s3::d6_s3_reads_through_minted_credentials_and_out_of_prefix_writes_are_denied`, `m3_s3::d6_the_session_policy_denies_on_its_own`, `m3_s3::d6_a_planted_aws_key_is_rejected`); the real-AWS run needs a test account (user). Remaining: D2 (Okta/Entra tenants), the D1/D3/D6 runs against real services, org public-sink option, GraphQL.

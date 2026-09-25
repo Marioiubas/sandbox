@@ -3,10 +3,11 @@
 //! session; nothing is written to disk.
 
 use crate::issuers::Transport;
+use crate::issuers::aws_sts::{self, AwsSts, BaseCreds};
 use crate::issuers::github_app::{self, GitHubApp};
 use crate::secrets::SecretReader;
 use crate::sentinel::Sentinels;
-use crate::{Issued, Secret};
+use crate::{AwsKeys, Issued, Secret};
 use policy::{AllowedBinding, CredKind, CredentialDef};
 use ring::signature::RsaKeyPair;
 use sha2::{Digest, Sha256};
@@ -33,6 +34,9 @@ pub struct SessionCreds {
     reader: Arc<dyn SecretReader>,
     transport: Arc<dyn Transport>,
     issuers: BTreeMap<String, GitHubApp>,
+    aws: BTreeMap<String, AwsSts>,
+    /// `SourceIdentity` for STS sessions (the session's end user).
+    source_identity: Option<String>,
     cache: tokio::sync::Mutex<HashMap<[u8; 32], Arc<Issued>>>,
     keys: Mutex<HashMap<String, Arc<RsaKeyPair>>>,
     /// Upstream mint/load operations performed (tests assert "no mint without allow").
@@ -62,6 +66,9 @@ pub fn scope_digest(def: &CredentialDef, issuers: &BTreeMap<String, GitHubApp>, 
                 "permissions": permissions, "repos": r, "session": session,
             })
         }
+        CredKind::AwsSts { issuer, session_policy } => serde_json::json!({
+            "kind": "aws_sts", "credential": def.id, "issuer": issuer, "policy": session_policy, "session": session,
+        }),
     };
     Sha256::digest(v.to_string().as_bytes()).into()
 }
@@ -85,10 +92,20 @@ impl SessionCreds {
             reader,
             transport,
             issuers,
+            aws: BTreeMap::new(),
+            source_identity: None,
             cache: tokio::sync::Mutex::new(HashMap::new()),
             keys: Mutex::new(HashMap::new()),
             mints: AtomicU64::new(0),
         }
+    }
+
+    /// Add `aws_sts` issuers, and the end user STS sessions name as their
+    /// `SourceIdentity`.
+    pub fn with_aws_sts(mut self, issuers: BTreeMap<String, AwsSts>, source_identity: Option<String>) -> SessionCreds {
+        self.aws = issuers;
+        self.source_identity = source_identity;
+        self
     }
 
     /// The credential for an allowed request: a cached handle when the same
@@ -129,10 +146,41 @@ impl SessionCreds {
                 let reuse = def.ttl.map(|t| now + t).map(|r| r.min(exp)).unwrap_or(exp);
                 Issued::new(&def.id, "github_app", tok, Some(exp), Some(reuse), digest, "mint")
             }
+            CredKind::AwsSts { issuer, session_policy } => {
+                let sts = self.aws.get(issuer).ok_or_else(|| err(format!("no issuer {issuer}")))?;
+                let base = self.aws_base(sts).await.map_err(|e| err(format!("{e:#}")))?;
+                let name = aws_sts::sts_name(&format!("broker-{}", self.session));
+                let who = self.source_identity.as_deref().filter(|_| sts.source_identity).map(aws_sts::sts_name);
+                let s = aws_sts::mint(sts, &base, self.transport.as_ref(), session_policy, &name, who.as_deref())
+                    .await
+                    .map_err(|e| err(format!("{e:#}")))?;
+                let now = SystemTime::now();
+                if s.expires_at <= now + REFRESH_MARGIN {
+                    return Err(err("minted session is already (nearly) expired".into()));
+                }
+                let reuse = def.ttl.map(|t| now + t).map(|r| r.min(s.expires_at)).unwrap_or(s.expires_at);
+                let keys = AwsKeys { access_key_id: s.access_key_id, session_token: s.session_token };
+                Issued::new(&def.id, "aws_sts", s.secret_access_key, Some(s.expires_at), Some(reuse), digest, "mint")
+                    .with_aws(keys)
+            }
         };
         let issued = Arc::new(issued);
         cache.insert(digest, issued.clone());
         Ok((issued, false))
+    }
+
+    /// The base credentials of an STS issuer, read for each mint.
+    async fn aws_base(&self, sts: &AwsSts) -> anyhow::Result<BaseCreds> {
+        let reader = self.reader.clone();
+        let refs = (sts.access_key_id.clone(), sts.secret_access_key.clone(), sts.session_token.clone());
+        tokio::task::spawn_blocking(move || {
+            Ok(BaseCreds {
+                access_key_id: reader.read(&refs.0)?,
+                secret_access_key: reader.read(&refs.1)?,
+                session_token: refs.2.as_ref().map(|r| reader.read(r)).transpose()?,
+            })
+        })
+        .await?
     }
 
     async fn app_key(&self, app: &GitHubApp) -> anyhow::Result<Arc<RsaKeyPair>> {

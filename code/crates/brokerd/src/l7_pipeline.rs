@@ -45,6 +45,7 @@ use tokio_rustls::TlsAcceptor;
 
 mod github;
 mod respond;
+mod s3;
 
 use respond::{OutcomeBody, collect, decode_body};
 
@@ -187,6 +188,9 @@ impl Conn {
         };
         let method = parts.method.as_str().to_string();
         let plan = l7::classify::plan(&self.protocols, &self.host, self.port, &method, path.path(), path.query());
+        if let Err(r) = s3::check_headers(&plan, &parts.headers) {
+            return self.deny(&rid, r, vec![], &[format!("http {method} {}", path.path())], None, None);
+        }
 
         // 5a. Client credentials: sentinels for this host only (I7).
         let sentinels = &self.l7.creds.sentinels;
@@ -337,10 +341,7 @@ impl Conn {
         parts
             .headers
             .insert(http::header::HOST, HeaderValue::from_str(&self.authority()).expect("canonical authority"));
-        let target = match &query {
-            Some(q) => format!("{}?{q}", path.path()),
-            None => path.path().to_string(),
-        };
+        let target = s3::target(&plan, path.path(), query.as_deref());
         parts.uri = match target.parse() {
             Ok(u) => u,
             Err(_) => return self.deny(&rid, Reason::NonCanonicalPath, vec![], &verbs, None, None),
@@ -348,7 +349,7 @@ impl Conn {
         parts.version = http::Version::HTTP_11;
         let mut needles: Vec<Vec<u8>> = Vec::new();
         if let Some((i, _, spec, _)) = &issued {
-            if creds::attach(i, spec, &mut parts.headers).is_err() {
+            if s3::attach(&plan, i, spec, &method, &mut parts.headers).is_err() {
                 return self.deny(&rid, Reason::MintFailed, vec![], &verbs, None, None);
             }
             needles = creds::issuers::needles(i, spec);

@@ -5,11 +5,12 @@ type: "standard"
 section: "identity"
 summary: "AssumeRole with an inline session policy (<=2,048 chars plus up to 10 ARNs) intersected with the role, 900 s-43,200 s lifetime (1 h when chaining), 50 tags and SourceIdentity in CloudTrail; the best native story, compiled by the broker."
 tags: [sandbox/identity, standard, topic/credentials, topic/audit, platform/cloud, control/task-tok, control/cred-out, boundary/tb4, invariant/i1, milestone/m3]
-status: verified
+status: built
 confidence: high
 milestone: M3
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
+code: ["code/crates/creds/src/issuers/aws_sts.rs", "code/crates/creds/src/issuers/sigv4.rs", "code/crates/policy/src/s3.rs", "code/crates/l7/src/s3.rs", "code/crates/brokerd/src/l7_pipeline/s3.rs"]
 related: ["[[Just-in-Time Credential Minting]]", "[[Credential Injector and Issuers]]", "[[M3 CI Identity and MCP]]", "[[Policy Miner Safeguards]]", "[[Audit Recorder and Event Schema]]", "[[ADR-005 Mint Credentials Per Task]]", "[[Claude Code and sandbox-runtime]]", "[[Core Trait Contracts]]", "[[Tech Stack]]", "[[GCP Credential Access Boundaries]]"]
 ---
 
@@ -110,9 +111,19 @@ The role's own policy is the org ceiling (for example read-only on the data buck
 
 ## Open questions
 
-- Required-parameter and response-shape details beyond the record must be confirmed from the API reference.
-- The SigV4 streaming-payload strategy is undecided.
+- ~~Required-parameter and response-shape details beyond the record must be confirmed from the API reference.~~ Resolved 2026-09-25 from the [STS API reference](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html): `RoleArn` (20-2048) and `RoleSessionName` (2-64, `[\w+=,.@-]*`) are required; `SourceIdentity` has the same pattern and may not begin with `aws:`; the response is XML with `Credentials` holding `AccessKeyId`, `SecretAccessKey`, `SessionToken` and an ISO 8601 `Expiration`; `DurationSeconds` defaults to 3600 when omitted (the broker always sends it).
+- ~~The SigV4 streaming-payload strategy is undecided.~~ Decided in [[ADR-032 AWS STS and S3 Adapter as Built]]: keep a client payload hash (S3 verifies the body against it) or an unsigned payload; refuse signed-chunk uploads.
+
+## Implementation notes
+
+- The inline example above is what the compiler emits for `read = ["tasks/123/"]`, minified. Write prefixes add `s3:PutObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`; delete prefixes add `s3:DeleteObject`; a `""` read prefix drops the `s3:prefix` condition so unprefixed listings match Cedar's decision ([[ADR-032 AWS STS and S3 Adapter as Built]]).
+- The "2,048 plaintext characters" limit is checked when the policy compiles, so an oversized grant is a compile error rather than a runtime `AssumeRole` failure.
+- For S3 the canonical request's payload hash is the `x-amz-content-sha256` value itself, including the literal `UNSIGNED-PAYLOAD` ([IAM User Guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/create-signed-request.html)).
 
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-25: built for M3 ([[ADR-032 AWS STS and S3 Adapter as Built]]). `creds::issuers::aws_sts` (config, `AssumeRole` form body, strict XML parsing, SigV4-signed call with the base credentials, `sign_s3`), `creds::issuers::sigv4` (checked against four AWS SigV4 test-suite vectors and curl's `--aws-sigv4`), `policy::s3` (endpoint grammar, prefixes, session policy compiler with the 2,048-character check, reference check), `l7::s3` (operation map, canonical URI and query, header refusals). Tests: `policy::s3::tests::broker_and_aws_agree` (property: the reference decision and an IAM evaluation of the compiled session policy agree for every operation, bucket and key), `cedar::s3_tests::*`, `creds::issuers::aws_sts::tests::*`, `m3_s3::d6_*`; fuzz target `s3_route`. Tags and `PolicyArns` are not sent.

@@ -119,6 +119,7 @@ impl Daemon {
             ChannelAuth::Sentinel(b) => Some(b.clone()),
             _ => None,
         };
+        let enduser = identity.as_ref().map(|i| i.subject.clone()).unwrap_or_else(|| format!("local:{username}"));
         let l7 = crate::session_l7::setup(
             id,
             &egress,
@@ -128,6 +129,7 @@ impl Daemon {
             self.resolver.clone(),
             session_tmp,
             channel_sentinel,
+            &enduser,
         )
         .map_err(|e| format!("L7 setup: {e:#}"))?;
         for (k, v) in &l7.env {
@@ -153,7 +155,6 @@ impl Daemon {
 
         // Start the data plane before the agent, so its first request has a
         // listener (I2); then launch, which verifies the layers from inside.
-        let enduser = identity.as_ref().map(|i| i.subject.clone()).unwrap_or_else(|| format!("local:{username}"));
         let stats = Arc::new(Stats::default());
         let egress_mode = egress.mode().as_str();
         let ctx = Arc::new(PipelineCtx {

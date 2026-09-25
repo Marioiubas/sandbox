@@ -4395,5 +4395,24 @@
     "aliases": [
       "ADR-031"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-032 AWS STS and S3 Adapter as Built.md",
+    "title": "ADR-032 AWS STS and S3 Adapter as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "S3 grants map each request to s3.get, s3.list, s3.put or s3.delete on a bucket and key prefix or deny it; an aws_sts credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker strips the agent's SigV4 signature and re-signs with the session.",
+    "links_to": [
+      "AWS STS Session Policies",
+      "Credential Injector and Issuers",
+      "M3 CI Identity and MCP",
+      "I1 No Secrets in the Sandbox",
+      "I7 Reject Foreign Credentials",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-25) from the STS AssumeRole API reference, the IAM User Guide's SigV4 signing procedure, the AWS SigV4 test suite and the D6 tests.",
+    "aliases": [
+      "ADR-032"
+    ]
   }
 ]

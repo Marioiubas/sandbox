@@ -269,6 +269,33 @@ fn l7_policies(
                 out.push(permit(&id("host-verbs"), idx, &host_verbs, &[h.into(), p.into()]));
             }
         }
+        Protocol::S3 => {
+            // The operation decides; the request's Http action rides along.
+            out.push(permit(&id("http"), idx, &["http.read".into(), "http.write".into()], &[h.into(), p.into()]));
+            if let Some(r) = rules.s3() {
+                let classes: [(&str, &[&str]); 3] =
+                    [("read", &["s3.get", "s3.list"]), ("write", &["s3.put"]), ("delete", &["s3.delete"])];
+                for (kind, ops) in classes {
+                    let prefixes = r.prefixes(ops[0]);
+                    if prefixes.is_empty() {
+                        continue;
+                    }
+                    let keys: Vec<String> =
+                        prefixes.iter().map(|x| format!("context.key like {}", like_lit(&format!("{x}*")))).collect();
+                    out.push(permit(
+                        &id(&format!("s3-{kind}")),
+                        idx,
+                        &ops.iter().map(|o| o.to_string()).collect::<Vec<_>>(),
+                        &[
+                            h.into(),
+                            p.into(),
+                            format!("context.bucket == {}", lit(&r.bucket)),
+                            format!("({})", keys.join(" || ")),
+                        ],
+                    ));
+                }
+            }
+        }
         Protocol::Git => {
             let fetch = rules.fetch();
             if !fetch.is_empty() {

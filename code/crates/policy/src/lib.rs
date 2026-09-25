@@ -20,6 +20,7 @@ pub mod glob;
 pub mod l7;
 pub mod mcp;
 pub mod repo;
+pub mod s3;
 
 pub use config::{AgentSection, FsSection, PolicyFile, ProfileFile, load_policy_file, load_profile_str};
 pub use egress::{Admission, EgressPolicy, Grant, PathChoice};

@@ -147,6 +147,21 @@ pub fn inspect(
                             }
                             verdict(pass, name, sentinels, dest, &mut uses)?
                         }
+                        // A SigV4 signature made with an access key ID: only
+                        // this session's sentinel is acceptable (the broker
+                        // re-signs); the signature itself is discarded.
+                        "aws4-hmac-sha256" => {
+                            let akid = rest
+                                .split(',')
+                                .find_map(|p| p.trim().strip_prefix("Credential="))
+                                .and_then(|c| c.split('/').next())
+                                .filter(|a| !a.is_empty())
+                                .ok_or_else(|| Rejected {
+                                    reason: Reason::ForeignCredential,
+                                    location: name.to_string(),
+                                })?;
+                            verdict(akid.as_bytes(), name, sentinels, dest, &mut uses)?
+                        }
                         _ => {
                             return Err(Rejected { reason: Reason::ForeignCredential, location: name.to_string() });
                         }
@@ -220,6 +235,30 @@ mod tests {
             h.append(http::header::HeaderName::from_bytes(k.as_bytes()).unwrap(), HeaderValue::from_str(v).unwrap());
         }
         h
+    }
+
+    #[test]
+    fn sigv4_authorization_carries_only_a_sentinel_access_key_id() {
+        let (s, v, api) = setup();
+        let sig = |akid: &str| {
+            format!(
+                "AWS4-HMAC-SHA256 Credential={akid}/20260925/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-date, Signature=00ff"
+            )
+        };
+        let ok = inspect(&hm(&[("authorization", &sig(&v))]), None, &s, &api, None).unwrap();
+        assert_eq!(ok[0].credential_id, "anthropic");
+        for bad in [
+            sig("AKIDEXAMPLEFOREIGN"),
+            sig(""),
+            "AWS4-HMAC-SHA256 SignedHeaders=host, Signature=00".to_string(),
+            "AWS4-HMAC-SHA256".to_string(),
+        ] {
+            let r = inspect(&hm(&[("authorization", &bad)]), None, &s, &api, None).unwrap_err();
+            assert_eq!(r.reason, Reason::ForeignCredential, "{bad}");
+        }
+        let other = canon_host(b"evil.example").unwrap();
+        let r = inspect(&hm(&[("authorization", &sig(&v))]), None, &s, &other, None).unwrap_err();
+        assert_eq!(r.reason, Reason::SentinelWrongHost);
     }
 
     #[test]

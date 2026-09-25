@@ -249,3 +249,43 @@ session and every audit row are then attributed to the token's subject,
 for example `repo:acme/web:ref:refs/heads/main`. A token that does not
 check out stops the run. The token is never given to the agent or sent
 anywhere else.
+
+## Amazon S3 through STS (M3)
+
+```toml
+[[egress]]
+host = "acme-data.s3.us-east-1.amazonaws.com"   # or s3.us-east-1.amazonaws.com (path-style)
+protocol = "s3"
+s3 = { bucket = "acme-data", read = ["tasks/123/"], write = ["tasks/123/out/"] }   # delete = [...] too
+credential = { kind = "aws_sts", issuer = "dev" }
+
+[issuers.aws_sts.dev]                   # user or org policy only
+role_arn = "arn:aws:iam::123456789012:role/agent-s3"
+region = "us-east-1"
+access_key_id = "keychain:broker-aws-dev#access_key_id"          # base credentials that may assume the role
+secret_access_key = "keychain:broker-aws-dev#secret_access_key"
+# duration = "15m"                      # 15m (default) to 12h, within the role's maximum
+# source_identity = true                # the trust policy must allow sts:SetSourceIdentity
+```
+
+Each request on an S3 grant is a read (`GetObject`, `HeadObject`), a
+listing (`ListObjects`, `ListObjectsV2` on a `prefix`), a write
+(`PutObject` and the multipart-upload calls) or a delete (`DeleteObject`),
+and it is allowed only on the grant's bucket and under its prefixes.
+Everything else is denied: bucket and object settings (`?acl`, `?policy`,
+`?tagging`, …), versioned access, copies, batch deletes, presigned URLs,
+requests that set ACLs, tags or object locks, and uploads that sign each
+chunk. Prefixes are literal (no `*`, `?` or `$`); a prefix of `""` means
+the whole bucket.
+
+The agent gets `AWS_ACCESS_KEY_ID` set to a sentinel and
+`AWS_SECRET_ACCESS_KEY` set to a placeholder, so AWS SDKs and
+`curl --aws-sigv4` sign requests as usual. The broker checks each request,
+strips the agent's signature and signs the request again with a session
+it gets from STS `AssumeRole`. That session is limited by an inline session
+policy the broker builds from the grant (same bucket, same prefixes), so AWS
+refuses anything outside them even without the broker's own check. Sessions
+last 15 minutes by default, are reused within a `broker run`, and never
+enter the sandbox. The role's own policy is the upper limit: a session
+policy can only narrow it. With `source_identity` on (the default), the
+session's user appears in CloudTrail as `SourceIdentity`.

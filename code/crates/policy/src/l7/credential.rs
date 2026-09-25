@@ -15,6 +15,9 @@ pub enum AttachSpec {
     Basic { username: String },
     /// `<name>: <secret>`
     Header { name: String },
+    /// The whole request is signed with AWS Signature Version 4 using the
+    /// minted session credentials (`aws_sts`).
+    SigV4,
 }
 
 impl AttachSpec {
@@ -28,8 +31,20 @@ impl AttachSpec {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CredKind {
-    Static { secret: SecretRef },
-    GitHubApp { issuer: String, permissions: BTreeMap<String, String>, repos: Vec<RepoId> },
+    Static {
+        secret: SecretRef,
+    },
+    GitHubApp {
+        issuer: String,
+        permissions: BTreeMap<String, String>,
+        repos: Vec<RepoId>,
+    },
+    /// An STS `AssumeRole` session narrowed by an inline session policy
+    /// compiled from the grant's S3 prefixes.
+    AwsSts {
+        issuer: String,
+        session_policy: String,
+    },
 }
 
 impl CredKind {
@@ -37,6 +52,7 @@ impl CredKind {
         match self {
             CredKind::Static { .. } => "static",
             CredKind::GitHubApp { .. } => "github_app",
+            CredKind::AwsSts { .. } => "aws_sts",
         }
     }
 }
@@ -118,6 +134,7 @@ pub(super) fn compile_credential(
     protocol: Protocol,
     pattern: &HostPattern,
     env: &CompileEnv,
+    s3: Option<&crate::s3::S3Rules>,
 ) -> Result<CredentialDef, String> {
     let id = c.id.clone().unwrap_or_else(|| grant_id.to_string());
     if let Some(v) = &c.env
@@ -125,22 +142,31 @@ pub(super) fn compile_credential(
     {
         return Err(format!("credential {id}: env {v:?} is not an allowed variable name"));
     }
-    let attach = match (c.header.as_deref().map(str::to_ascii_lowercase), c.scheme.as_deref()) {
-        (Some(h), _) if !header_name_ok(&h) => return Err(format!("credential {id}: bad header name {h:?}")),
-        (Some(h), Some(_)) if h != "authorization" => {
-            return Err(format!("credential {id}: scheme applies only to the authorization header"));
+    let attach = if c.kind == "aws_sts" {
+        if c.header.is_some() || c.scheme.is_some() || c.username.is_some() {
+            return Err(format!(
+                "credential {id}: aws_sts signs the request (SigV4); header, scheme and username do not apply"
+            ));
         }
-        (Some(h), None) if h != "authorization" => AttachSpec::Header { name: h },
-        (_, Some("bearer")) => AttachSpec::Bearer,
-        (_, Some("token")) => AttachSpec::Token,
-        (_, Some("basic")) => AttachSpec::Basic {
-            username: c.username.clone().ok_or_else(|| format!("credential {id}: basic needs username"))?,
-        },
-        (_, Some(other)) => return Err(format!("credential {id}: unknown scheme {other:?}")),
-        (_, None) if c.kind == "github_app" && protocol == Protocol::Git => {
-            AttachSpec::Basic { username: "x-access-token".into() }
+        AttachSpec::SigV4
+    } else {
+        match (c.header.as_deref().map(str::to_ascii_lowercase), c.scheme.as_deref()) {
+            (Some(h), _) if !header_name_ok(&h) => return Err(format!("credential {id}: bad header name {h:?}")),
+            (Some(h), Some(_)) if h != "authorization" => {
+                return Err(format!("credential {id}: scheme applies only to the authorization header"));
+            }
+            (Some(h), None) if h != "authorization" => AttachSpec::Header { name: h },
+            (_, Some("bearer")) => AttachSpec::Bearer,
+            (_, Some("token")) => AttachSpec::Token,
+            (_, Some("basic")) => AttachSpec::Basic {
+                username: c.username.clone().ok_or_else(|| format!("credential {id}: basic needs username"))?,
+            },
+            (_, Some(other)) => return Err(format!("credential {id}: unknown scheme {other:?}")),
+            (_, None) if c.kind == "github_app" && protocol == Protocol::Git => {
+                AttachSpec::Basic { username: "x-access-token".into() }
+            }
+            (_, None) => AttachSpec::Bearer,
         }
-        (_, None) => AttachSpec::Bearer,
     };
     if c.username.is_some() && !matches!(attach, AttachSpec::Basic { .. }) {
         return Err(format!("credential {id}: username applies only to scheme = \"basic\""));
@@ -192,13 +218,31 @@ pub(super) fn compile_credential(
             }
             CredKind::GitHubApp { issuer, permissions, repos }
         }
-        other => return Err(format!("credential {id}: unknown kind {other:?} (static, github_app)")),
+        "aws_sts" => {
+            if c.secret_ref.is_some() || c.swap_body || c.permissions.is_some() || c.repos.is_some() {
+                return Err(format!(
+                    "credential {id}: ref/swap_body/permissions/repos do not apply to aws_sts (the grant's s3 prefixes are its scope)"
+                ));
+            }
+            if protocol != Protocol::S3 {
+                return Err(format!("credential {id}: aws_sts needs protocol = \"s3\""));
+            }
+            let issuer = c.issuer.clone().ok_or_else(|| format!("credential {id}: aws_sts needs issuer"))?;
+            if !env.aws_sts_issuers.contains(&issuer) {
+                return Err(format!("credential {id}: no [issuers.aws_sts.{issuer}] in user or org policy"));
+            }
+            let rules = s3.ok_or_else(|| format!("credential {id}: aws_sts needs the grant's s3 rules"))?;
+            let session_policy = crate::s3::session_policy(rules).map_err(|m| format!("credential {id}: {m}"))?;
+            CredKind::AwsSts { issuer, session_policy }
+        }
+        other => return Err(format!("credential {id}: unknown kind {other:?} (static, github_app, aws_sts)")),
     };
     Ok(CredentialDef {
         id,
         kind,
         attach,
-        env: c.env.clone(),
+        // The SDKs' variable for the access key ID receives the sentinel.
+        env: c.env.clone().or_else(|| (c.kind == "aws_sts").then(|| "AWS_ACCESS_KEY_ID".to_string())),
         swap_body: c.swap_body,
         hosts: vec![pattern.clone()],
         ttl,

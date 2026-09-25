@@ -23,6 +23,7 @@ http.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
+l7.workspace = true
 libc.workspace = true
 netguard.workspace = true
 ring.workspace = true

@@ -51,6 +51,10 @@ impl EgressPolicy {
                 };
                 (verb, res, ents, Box::new(ctx))
             }
+            Action::S3 { op, bucket, key } => {
+                let ctx = move |m: Mode| json!({ "session": self.session_ctx(m), "port": port, "bucket": bucket, "key": key });
+                (op, ent::host_uid(&adm.host), ents, Box::new(ctx))
+            }
         }
     }
 

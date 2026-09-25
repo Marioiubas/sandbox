@@ -30,7 +30,7 @@ pub struct EgressEntry {
     /// query DNS for this host. Address-class rules still apply.
     #[serde(default)]
     pub addrs: Vec<String>,
-    /// `http` (default when any L7 key is set), `git` or `registry`.
+    /// `http` (default when any L7 key is set), `git`, `registry`, `github` or `s3`.
     pub protocol: Option<String>,
     /// Allowed HTTP methods on a terminated host; absent means any, empty none.
     pub methods: Option<Vec<String>>,
@@ -45,6 +45,9 @@ pub struct EgressEntry {
     /// `protocol = "github"`: repositories the repository verbs apply to;
     /// absent means `["${repo_remote}"]` (the task repository only).
     pub repos: Option<Vec<String>>,
+    /// `protocol = "s3"`: the bucket and the key prefixes each operation
+    /// class may touch.
+    pub s3: Option<S3Allow>,
     /// A credential the broker attaches to requests this entry allows.
     pub credential: Option<CredentialSpec>,
     /// Certificate-pinning clients: never terminate TLS for this host, and
@@ -62,6 +65,7 @@ impl EgressEntry {
             || self.allow.is_some()
             || self.verbs.is_some()
             || self.repos.is_some()
+            || self.s3.is_some()
             || self.credential.is_some()
     }
 }
@@ -102,11 +106,28 @@ fn one_or_many<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<PushRule>, D::Erro
     })
 }
 
+/// `s3 = { ... }` on a `protocol = "s3"` entry: key prefixes per operation
+/// class. Empty lists grant nothing.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct S3Allow {
+    pub bucket: String,
+    /// Prefixes whose objects may be read (GetObject, HeadObject) and listed.
+    #[serde(default)]
+    pub read: Vec<String>,
+    /// Prefixes objects may be written under (PutObject, multipart uploads).
+    #[serde(default)]
+    pub write: Vec<String>,
+    /// Prefixes objects may be deleted under.
+    #[serde(default)]
+    pub delete: Vec<String>,
+}
+
 /// `credential = { ... }` on an egress entry.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct CredentialSpec {
-    /// `static` or `github_app`.
+    /// `static`, `github_app` or `aws_sts`.
     pub kind: String,
     /// Stable credential ID for audit rows (default: the grant ID).
     pub id: Option<String>,
@@ -126,7 +147,7 @@ pub struct CredentialSpec {
     /// Swap the sentinel for the secret inside request bodies too.
     #[serde(default)]
     pub swap_body: bool,
-    /// `github_app`: the `[issuers.github_app.<name>]` to mint with.
+    /// `github_app` or `aws_sts`: the `[issuers.<kind>.<name>]` to mint with.
     pub issuer: Option<String>,
     /// `github_app`: installation-token permissions (always sent).
     pub permissions: Option<BTreeMap<String, String>>,
@@ -153,11 +174,45 @@ pub struct GitHubAppIssuerSpec {
     pub api_addrs: Vec<String>,
 }
 
+/// `[issuers.aws_sts.<name>]`: a role the broker assumes with a session
+/// policy compiled from the grant (AWS STS Session Policies).
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AwsStsIssuerSpec {
+    /// The role to assume (its own policy is the ceiling).
+    pub role_arn: String,
+    /// The STS region (and the default endpoint's).
+    pub region: String,
+    /// Secret references to the base credentials that may assume the role.
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    /// For base credentials that are themselves temporary.
+    pub session_token: Option<String>,
+    /// Default `https://sts.<region>.amazonaws.com`.
+    pub sts_endpoint: Option<String>,
+    /// Pinned addresses for the STS host (tests); no DNS query then.
+    #[serde(default)]
+    pub sts_addrs: Vec<String>,
+    /// Session length (`15m` default; 15m to 12h, and at most the role's maximum).
+    pub duration: Option<String>,
+    /// Send `SourceIdentity` (the session's end user) for CloudTrail; the
+    /// role's trust policy must allow `sts:SetSourceIdentity`. Default true.
+    pub source_identity: Option<bool>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct IssuersSection {
     #[serde(default)]
     pub github_app: BTreeMap<String, GitHubAppIssuerSpec>,
+    #[serde(default)]
+    pub aws_sts: BTreeMap<String, AwsStsIssuerSpec>,
+}
+
+impl IssuersSection {
+    pub fn is_empty(&self) -> bool {
+        self.github_app.is_empty() && self.aws_sts.is_empty()
+    }
 }
 
 /// Identity sources (user or org scope): OIDC issuers whose identity

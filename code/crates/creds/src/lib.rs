@@ -7,8 +7,9 @@
 //!   issue (I7).
 //! - [`secrets`]: read roots from the OS keychain, brokerd's environment or
 //!   the broker config directory.
-//! - [`issuers`]: `static` and `github_app` (installation tokens limited to
-//!   repositories and permissions, always both).
+//! - [`issuers`]: `static`, `github_app` (installation tokens limited to
+//!   repositories and permissions, always both) and `aws_sts` (AssumeRole
+//!   sessions narrowed by a session policy; requests re-signed with SigV4).
 //! - [`session`]: per-session issued-token cache keyed by scope digest.
 //!
 //! Secret material lives in [`Secret`] (zeroized on drop, no `Clone`,
@@ -68,6 +69,15 @@ pub struct Issued {
     pub scope_digest: [u8; 32],
     /// `mint` or `load`, for audit rows.
     pub origin: &'static str,
+    /// `aws_sts`: the rest of the session (the secret is the secret key).
+    aws: Option<AwsKeys>,
+}
+
+/// The non-secret access key ID and the session token of a minted AWS
+/// session; the secret access key is the [`Issued`] secret.
+pub struct AwsKeys {
+    pub access_key_id: String,
+    pub session_token: Secret,
 }
 
 impl Issued {
@@ -80,7 +90,23 @@ impl Issued {
         scope_digest: [u8; 32],
         origin: &'static str,
     ) -> Issued {
-        Issued { credential_id: credential_id.to_string(), kind, secret, expires_at, reuse_until, scope_digest, origin }
+        Issued {
+            credential_id: credential_id.to_string(),
+            kind,
+            secret,
+            expires_at,
+            reuse_until,
+            scope_digest,
+            origin,
+            aws: None,
+        }
+    }
+    pub fn with_aws(mut self, keys: AwsKeys) -> Issued {
+        self.aws = Some(keys);
+        self
+    }
+    pub fn aws(&self) -> Option<&AwsKeys> {
+        self.aws.as_ref()
     }
     pub fn secret(&self) -> &Secret {
         &self.secret

@@ -197,3 +197,14 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Moved:** the launch step from `crates/brokerd/src/session.rs` to `crates/brokerd/src/session/launch.rs` (500-line rule; no behaviour change).
 - **ADRs:** [[ADR-031 CI Identity as Built]].
 - **Next step:** AWS STS minting and SigV4 re-signing against a fake STS/S3 (D6).
+
+### 2026-09-25: M3 step 4, AWS STS and the S3 adapter
+
+- **Milestone:** [[M3 CI Identity and MCP]] (in progress).
+- **Built:** S3 grants (`protocol = "s3"`, bucket plus read/write/delete prefixes) and the `l7::s3` adapter (every request is `s3.get`, `s3.list`, `s3.put` or `s3.delete` on one bucket and key, or denied); Cedar actions for them; the `aws_sts` issuer (`AssumeRole` signed by the broker with the base credentials, inline session policy compiled from the grant and size-checked at compile time, 15-minute default, `SourceIdentity`); SigV4 re-signing of authorized S3 requests with the minted session; sentinel `AWS_ACCESS_KEY_ID` and a placeholder secret key in the sandbox; SigV4 `Authorization` headers inspected for foreign access keys.
+- **Verified:** the STS request and response details and the SigV4 procedure against AWS's own documentation (2026-09-25); the signer against four AWS SigV4 test-suite vectors and against curl's `--aws-sigv4`.
+- **Found:** clippy flagged the repository-policy `Status` enum once `IssuersSection` grew; the approved policy is now boxed.
+- **Tests:** `m3_s3::d6_*` (reads and in-prefix writes through minted credentials; out-of-prefix writes, ACL headers and subresources denied at the broker and never forwarded; the session policy alone denies out-of-prefix writes; a planted AWS key is rejected), `policy::s3::tests::broker_and_aws_agree` (property), `cedar::s3_tests::*` (including Cedar agreeing with the reference check), `l7::s3::tests::*` (including a canonical-form property test), `creds::issuers::{sigv4,aws_sts}::tests::*`; the formal gates now include an S3 grant (credential confinement proved); fuzz target `s3_route` (2.3 M runs locally).
+- **ADRs:** [[ADR-032 AWS STS and S3 Adapter as Built]].
+- **Next step:** what remains in M3 needs outside resources (Okta/Entra tenants for D2, a GitHub token for the real MCP server run, an AWS test account for D6 against real S3); the org public-sink option and GraphQL mapping can proceed without them.
+

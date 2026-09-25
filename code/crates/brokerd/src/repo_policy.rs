@@ -31,7 +31,7 @@ pub enum Status {
     },
     Approved {
         sha256: String,
-        toml: Option<PolicyFile>,
+        toml: Option<Box<PolicyFile>>,
         cedar: Option<String>,
     },
 }
@@ -94,7 +94,7 @@ fn key(repo_root: &Path) -> String {
 /// Validate repo-scope restrictions on the TOML layer (I4).
 pub fn parse_toml(text: &str) -> anyhow::Result<PolicyFile> {
     let p = policy::config::parse_policy_str(text)?;
-    if !p.issuers.github_app.is_empty() {
+    if !p.issuers.is_empty() {
         anyhow::bail!("[issuers] is not allowed in repository policy (it would confer authority; I4)");
     }
     if !p.tls.extra_roots.is_empty() {
@@ -119,7 +119,7 @@ pub fn status(dirs: &BrokerDirs, repo_root: &Path) -> anyhow::Result<Status> {
     if load_approvals(dirs).get(&key(repo_root)) != Some(&sha256) {
         return Ok(Status::Unapproved { sha256 });
     }
-    let toml = files.toml.as_deref().map(parse_toml).transpose()?;
+    let toml = files.toml.as_deref().map(parse_toml).transpose()?.map(Box::new);
     Ok(Status::Approved { sha256, toml, cedar: files.cedar })
 }
 

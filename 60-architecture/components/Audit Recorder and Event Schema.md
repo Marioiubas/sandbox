@@ -7,7 +7,7 @@ tags: [sandbox/architecture, component, topic/audit, topic/identity, control/aud
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: "The audit crate: SQLite WAL hash-chained decision log (each hash covers the previous hash concatenated with the canonical JSON event) and the per-request OTel/OCSF event carrying user, agent and binary hash, task, session, method, redacted URL, adapter verb, Cedar decision with policy IDs and mode, credential ID (never value), status, bytes and chain hash."
 related: ["[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Core Trait Contracts]]", "[[M2 Policy Audit and Learn]]", "[[Control Plane and Policy Bundles]]", "[[AWS STS Session Policies]]", "[[Open Questions and Unverified Claims]]", "[[Gap Analysis]]", "[[Policy Learning Loop]]", "[[Broker CLI and Daemon]]", "[[Policy Engine and Entity Builder]]", "[[Credential Injector and Issuers]]", "[[Request and Session Lifecycle]]", "[[I1 No Secrets in the Sandbox]]", "[[Replit Production Database Deletion]]", "[[Mythos Preview Evaluation Escape]]", "[[Policy Miner Safeguards]]", "[[M3 CI Identity and MCP]]", "[[Agent Identity Brokers]]", "[[L1 Conformance Suite]]", "[[Tech Stack]]", "[[Repository Layout]]"]
 sources: ["https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html", "https://incidentdatabase.ai/cite/1152/", "https://www.lesswrong.com/posts/xtnSzhA3TvExN4ZhG/claude-mythos-preview-system-card", "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-agent-governance-framework-gap-20260403/", "https://docs.aembit.io/get-started/use-cases/ai-agents/", "https://tailscale.com/docs/aperture/what-is-aperture"]
@@ -217,3 +217,4 @@ Exports feed [[Control Plane and Policy Bundles]]; traces feed [[Policy Learning
 - 2026-09-25 (M3): MCP rows (`layer: mcp`: connect, each call, refusals, revocations with a tool diff) and reasons `mcp_server_unknown`, `mcp_manifest_unapproved`, `mcp_manifest_changed`, `mcp_tool_unknown`, `mcp_tool_not_allowed`, `mcp_method_not_allowed`, `mcp_malformed`, `mcp_launch_failed`.
 - 2026-09-25: `reason.rs` reached 500 lines with the M3 reasons; `Reason::explain` (the `broker why` text) moved to `reason/explain.rs`, no behaviour change.
 - 2026-09-25 (M3): `enduser` is the verified identity token's `sub` for CI sessions; `session.start` carries `identity` (issuer, subject, claims); the token is never logged ([[ADR-031 CI Identity as Built]]).
+- 2026-09-25 (M3): reasons `s3_route_unknown` and `s3_prefix_not_allowed`; allow rows for S3 carry `credential_kind: aws_sts` with `credential_origin` `mint` then `reuse` ([[ADR-032 AWS STS and S3 Adapter as Built]]).

@@ -11,6 +11,7 @@ fn env_with(session: SessionInfo) -> CompileEnv {
     CompileEnv {
         repo_remote: RepoId::parse("github.com/acme/web"),
         github_app_issuers: ["acme".to_string()].into_iter().collect(),
+        aws_sts_issuers: ["aws-dev".to_string()].into_iter().collect(),
         session,
     }
 }

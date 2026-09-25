@@ -150,6 +150,9 @@ pub fn mine(c: &Corpus, o: &Options) -> Mined {
                         Action::GitPushAdvertise { .. } => {} // implied by the push itself
                         // GitHub verb proposals arrive with the OpenAPI mapping (G1, ADR-028).
                         Action::GitHub { .. } => {}
+                        // S3 grants name a credential and prefixes the learner
+                        // cannot choose; they are written by hand (ADR-032).
+                        Action::S3 { .. } => {}
                         Action::GitPush { repo, refname, force, .. } => push
                             .entry((ob.host.clone(), ob.port, repo.to_string(), refname.clone(), *force))
                             .or_default()

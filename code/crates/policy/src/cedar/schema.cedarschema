@@ -35,6 +35,8 @@ namespace Broker {
   // write: the tool is org-classified as having external effects.
   type McpCtx  = { session: Session, tool: String, args_integrity: String, write: Bool };
   type GitHubCtx = { session: Session, port: Long, method: String, path_str: String };
+  // key: the object key, or for a listing the requested prefix.
+  type S3Ctx = { session: Session, port: Long, bucket: String, key: String };
 
   // L4 admission: may the broker resolve the name (before any DNS query),
   // and connect to the resolved addresses.
@@ -58,6 +60,9 @@ namespace Broker {
     appliesTo { principal: [Task], resource: [Repo], context: GitHubCtx };
   action "github.read", "gist.create"
     appliesTo { principal: [Task], resource: [Host], context: GitHubCtx };
+  // S3 operation classes (the S3 adapter, M3) on an S3 endpoint host.
+  action "s3.get", "s3.list", "s3.put", "s3.delete"
+    appliesTo { principal: [Task], resource: [Host], context: S3Ctx };
 
   action "credential.use"
     appliesTo { principal: [Task], resource: [Credential], context: CredCtx };

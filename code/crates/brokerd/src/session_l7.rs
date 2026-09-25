@@ -8,6 +8,7 @@ use crate::l7_pipeline::{L7Ctx, MAX_INSPECTED_BODY};
 use crate::upstream::BrokerTransport;
 use audit::SessionId;
 use creds::SessionCreds;
+use creds::issuers::aws_sts::AwsSts;
 use creds::issuers::github_app::GitHubApp;
 use creds::secrets::OsSecrets;
 use netguard::resolver::PolicyResolver;
@@ -46,6 +47,7 @@ pub fn setup(
     resolver: Arc<dyn PolicyResolver>,
     session_tmp: &Path,
     channel_sentinel: Option<Vec<u8>>,
+    enduser: &str,
 ) -> anyhow::Result<L7Setup> {
     let ca = Arc::new(tls::session_ca::SessionCa::new(id.as_str())?);
     let mut extra = Vec::new();
@@ -60,11 +62,17 @@ pub fn setup(
     for (name, spec) in &user.issuers.github_app {
         issuers.insert(name.clone(), GitHubApp::from_spec(name, spec).map_err(|m| anyhow::anyhow!(m))?);
     }
+    let mut aws = BTreeMap::new();
+    for (name, spec) in &user.issuers.aws_sts {
+        aws.insert(name.clone(), AwsSts::from_spec(name, spec).map_err(|m| anyhow::anyhow!(m))?);
+    }
     let transport = Arc::new(BrokerTransport { resolver, tls: upstream_tls.clone() });
     let reader = Arc::new(OsSecrets { config_dir: dirs.config_dir.clone(), home: home.to_path_buf() });
     let defs = egress.credentials();
     let credentials = defs.iter().map(|c| format!("{} ({})", c.id, c.kind.as_str())).collect();
-    let creds = Arc::new(SessionCreds::new(id.as_str(), &defs, issuers, reader, transport));
+    let creds = Arc::new(
+        SessionCreds::new(id.as_str(), &defs, issuers, reader, transport).with_aws_sts(aws, Some(enduser.to_string())),
+    );
     let mut env = tls::trust_bundle::env_vars(&bundle);
     env.extend(creds.sentinels.env());
     let ctx = Arc::new(L7Ctx {

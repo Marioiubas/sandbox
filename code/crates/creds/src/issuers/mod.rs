@@ -1,8 +1,11 @@
 //! Issuers and attachment. `static` reads a root from a secret source;
-//! `github_app` mints installation tokens. Both hand back an [`Issued`]
-//! that only [`attach`] turns into a header.
+//! `github_app` mints installation tokens; `aws_sts` mints role sessions.
+//! Each hands back an [`Issued`] that only [`attach`] turns into a header,
+//! or (`aws_sts`) that [`aws_sts::sign_s3`] signs the request with.
 
+pub mod aws_sts;
 pub mod github_app;
+pub mod sigv4;
 
 use crate::{Issued, Secret};
 use base64::Engine;
@@ -63,10 +66,25 @@ pub trait Transport: Send + Sync {
         bearer: &Secret,
         body: Vec<u8>,
     ) -> anyhow::Result<(u16, Vec<u8>)>;
+
+    /// A POST with caller-built headers (a SigV4-signed STS call). Values
+    /// are sent as sensitive headers.
+    async fn post(
+        &self,
+        api: &ApiEndpoint,
+        path: &str,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    ) -> anyhow::Result<(u16, Vec<u8>)> {
+        let _ = (api, path, headers, body);
+        anyhow::bail!("this transport does not send signed requests")
+    }
 }
 
 fn header_value(spec: &AttachSpec, secret: &[u8]) -> Vec<u8> {
     match spec {
+        // Never a header of its own: `aws_sts::sign_s3` signs the request.
+        AttachSpec::SigV4 => Vec::new(),
         AttachSpec::Bearer => [b"Bearer ".as_slice(), secret].concat(),
         AttachSpec::Token => [b"token ".as_slice(), secret].concat(),
         AttachSpec::Basic { username } => {
@@ -80,6 +98,9 @@ fn header_value(spec: &AttachSpec, secret: &[u8]) -> Vec<u8> {
 
 /// Set the credential header on a forwarded request (after `strip`).
 pub fn attach(issued: &Issued, spec: &AttachSpec, headers: &mut HeaderMap) -> anyhow::Result<()> {
+    if *spec == AttachSpec::SigV4 {
+        anyhow::bail!("credential {} signs whole requests (SigV4)", issued.credential_id);
+    }
     let name = HeaderName::from_bytes(spec.header_name().as_bytes())?;
     let mut v = HeaderValue::from_bytes(&header_value(spec, issued.secret().expose()))
         .map_err(|_| anyhow::anyhow!("credential {} is not a valid header value", issued.credential_id))?;
@@ -88,11 +109,8 @@ pub fn attach(issued: &Issued, spec: &AttachSpec, headers: &mut HeaderMap) -> an
     Ok(())
 }
 
-/// Byte strings the response filter must never let back into the sandbox:
-/// the secret, its base64 and percent-encoded forms, and the header value.
-pub fn needles(issued: &Issued, spec: &AttachSpec) -> Vec<Vec<u8>> {
-    let s = issued.secret().expose();
-    let mut v = vec![s.to_vec(), base64::engine::general_purpose::STANDARD.encode(s).into_bytes()];
+/// A secret, its base64 and its percent-encoded form.
+fn forms(s: &[u8]) -> Vec<Vec<u8>> {
     let pct: String = s
         .iter()
         .map(|&b| {
@@ -103,7 +121,18 @@ pub fn needles(issued: &Issued, spec: &AttachSpec) -> Vec<Vec<u8>> {
             }
         })
         .collect();
-    v.push(pct.into_bytes());
+    vec![s.to_vec(), base64::engine::general_purpose::STANDARD.encode(s).into_bytes(), pct.into_bytes()]
+}
+
+/// Byte strings the response filter must never let back into the sandbox:
+/// the secret (and an AWS session token), their base64 and percent-encoded
+/// forms, and the header value.
+pub fn needles(issued: &Issued, spec: &AttachSpec) -> Vec<Vec<u8>> {
+    let s = issued.secret().expose();
+    let mut v = forms(s);
+    if let Some(k) = issued.aws() {
+        v.extend(forms(k.session_token.expose()));
+    }
     if let AttachSpec::Basic { .. } = spec {
         let hv = header_value(spec, s);
         v.push(hv[b"Basic ".len()..].to_vec());

@@ -39,11 +39,16 @@ fn run(min_runs: usize, out: Option<std::path::PathBuf>) -> anyhow::Result<()> {
         by_profile.entry(x.profile.clone()).or_default().push(x.id.clone());
     }
     let issuers: std::collections::BTreeSet<String> = user.issuers.github_app.keys().cloned().collect();
+    let aws: std::collections::BTreeSet<String> = user.issuers.aws_sts.keys().cloned().collect();
     for (profile, sessions) in by_profile {
         let prof = brokerd::profiles::by_name(&profile)?;
         let mut sub = s.corpus.clone();
         sub.observations.retain(|o| sessions.contains(&o.session));
-        let env = policy::CompileEnv { github_app_issuers: issuers.clone(), ..Default::default() };
+        let env = policy::CompileEnv {
+            github_app_issuers: issuers.clone(),
+            aws_sts_issuers: aws.clone(),
+            ..Default::default()
+        };
         let scope = format!("profile:{profile}");
         let before =
             learn::replay(&sub, [(scope.as_str(), prof.egress.as_slice()), ("user", user.egress.as_slice())], &env)

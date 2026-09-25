@@ -24,6 +24,7 @@ fn env() -> CompileEnv {
     CompileEnv {
         repo_remote: RepoId::parse("github.com/acme/web"),
         github_app_issuers: ["acme".to_string()].into_iter().collect(),
+        aws_sts_issuers: ["dev".to_string()].into_iter().collect(),
         session: SessionInfo {
             session_id: "s1".into(),
             task_id: "task-1".into(),
@@ -65,6 +66,12 @@ credential = { kind = "static", ref = "env:K", header = "x-api-key" }
 [[egress]]
 host = "*.example.com"
 id = "wild"
+[[egress]]
+host = "acme-data.s3.us-east-1.amazonaws.com"
+id = "data"
+protocol = "s3"
+s3 = { bucket = "acme-data", read = ["tasks/123/"], write = ["tasks/123/out/"] }
+credential = { kind = "aws_sts", issuer = "dev" }
 "#;
 
 const WIDER: &str = r#"

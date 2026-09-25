@@ -18,6 +18,8 @@ pub enum Plan {
     Git(git::Route),
     /// A GitHub API request: its Http action and its verb (or why none).
     GitHub(Action, Result<crate::github::Route, Reason>),
+    /// An S3 request: its Http action and its operation (or why none).
+    S3(Action, Result<crate::s3::Route, Reason>),
 }
 
 impl Plan {
@@ -45,6 +47,9 @@ pub fn plan(
     if protocols.contains(&Protocol::GitHub) {
         return Plan::GitHub(http, crate::github::route(host, method, path));
     }
+    if protocols.contains(&Protocol::S3) {
+        return Plan::S3(http, crate::s3::route(host, method, path, query));
+    }
     Plan::Http(http)
 }
 
@@ -68,6 +73,11 @@ pub fn actions(plan: &Plan, body: Option<&[u8]>) -> Result<(Vec<Action>, Option<
                 path,
             };
             Ok((vec![http.clone(), verb], None))
+        }
+        Plan::S3(_, Err(reason)) => Err(*reason),
+        Plan::S3(http, Ok(r)) => {
+            let op = Action::S3 { op: r.op.to_string(), bucket: r.bucket.clone(), key: r.key.clone() };
+            Ok((vec![http.clone(), op], None))
         }
     }
 }

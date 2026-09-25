@@ -56,6 +56,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-029 GitHub API Adapter and Session Labels as Built]] | GitHub REST requests map to verbs (verified routes; GraphQL denied); `protocol = "github"` grants verbs on repos; the broker looks up visibility with the bound credential and re-decides; raise-only session labels from API facts stop the toxic flow at the public write. |
 | [[ADR-030 MCP Guard as Built]] | Pinned stdio MCP servers: named in user/org policy, reached by an in-sandbox stub via the session proxy, started as their own sandboxed session with sentinel credentials, pinned by a digest of their whole tools list, approved on the host, every tools/call authorized; any change revokes. |
 | [[ADR-031 CI Identity as Built]] | A CI runner's OIDC token, verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience), names the session and every audit row; it never reaches the agent or an upstream; unverifiable tokens refuse the launch. |
+| [[ADR-032 AWS STS and S3 Adapter as Built]] | S3 grants map each request to s3.get/list/put/delete on a bucket and key prefix or deny it; an `aws_sts` credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker re-signs with SigV4. |
 
 ## Where the value is
 
@@ -117,6 +118,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-029 GitHub API Adapter and Session Labels as Built]] — GitHub REST requests map to verbs (verified routes; GraphQL denied); `protocol = "github"` grants verbs on repos; the broker looks up visibility with the bound credential and re-decides; raise-only session labels from API facts stop the toxic flow at the public write.
 - [[ADR-030 MCP Guard as Built]] — Pinned stdio MCP servers: named in user/org policy, reached by an in-sandbox stub via the session proxy, started as their own sandboxed session with sentinel credentials, pinned by a digest of their whole tools list, approved on the host, every tools/call authorized; any change revokes.
 - [[ADR-031 CI Identity as Built]] — A CI runner's OIDC token, verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience), names the session and every audit row; it never reaches the agent or an upstream; unverifiable tokens refuse the launch.
+- [[ADR-032 AWS STS and S3 Adapter as Built]] — S3 grants map each request to s3.get/list/put/delete on a bucket and key prefix or deny it; an `aws_sts` credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker re-signs with SigV4.
 
 ## How this section connects
 

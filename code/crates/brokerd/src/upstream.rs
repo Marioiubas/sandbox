@@ -53,15 +53,10 @@ pub struct BrokerTransport {
     pub tls: Arc<ClientConfig>,
 }
 
-#[async_trait::async_trait]
-impl Transport for BrokerTransport {
-    async fn post_json(
-        &self,
-        api: &ApiEndpoint,
-        path: &str,
-        bearer: &Secret,
-        body: Vec<u8>,
-    ) -> anyhow::Result<(u16, Vec<u8>)> {
+impl BrokerTransport {
+    /// One request to an issuer API: broker resolver (never a metadata or
+    /// link-local address), verified TLS, a 1 MiB response limit.
+    async fn send(&self, api: &ApiEndpoint, req: http::Request<Full<Bytes>>) -> anyhow::Result<(u16, Vec<u8>)> {
         let addrs = if api.addrs.is_empty() {
             let a =
                 self.resolver.resolve(&api.host).await.map_err(|r| anyhow::anyhow!("resolving {}: {r:?}", api.host))?;
@@ -83,6 +78,26 @@ impl Transport for BrokerTransport {
         tokio::spawn(async move {
             let _ = conn.await;
         });
+        let resp = tokio::time::timeout(Duration::from_secs(20), sender.send_request(req)).await??;
+        let status = resp.status().as_u16();
+        let bytes = Limited::new(resp.into_body(), 1 << 20)
+            .collect()
+            .await
+            .map_err(|_| anyhow::anyhow!("issuer response too large or broken"))?
+            .to_bytes();
+        Ok((status, bytes.to_vec()))
+    }
+}
+
+#[async_trait::async_trait]
+impl Transport for BrokerTransport {
+    async fn post_json(
+        &self,
+        api: &ApiEndpoint,
+        path: &str,
+        bearer: &Secret,
+        body: Vec<u8>,
+    ) -> anyhow::Result<(u16, Vec<u8>)> {
         let mut auth = http::HeaderValue::from_bytes(&[b"Bearer ".as_slice(), bearer.expose()].concat())
             .map_err(|_| anyhow::anyhow!("issuer bearer is not a header value"))?;
         auth.set_sensitive(true);
@@ -96,13 +111,28 @@ impl Transport for BrokerTransport {
             .header("user-agent", concat!("broker/", env!("CARGO_PKG_VERSION")))
             .header("content-type", "application/json")
             .body(Full::new(Bytes::from(body)))?;
-        let resp = tokio::time::timeout(Duration::from_secs(20), sender.send_request(req)).await??;
-        let status = resp.status().as_u16();
-        let bytes = Limited::new(resp.into_body(), 1 << 20)
-            .collect()
-            .await
-            .map_err(|_| anyhow::anyhow!("issuer response too large or broken"))?
-            .to_bytes();
-        Ok((status, bytes.to_vec()))
+        self.send(api, req).await
+    }
+
+    async fn post(
+        &self,
+        api: &ApiEndpoint,
+        path: &str,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    ) -> anyhow::Result<(u16, Vec<u8>)> {
+        let mut req = http::Request::builder()
+            .method("POST")
+            .uri(path)
+            .header("host", api.authority())
+            .header("user-agent", concat!("broker/", env!("CARGO_PKG_VERSION")))
+            .body(Full::new(Bytes::from(body)))?;
+        for (k, v) in headers {
+            let mut v =
+                http::HeaderValue::from_str(&v).map_err(|_| anyhow::anyhow!("header {k} is not a header value"))?;
+            v.set_sensitive(true);
+            req.headers_mut().insert(http::HeaderName::from_bytes(k.as_bytes())?, v);
+        }
+        self.send(api, req).await
     }
 }

@@ -56,6 +56,10 @@ impl Reason {
             GithubGraphqlUnsupported => "GitHub GraphQL requests are denied until they can be mapped to verbs",
             GithubVerbNotAllowed => "the GitHub verb (for example pr.merge) is not granted",
             GithubRepoNotAllowed => "the GitHub verb is granted, but not on this repository",
+            S3RouteUnknown => {
+                "the S3 request is not an object read, listing, write or delete the adapter maps (bucket settings, ACLs, copies, presigned URLs and signed-chunk uploads are denied)"
+            }
+            S3PrefixNotAllowed => "the S3 operation is not granted on this bucket and key prefix",
             McpServerUnknown => "no pinned MCP server by that name is defined in user or org policy",
             McpManifestUnapproved => "the MCP server's tool manifest has not been approved (`broker mcp approve`)",
             McpManifestChanged => "the MCP server's tool manifest changed since approval; its grants are revoked",
