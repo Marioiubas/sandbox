@@ -53,6 +53,10 @@ fn copy(mut from: impl Read, mut to: impl Write) {
 fn serve(listener: TcpListener, sock: &Path) {
     for conn in listener.incoming() {
         let Ok(tcp) = conn else { continue };
+        // Relay writes at once: with Nagle, a small write after another
+        // (the CONNECT reply, then the TLS handshake) waits for the client's
+        // delayed ACK, adding tens of milliseconds to every new connection.
+        let _ = tcp.set_nodelay(true);
         let sock = sock.to_path_buf();
         std::thread::spawn(move || {
             let Ok(uds) = UnixStream::connect(&sock) else { return };

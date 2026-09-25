@@ -239,3 +239,4 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Category 11 (covert channels) measured:** `m4_covert`: query strings ≈81 KB/s, path choice ≈93 bytes/s, request timing ≈0.9 bytes/s on an allowed host (macOS, debug build); reported in `docs/threat-model.md`, never claimed zero.
 - **`broker doctor`:** per-grant TLS mode, identity and protocol matrix; **found** that it compiled the user policy without its issuers, so valid GitHub App or AWS credentials showed as INVALID; fixed, with `m4_doctor`.
 - **Docs:** `docs/deployment/laptop.md` and `docs/deployment/ci.md`.
+- **Found (Linux latency):** on the CI runner new connections added ~47-59 ms and warm terminated requests 7.4 ms p50, over the L4 thresholds, while macOS met them. The in-namespace bridge relayed TCP without `TCP_NODELAY`; fixed, re-measurement pending.
