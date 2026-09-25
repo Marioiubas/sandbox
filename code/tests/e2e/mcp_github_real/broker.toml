@@ -1,0 +1,19 @@
+version = 1
+
+# M3 D3 in CI: the real GitHub MCP server (v1.12.2), pinned by path, with a
+# fine-grained token for the two test repositories (the BROKER_GH_MCP_TOKEN
+# Actions secret, written to the broker config directory, mode 0600). The
+# server runs in its own sandbox and reaches only api.github.com through
+# the verbs below; it sees a sentinel, never the token.
+[mcp.github]
+command = ["@BIN@/github-mcp-server", "stdio", "--toolsets", "issues,pull_requests,repos,context"]
+tools.write = ["add_comment_to_pending_review", "add_issue_comment", "add_reply_to_pull_request_comment", "create_branch", "create_or_update_file", "create_pull_request", "issue_write", "pull_request_review_write", "push_files", "sub_issue_write", "update_issue_comment", "update_pull_request", "update_pull_request_branch"]
+tools.untrusted = ["list_issues", "issue_read", "search_issues", "list_pull_requests", "pull_request_read", "search_pull_requests", "search_code", "search_commits", "search_repositories", "list_commits", "get_commit", "get_file_contents"]
+tools.deny = ["merge_pull_request", "delete_file", "fork_repository", "create_repository"]
+
+[[mcp.github.egress]]
+host = "api.github.com"
+protocol = "github"
+verbs = ["repo.read", "github.read", "issue.comment", "pr.create"]
+repos = ["github.com/marioiubas/sandboxpublictest", "github.com/marioiubas/sandboxprivatetest"]
+credential = { kind = "static", ref = "file:gh-mcp-token", env = "GITHUB_PERSONAL_ACCESS_TOKEN" }

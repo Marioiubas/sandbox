@@ -184,6 +184,53 @@ jobs:
         if: env.HAS_KEY == 'true'
         run: sh tests/e2e/github_app_real/run.sh Marioiubas/sandboxpublictest Marioiubas/sandboxprivatetest agent/ci "$RUNNER_TEMP/work"
 
+  real-mcp:
+    # M3 D3 against the real GitHub MCP server on Linux (Go honours
+    # SSL_CERT_FILE there; on macOS Go cannot use HTTPS in a session). Pushes
+    # to main only; skips without the token secret.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: real-mcp
+      cancel-in-progress: false
+    env:
+      HAS_TOKEN: ${{ secrets.BROKER_GH_MCP_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_TOKEN == 'true'
+      - name: Install bubblewrap
+        if: env.HAS_TOKEN == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          gate=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$gate" ] && [ "$(cat "$gate")" = "1" ]; then
+            sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Build
+        if: env.HAS_TOKEN == 'true'
+        run: cargo build --workspace --bins --locked
+      - name: Install the broker, the pinned server and the policy outside the workspace
+        if: env.HAS_TOKEN == 'true'
+        env:
+          TOKEN: ${{ secrets.BROKER_GH_MCP_TOKEN }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/broker/config"
+          cp target/debug/broker target/debug/brokerd target/debug/broker-sandbox-shim "$RUNNER_TEMP/bin/"
+          curl -fsSL -o "$RUNNER_TEMP/gms.tar.gz" \
+            https://github.com/github/github-mcp-server/releases/download/v1.12.2/github-mcp-server_Linux_x86_64.tar.gz
+          echo "95843162759da2c31dde082dd145be35db82164594796c294414b69790c2290e  $RUNNER_TEMP/gms.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gms.tar.gz" -C "$RUNNER_TEMP/bin" github-mcp-server
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          echo "BROKER_HOME=$RUNNER_TEMP/broker" >> "$GITHUB_ENV"
+          sed "s|@BIN@|$RUNNER_TEMP/bin|" tests/e2e/mcp_github_real/broker.toml > "$RUNNER_TEMP/broker/config/broker.toml"
+          umask 077
+          printf '%s' "$TOKEN" > "$RUNNER_TEMP/broker/config/gh-mcp-token"
+      - name: The real GitHub MCP server through the broker (M3 D3)
+        if: env.HAS_TOKEN == 'true'
+        run: TOKEN_FILE="$RUNNER_TEMP/broker/config/gh-mcp-token" sh tests/e2e/mcp_github_real/run.sh "$RUNNER_TEMP/work"
+
   latency:
     # M4 E3: measured and reported (step summary), not gated; thresholds in
     # the L4 Product Metrics note. Release build (what users run), loopback
