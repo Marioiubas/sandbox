@@ -44,7 +44,7 @@ The hardening emphasis follows the record: the sandbox-runtime NUL-byte parser d
 
 - [ ] Run each `tests/fuzz/fuzz_targets/*` for ≥24 h (continuous nightly jobs accumulate toward this); triage and fix every crash; add each crashing input to the corpus. — started: `.github/workflows/fuzz-nightly.yml` runs all 16 targets for 2 h each per night with the corpus cached between runs and crash inputs uploaded.
 - [ ] HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici ([arXiv 2405.17737](https://arxiv.org/abs/2405.17737)); acceptance is 0 decision-changing discrepancies ([[L1 Conformance Suite]]).
-- [ ] Complete all 12 categories of the [[Conformance Probe Matrix]], including category 11 (covert channels: bandwidth measured and reported, not claimed zero) and category 12 (boundary escape).
+- [ ] Complete all 12 categories of the [[Conformance Probe Matrix]], including category 11 (covert channels: bandwidth measured and reported, not claimed zero) and category 12 (boundary escape). — 1-10 automated (M0-M3); 11 measured by `m4_covert` (query strings ≈81 KB/s, path choice ≈93 B/s, timing ≈0.9 B/s on one laptop); 12 not started (needs nested VMs).
 
 **Evaluation (eval/)**
 
@@ -158,3 +158,4 @@ All six layers of the [[Evaluation Harness]]: L1 (hard gate), L2 and L3 (first r
 ## Build log
 
 - 2026-09-25: started while M3 waits on outside accounts: nightly fuzzing toward E1 (`fuzz-nightly.yml`); the E3 latency harness (`m4_latency`), first measurement on macOS 26, Apple silicon, debug build, 8 concurrent clients, loopback echo server: splice warm added p50 0.05 ms / p95 0.06 ms; splice new added p50 4.0 ms; terminated warm added p50 2.2 ms / p95 4.5 ms; terminated new added p50 7.5 ms / p95 11.6 ms; `broker run -- /usr/bin/true` p50 58.8 ms / p95 61.9 ms (all within the L4 thresholds); `docs/threat-model.md` brought up to M3 (M2 and M3 controls and residuals); the injection-claims audit found nothing to change.
+- 2026-09-25: category 11 measured (`m4_covert`); the figures are in [[Conformance Probe Matrix]] and `docs/threat-model.md`.

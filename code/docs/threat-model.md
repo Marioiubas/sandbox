@@ -30,7 +30,9 @@ Two further residuals follow from the design:
 - **Allowed destinations remain exfiltration channels.** A gist or an issue
   on an allowed github.com, a package registry, timing or request counts can
   all carry data. Covert-channel bandwidth is measured and reported, not
-  claimed to be zero.
+  claimed to be zero: on one allowed host, one laptop measurement moved about
+  80 KB/s in query strings, about 90 bytes/s by choice of path and about
+  1 byte/s by request timing (`tests/conformance/tests/m4_covert.rs`).
 - **The broker is itself custom code** on a hostile boundary. Its parsers are
   property-tested and fuzzed, and the bypass corpus in
   `tests/bypass-corpus/` is public, but its own bugs are in scope as a risk.

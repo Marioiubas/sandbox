@@ -236,4 +236,4 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Built:** `.github/workflows/fuzz-nightly.yml` (16 targets × 2 h per night, corpus cached, crash inputs uploaded) toward E1; the E3 latency harness `tests/conformance/tests/m4_latency.rs` and a non-gating Linux `latency` CI job; `docs/threat-model.md` updated for M2 and M3.
 - **Measured (macOS 26, Apple silicon, debug build):** splice warm added p50 0.05 ms / p95 0.06 ms; splice new added p50 4.0 ms; terminated warm added p50 2.2 ms / p95 4.5 ms; terminated new added p50 7.5 ms / p95 11.6 ms; `broker run -- /usr/bin/true` p50 58.8 ms / p95 61.9 ms.
 - **Checked:** no code comment, CLI string, doc or Action text claims the broker stops prompt injection.
-
+- **Category 11 (covert channels) measured:** `m4_covert`: query strings ≈81 KB/s, path choice ≈93 bytes/s, request timing ≈0.9 bytes/s on an allowed host (macOS, debug build); reported in `docs/threat-model.md`, never claimed zero.
