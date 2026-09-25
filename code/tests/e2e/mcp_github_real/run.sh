@@ -27,7 +27,7 @@ $init
 {"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"list_issues","arguments":{"owner":"Marioiubas","repo":"sandboxpublictest"}}}
 JSON
 connect calls.jsonl calls.out
-broker audit query --json --limit 100000 > audit.jsonl
+broker audit query --json --limit 1000 > audit.jsonl
 python3 - "$TOKEN_FILE" <<'PY'
 import json, sys
 token = open(sys.argv[1]).read().strip()
