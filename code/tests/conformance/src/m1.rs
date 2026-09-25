@@ -100,6 +100,9 @@ impl HttpsServer {
                 let acceptor = tokio_rustls::TlsAcceptor::from(cfg);
                 loop {
                     let Ok((s, _)) = l.accept().await else { continue };
+                    // As most production servers (Go, nginx keep-alive):
+                    // replies are not held back for the peer's delayed ACK.
+                    let _ = s.set_nodelay(true);
                     let (acceptor, handler, seen) = (acceptor.clone(), handler.clone(), seen2.clone());
                     tokio::spawn(async move {
                         let Ok(tls) = acceptor.accept(s).await else { return };
