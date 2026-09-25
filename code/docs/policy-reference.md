@@ -205,6 +205,21 @@ in that session is denied (the Rule of Two). A new `broker run` starts a
 new session. Mark a credential `risk = "high"` to treat any use of it as a
 sensitive read.
 
+For a stricter rule, your own or your org's policy can deny writes to
+public destinations as soon as a session has read untrusted input, even if
+it has read nothing sensitive:
+
+```toml
+[trifecta]                              # user or org policy only
+deny_public_sinks_after_untrusted_input = true
+```
+
+With this on, after untrusted input the session cannot open PRs, comment
+or write contents on a repository unless the broker knows it is private,
+cannot push (pushes carry no visibility, so every push counts), and cannot
+create gists or publish packages. Reads still work. The reason in the audit
+log is `public_sink_after_untrusted_input`.
+
 ## MCP servers (M3)
 
 ```toml

@@ -96,6 +96,7 @@ impl Daemon {
             repo_remote,
             github_app_issuers: user_policy.issuers.github_app.keys().cloned().collect(),
             aws_sts_issuers: user_policy.issuers.aws_sts.keys().cloned().collect(),
+            deny_public_sinks_after_untrusted_input: user_policy.trifecta.deny_public_sinks_after_untrusted_input,
             session: session_info,
         };
         let mut egress = EgressPolicy::compile_with(

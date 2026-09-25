@@ -208,3 +208,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **ADRs:** [[ADR-032 AWS STS and S3 Adapter as Built]].
 - **Next step:** what remains in M3 needs outside resources (Okta/Entra tenants for D2, a GitHub token for the real MCP server run, an AWS test account for D6 against real S3); the org public-sink option and GraphQL mapping can proceed without them.
 
+### 2026-09-25: M3, the org public-sink rule
+
+- **Milestone:** [[M3 CI Identity and MCP]] (in progress).
+- **Built:** `[trifecta] deny_public_sinks_after_untrusted_input` (user or org policy, off by default) compiling to two Cedar forbids with reason `public_sink_after_untrusted_input`; repository policy may not set it.
+- **Found:** the first version lost the forbids when the MCP permits rebuilt the engine; the end-to-end test caught it, and option policies are now part of every rebuild.
+- **Also:** the `ci-mode` attribution step prints the subject, issuer and run ID and checks them with `jq` (the D1 fixture passed on CI after the canary fix; the attribution grep did not match, and the step now shows why).
+- **Tests:** `cedar::github_tests::the_org_option_denies_public_sinks_after_untrusted_input`, `gates::tests::the_public_sink_option_is_a_proved_narrowing`, `m3_github::with_the_org_option_the_public_pr_after_a_public_issue_is_denied`.
+- **ADRs:** [[ADR-033 Public-Sink Rule as Built]].
+

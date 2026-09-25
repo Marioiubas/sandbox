@@ -117,6 +117,25 @@ fn a_public_issue_then_a_pr_on_that_public_repo_is_allowed() {
 }
 
 #[test]
+fn with_the_org_option_the_public_pr_after_a_public_issue_is_denied() {
+    // Willison's "[A]+[C] without [B]": the stricter rule is opt-in (ADR-010).
+    let f = setup();
+    let cfg = f.h.config_dir().join("broker.toml");
+    let text = std::fs::read_to_string(&cfg).unwrap();
+    f.h.set_config(&format!("{text}\n[trifecta]\ndeny_public_sinks_after_untrusted_input = true\n"));
+    let (codes, evs) = f.run(&[
+        ("POST", "/repos/acme/public/pulls"),
+        ("GET", "/repos/acme/public/issues"),
+        ("POST", "/repos/acme/public/pulls"),
+        ("GET", "/repos/acme/public"),
+    ]);
+    assert_eq!(codes, "201 200 403 200", "writes before untrusted input and reads after it still pass");
+    assert_eq!(denies(&evs), vec![Reason::PublicSinkAfterUntrustedInput]);
+    let posts = f.api.seen.lock().unwrap().iter().filter(|s| s.method == "POST").count();
+    assert_eq!(posts, 1, "the denied PR never reached GitHub");
+}
+
+#[test]
 fn unmapped_or_ungranted_github_requests_deny_with_their_reason() {
     let f = setup();
     let (codes, evs) = f.run(&[

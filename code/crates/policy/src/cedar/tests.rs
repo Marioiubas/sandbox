@@ -12,6 +12,7 @@ fn env_with(session: SessionInfo) -> CompileEnv {
         repo_remote: RepoId::parse("github.com/acme/web"),
         github_app_issuers: ["acme".to_string()].into_iter().collect(),
         aws_sts_issuers: ["aws-dev".to_string()].into_iter().collect(),
+        deny_public_sinks_after_untrusted_input: false,
         session,
     }
 }

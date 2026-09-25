@@ -132,6 +132,7 @@ fn run_check(a: CheckArgs) -> anyhow::Result<i32> {
         repo_remote: brokerd::session_util::origin_remote(&root),
         github_app_issuers: user.issuers.github_app.keys().cloned().collect(),
         aws_sts_issuers: user.issuers.aws_sts.keys().cloned().collect(),
+        deny_public_sinks_after_untrusted_input: user.trifecta.deny_public_sinks_after_untrusted_input,
         ..Default::default()
     };
     let mut new = compile(profile.as_ref(), &user, &env)?;
@@ -194,6 +195,7 @@ fn run_export(a: ExportArgs) -> anyhow::Result<()> {
     let env = CompileEnv {
         github_app_issuers: user.issuers.github_app.keys().cloned().collect(),
         aws_sts_issuers: user.issuers.aws_sts.keys().cloned().collect(),
+        deny_public_sinks_after_untrusted_input: user.trifecta.deny_public_sinks_after_untrusted_input,
         ..Default::default()
     };
     let egress = compile(Some(&profile), &user, &env)?;

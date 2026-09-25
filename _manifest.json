@@ -4414,5 +4414,28 @@
     "aliases": [
       "ADR-032"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-033 Public-Sink Rule as Built.md",
+    "title": "ADR-033 Public-Sink Rule as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "An opt-in [trifecta] switch in user or org policy denies writes to repositories not known to be private, every git push, gists and package publishes once a session has read untrusted input, unless approved; proved a narrowing by the gates.",
+    "links_to": [
+      "ADR-010 Session-Level Trifecta Labels in the MVP",
+      "Trifecta Session Labels",
+      "Agents Rule of Two",
+      "Example Cedar Policies",
+      "M3 CI Identity and MCP",
+      "SymCC CI Gates",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-25) from ADR-010, the Trifecta Session Labels and Example Cedar Policies notes, and the tests named in the ADR.",
+    "aliases": [
+      "ADR-033"
+    ],
+    "sources": [
+      "https://simonwillison.net/2025/Nov/2/new-prompt-injection-papers/"
+    ]
   }
 ]

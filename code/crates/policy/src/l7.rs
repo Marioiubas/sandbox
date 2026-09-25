@@ -185,6 +185,8 @@ pub struct CompileEnv {
     pub repo_remote: Option<RepoId>,
     pub github_app_issuers: BTreeSet<String>,
     pub aws_sts_issuers: BTreeSet<String>,
+    /// `[trifecta] deny_public_sinks_after_untrusted_input` (user/org).
+    pub deny_public_sinks_after_untrusted_input: bool,
     /// The session's principal (Task) and mode.
     pub session: crate::cedar::SessionInfo,
 }

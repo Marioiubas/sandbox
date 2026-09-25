@@ -277,6 +277,18 @@ pub struct FsSection {
     pub deny_read: Vec<String>,
 }
 
+/// Session-label rules beyond the Rule of Two (Trifecta Session Labels).
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TrifectaSection {
+    /// Once a session has read untrusted input, deny writes to public
+    /// sinks (write verbs on repositories not known to be private, pushes,
+    /// gists, package publishes) unless approved, even without a sensitive
+    /// read: Willison's "[A]+[C] without [B]" (ADR-010). Default off.
+    #[serde(default)]
+    pub deny_public_sinks_after_untrusted_input: bool,
+}
+
 /// User- or org-scope policy file (`broker.toml`).
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -298,6 +310,9 @@ pub struct PolicyFile {
     /// User/org scope only: identity token issuers (CI runners).
     #[serde(default)]
     pub identity: IdentitySection,
+    /// User/org scope only: stricter session-label rules.
+    #[serde(default)]
+    pub trifecta: TrifectaSection,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]

@@ -47,6 +47,7 @@ fn run(min_runs: usize, out: Option<std::path::PathBuf>) -> anyhow::Result<()> {
         let env = policy::CompileEnv {
             github_app_issuers: issuers.clone(),
             aws_sts_issuers: aws.clone(),
+            deny_public_sinks_after_untrusted_input: user.trifecta.deny_public_sinks_after_untrusted_input,
             ..Default::default()
         };
         let scope = format!("profile:{profile}");

@@ -79,6 +79,9 @@ impl Reason {
             TaskExpired => "the task's grants have expired",
             CredentialHostCeiling => "the credential may not be attached to this host (org ceiling)",
             RuleOfTwo => "untrusted input and a sensitive read are both live; writes need out-of-band approval",
+            PublicSinkAfterUntrustedInput => {
+                "the session has read untrusted input and your policy denies writes to public destinations (repositories not known to be private, pushes, gists, package publishes) until approved"
+            }
             McpUnpinned => "the MCP server's tool manifest changed and it is no longer pinned",
             NeedsApproval => "this action needs an out-of-band approval",
             CeilingPasteSite => "paste sites are outside the org ceiling",

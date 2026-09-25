@@ -103,6 +103,9 @@ pub fn parse_toml(text: &str) -> anyhow::Result<PolicyFile> {
     if !p.identity.oidc.is_empty() {
         anyhow::bail!("[identity] is not allowed in repository policy: it decides who a session is (I4)");
     }
+    if p.trifecta != Default::default() {
+        anyhow::bail!("[trifecta] is not allowed in repository policy: set it in user or org policy");
+    }
     if !p.mcp.is_empty() {
         anyhow::bail!("[mcp] is not allowed in repository policy: servers are pinned in user or org policy only (I5)");
     }

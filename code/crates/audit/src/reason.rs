@@ -150,6 +150,8 @@ pub enum Reason {
     CredentialHostCeiling,
     /// Untrusted input and a sensitive read are both live; writes need approval.
     RuleOfTwo,
+    /// Untrusted input is live and org policy denies writes to public sinks.
+    PublicSinkAfterUntrustedInput,
     /// An MCP server whose tool manifest changed is unpinned.
     McpUnpinned,
     /// The action needs an out-of-band approval (publish, merge).
@@ -243,6 +245,7 @@ impl Reason {
         Reason::TaskExpired,
         Reason::CredentialHostCeiling,
         Reason::RuleOfTwo,
+        Reason::PublicSinkAfterUntrustedInput,
         Reason::McpUnpinned,
         Reason::NeedsApproval,
         Reason::CeilingPasteSite,
@@ -323,6 +326,7 @@ impl Reason {
             Reason::TaskExpired => "task_expired",
             Reason::CredentialHostCeiling => "credential_host_ceiling",
             Reason::RuleOfTwo => "rule_of_two",
+            Reason::PublicSinkAfterUntrustedInput => "public_sink_after_untrusted_input",
             Reason::McpUnpinned => "mcp_unpinned",
             Reason::NeedsApproval => "needs_approval",
             Reason::CeilingPasteSite => "ceiling_paste_site",
@@ -383,6 +387,7 @@ impl Reason {
             | TaskExpired
             | CredentialHostCeiling
             | RuleOfTwo
+            | PublicSinkAfterUntrustedInput
             | McpUnpinned
             | NeedsApproval
             | CeilingPasteSite

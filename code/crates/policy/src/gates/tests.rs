@@ -25,6 +25,7 @@ fn env() -> CompileEnv {
         repo_remote: RepoId::parse("github.com/acme/web"),
         github_app_issuers: ["acme".to_string()].into_iter().collect(),
         aws_sts_issuers: ["dev".to_string()].into_iter().collect(),
+        deny_public_sinks_after_untrusted_input: false,
         session: SessionInfo {
             session_id: "s1".into(),
             task_id: "task-1".into(),
@@ -107,6 +108,20 @@ fn the_shipped_policy_passes_every_hard_gate() {
     assert!(r.hard_failures().is_empty(), "{}", r.render());
     assert!(r.findings.iter().any(|f| f.gate == Gate::CredentialConfinement && f.outcome == Outcome::Proved));
     assert!(r.findings.iter().any(|f| f.gate == Gate::DenyLive && f.subject == "pkg.publish needs approval"));
+}
+
+#[test]
+fn the_public_sink_option_is_a_proved_narrowing() {
+    if !solver() {
+        return;
+    }
+    let p = parse_policy_str(BASE).unwrap();
+    let env = CompileEnv { deny_public_sinks_after_untrusted_input: true, ..env() };
+    let strict = EgressPolicy::compile_with([("user", p.egress.as_slice())], &env).unwrap();
+    let (old, new) = (bundle(BASE), Bundle::from_egress(&strict));
+    let r = check(&Inputs { new: &new, old: Some(&old), repo: None }).unwrap();
+    assert!(r.hard_failures().is_empty(), "{}", r.render());
+    assert!(r.widenings().is_empty(), "turning the option on only narrows: {}", r.render());
 }
 
 #[test]

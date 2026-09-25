@@ -44,6 +44,9 @@ pub struct EgressPolicy {
     grants: Vec<Grant>,
     repo_grants: Vec<Grant>,
     engine: Engine,
+    /// Policies from user/org options rather than grants (the public-sink
+    /// forbids); part of every rebuild of the base set.
+    options: Vec<Compiled>,
     session: SessionInfo,
     /// The session's trifecta labels, raised by the broker (shared with a
     /// shadow candidate so both see the same session).
@@ -177,8 +180,17 @@ impl EgressPolicy {
         env: &CompileEnv,
     ) -> Result<Self, CompileError> {
         let grants = build_grants(layers, env)?;
-        let engine = Engine::new(&compile_all(&grants)?).map_err(CompileError::Cedar)?;
-        Ok(EgressPolicy { grants, repo_grants: vec![], engine, session: env.session.clone(), labels: Arc::default() })
+        let options =
+            if env.deny_public_sinks_after_untrusted_input { cedar::compile::public_sink_policies() } else { vec![] };
+        let engine = Engine::new(&[compile_all(&grants)?, options.clone()].concat()).map_err(CompileError::Cedar)?;
+        Ok(EgressPolicy {
+            grants,
+            repo_grants: vec![],
+            engine,
+            options,
+            session: env.session.clone(),
+            labels: Arc::default(),
+        })
     }
 
     /// Conjoin an approved repository layer: it can only narrow (I4). Keys
@@ -279,7 +291,7 @@ impl EgressPolicy {
         }
         if let Some(r) = v.determining.iter().find_map(|id| self.engine.reason_of(id)) {
             let r = reason_from(r);
-            if matches!(r, Reason::NeedsApproval | Reason::RuleOfTwo) {
+            if matches!(r, Reason::NeedsApproval | Reason::RuleOfTwo | Reason::PublicSinkAfterUntrustedInput) {
                 let e = explain();
                 if e != Reason::PolicyDenied {
                     return e;

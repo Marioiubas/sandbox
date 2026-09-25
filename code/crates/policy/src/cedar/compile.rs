@@ -328,6 +328,25 @@ fn l7_policies(
     Ok(out)
 }
 
+/// The optional org rule (Trifecta Session Labels, ADR-010): once the
+/// session has read untrusted input, no writes to public sinks without
+/// approval. A repository counts unless the broker knows it is private
+/// (git pushes carry no looked-up visibility, so every push counts).
+pub fn public_sink_policies() -> Vec<Compiled> {
+    let repo = "@id(\"public-sink-after-untrusted-input\")\n@reason(\"public_sink_after_untrusted_input\")\n\
+                forbid (principal, action in [Broker::Action::\"pr.create\", Broker::Action::\"pr.merge\", Broker::Action::\"issue.comment\", Broker::Action::\"contents.write\", Broker::Action::\"git.push\"], resource)\n\
+                when { context.session.trifecta.untrusted_input && resource.visibility != \"private\" }\n\
+                unless { context.session.approved };";
+    let host = "@id(\"public-sink-after-untrusted-input-host\")\n@reason(\"public_sink_after_untrusted_input\")\n\
+                forbid (principal, action in [Broker::Action::\"gist.create\", Broker::Action::\"pkg.publish\"], resource)\n\
+                when { context.session.trifecta.untrusted_input }\n\
+                unless { context.session.approved };";
+    vec![
+        Compiled { id: "public-sink-after-untrusted-input".into(), grant: None, src: repo.into() },
+        Compiled { id: "public-sink-after-untrusted-input-host".into(), grant: None, src: host.into() },
+    ]
+}
+
 /// The ID suffix of a grant's `k`-th push permit (`<grant id>#push<k>`).
 pub fn push_suffix(k: usize) -> String {
     format!("push{k}")

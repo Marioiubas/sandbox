@@ -77,7 +77,7 @@ The motivating incidents: a public issue drove an agent to read private repos wi
 
 - [x] `crates/policy/src/trifecta.rs`: `sensitive_read` flips on a private-repo read (visibility known from the proxied API) or a high-risk credential; `untrusted_input` flips on public issues/PRs, arbitrary web pages or designated ticket sources; `external_effect` is any write-class action. (built as `crates/policy/src/github.rs` and `crates/brokerd/src/l7_pipeline/github.rs`; git clones do not raise `sensitive_read` yet: [[ADR-029 GitHub API Adapter and Session Labels as Built]])
 - [x] `crates/l7/src/adapters/github_api.rs`: map REST method/path and GraphQL operations to verbs (`pr.create`, `pr.merge`, `issue.comment`, `contents.write`) so "open a PR but never merge" is one rule ([[GitHub API Adapter]]). (built as `crates/l7/src/github.rs`, REST only; GraphQL denied: [[ADR-029 GitHub API Adapter and Session Labels as Built]])
-- [ ] Org policy option: forbid public-sink writes whenever `untrusted_input` is set (Willison's "[A]+[C] without [B]" critique).
+- [x] Org policy option: forbid public-sink writes whenever `untrusted_input` is set (Willison's "[A]+[C] without [B]" critique). ([[ADR-033 Public-Sink Rule as Built]])
 
 **Probes**
 
@@ -165,3 +165,4 @@ Next milestone: [[M4 Harden and Ship]].
 - 2026-09-25: step 2 built: MCP Guard for stdio servers ([[ADR-030 MCP Guard as Built]]). D3 and D4 pass against a fake server and API (`m3_mcp::d3_d4_pinned_server_is_approved_confined_and_revoked_on_change`), with I1 and I5 extended to the server principal. The real GitHub MCP server run needs a GitHub token (user). Remaining: CI mode (D1), identity (D2), AWS STS (D6).
 - 2026-09-25: step 3 built: CI identity ([[ADR-031 CI Identity as Built]]). D1 runs in the `ci-mode` CI job (untrusted-issue fixture under the GitHub Action with the real runner token); attribution and refusal are tested locally (`m3_identity::*`). D2 (Okta/Entra) needs the dev tenants; D6 (AWS) remains.
 - 2026-09-25: step 4 built: AWS STS and the S3 adapter ([[ADR-032 AWS STS and S3 Adapter as Built]]). D6 passes against a fake STS and a fake S3 that verify every SigV4 signature and evaluate the session policy (`m3_s3::d6_s3_reads_through_minted_credentials_and_out_of_prefix_writes_are_denied`, `m3_s3::d6_the_session_policy_denies_on_its_own`, `m3_s3::d6_a_planted_aws_key_is_rejected`); the real-AWS run needs a test account (user). Remaining: D2 (Okta/Entra tenants), the D1/D3/D6 runs against real services, org public-sink option, GraphQL.
+- 2026-09-25: the org public-sink option built ([[ADR-033 Public-Sink Rule as Built]]): `m3_github::with_the_org_option_the_public_pr_after_a_public_issue_is_denied`; the gates prove it a narrowing.

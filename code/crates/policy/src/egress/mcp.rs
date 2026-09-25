@@ -12,6 +12,7 @@ impl EgressPolicy {
     ) -> Result<Self, CompileError> {
         crate::mcp::validate(servers).map_err(CompileError::Cedar)?;
         let mut compiled = compile_all(&self.grants)?;
+        compiled.extend(self.options.iter().cloned());
         compiled.extend(crate::mcp::policies(servers));
         self.engine = Engine::new(&compiled).map_err(CompileError::Cedar)?;
         Ok(self)

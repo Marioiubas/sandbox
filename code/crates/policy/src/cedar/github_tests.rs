@@ -171,3 +171,51 @@ fn mcp_calls_decide() {
         assert!(parse_policy_str(bad).is_err(), "{bad}");
     }
 }
+
+#[test]
+fn the_org_option_denies_public_sinks_after_untrusted_input() {
+    let toml = format!(
+        "{}\n[[egress]]\nhost = \"github.com\"\nid = \"git\"\nprotocol = \"git\"\n\
+         allow = {{ push = {{ repo = \"${{repo_remote}}\", refs = [\"agent/*\"] }} }}\n",
+        API.replace("\"github.read\"]", "\"github.read\", \"gist.create\"]")
+    );
+    let p = parse_policy_str(&toml).unwrap();
+    let strict = CompileEnv { deny_public_sinks_after_untrusted_input: true, ..env() };
+    // As the daemon builds it: the MCP rebuild keeps the option's forbids.
+    let on = EgressPolicy::compile_with([("user", p.egress.as_slice())], &strict).unwrap().with_mcp(&p.mcp).unwrap();
+    let off = EgressPolicy::compile_with([("user", p.egress.as_slice())], &env()).unwrap();
+    let (public, web) = (Some("github.com/acme-public/site"), Some("github.com/acme/web"));
+    let push = |e: &EgressPolicy| {
+        let mut adm = e.admit_host(&canon_host(b"github.com").unwrap(), 443).unwrap();
+        e.admit_addrs(&mut adm, &["140.82.112.3".parse().unwrap()]).unwrap();
+        let a = Action::GitPush {
+            repo: RepoId::parse("github.com/acme/web").unwrap(),
+            refname: "refs/heads/agent/x".into(),
+            force: false,
+            update: "t",
+        };
+        e.authorize_l7(&adm, &[a]).result
+    };
+    for e in [&on, &off] {
+        assert_eq!(decide(e, gh("pr.create", public, Visibility::Public, "POST")), Ok(()), "no untrusted input yet");
+        assert_eq!(push(e), Ok(()));
+        e.labels().raise(Label::UntrustedInput);
+    }
+    // Off (the default): [A]+[C] alone is allowed, as ADR-010 describes.
+    assert_eq!(decide(&off, gh("pr.create", public, Visibility::Public, "POST")), Ok(()));
+    assert_eq!(push(&off), Ok(()));
+    // On: public sinks and repositories not known to be private are denied.
+    let sink = Err(Reason::PublicSinkAfterUntrustedInput);
+    assert_eq!(decide(&on, gh("pr.create", public, Visibility::Public, "POST")), sink);
+    assert_eq!(decide(&on, gh("issue.comment", web, Visibility::Unknown, "POST")), sink);
+    assert_eq!(decide(&on, gh("gist.create", None, Visibility::Unknown, "POST")), sink);
+    assert_eq!(push(&on), sink, "pushes carry no looked-up visibility, so every push counts");
+    assert_eq!(
+        decide(&on, gh("pr.create", web, Visibility::Private, "POST")),
+        Ok(()),
+        "a private repository is not a sink"
+    );
+    assert_eq!(decide(&on, gh("repo.read", public, Visibility::Public, "GET")), Ok(()), "reads pass");
+    // A verb that is not granted still reports the more specific reason.
+    assert_eq!(decide(&on, gh("pr.merge", public, Visibility::Public, "PUT")), Err(Reason::GithubVerbNotAllowed));
+}

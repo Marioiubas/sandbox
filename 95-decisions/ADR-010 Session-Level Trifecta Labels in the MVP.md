@@ -7,7 +7,7 @@ tags: [sandbox/decisions, decision, topic/ifc, topic/policy, control/task-tok, c
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: "Ship session-level trifecta labels sourced from systems of record in the MVP; defer CaMeL-style interpreters and FIDES planners."
 related: ["[[Trifecta Session Labels]]", "[[CaMeL]]", "[[FIDES]]", "[[AgentDyn]]", "[[Information Flow Control]]", "[[Provenance-Aware Cedar]]", "[[Credential Broker as Label Authority]]", "[[Lethal Trifecta]]", "[[Agents Rule of Two]]", "[[GitHub MCP Toxic Flow]]", "[[GitLost GitHub Agentic Workflows Leak]]", "[[Cedar]]", "[[I3 Probabilistic Components Only Narrow]]", "[[Threat Model Non-Goals]]", "[[M3 CI Identity and MCP]]", "[[L3 Real-Work Utility]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[GitHub API Adapter]]", "[[Policy Engine and Entity Builder]]", "[[MOC Decisions]]"]
 sources: ["https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/", "https://ai.meta.com/blog/practical-ai-agent-security/", "https://simonwillison.net/2025/Nov/2/new-prompt-injection-papers/", "https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://thehackernews.com/2026/07/public-github-issue-could-trick-github.html", "https://arxiv.org/html/2503.18813", "https://arxiv.org/html/2505.23643", "https://arxiv.org/html/2602.03117v1", "https://arxiv.org/html/2601.09923v1", "https://arxiv.org/html/2609.14003", "https://arxiv.org/abs/2608.30041", "https://arxiv.org/abs/2502.08966", "https://arxiv.org/html/2510.09023"]
@@ -134,3 +134,7 @@ A structural constraint applies as well. The broker wraps unmodified vendor agen
 - [RTBAS, arXiv 2502.08966](https://arxiv.org/abs/2502.08966)
 - [The Attacker Moves Second, arXiv 2510.09023](https://arxiv.org/html/2510.09023)
 - Report: decisions row "IFC depth in MVP" and the label-creep paragraph; research note 02 Q2, Q5 and Q6.
+
+## Build log
+
+- 2026-09-25: item 3 (the optional public-sink rule) is built as [[ADR-033 Public-Sink Rule as Built]].

@@ -131,8 +131,11 @@ jobs:
       - name: The session is attributed to this run
         run: |
           broker audit query --kind session.start --json > "$RUNNER_TEMP/starts.jsonl"
-          grep -q "\"enduser\":\"repo:${GITHUB_REPOSITORY}:" "$RUNNER_TEMP/starts.jsonl"
-          grep -q "\"run_id\":\"${GITHUB_RUN_ID}\"" "$RUNNER_TEMP/starts.jsonl"
+          # Subject, issuer and run ID only (no token is ever logged).
+          jq -c '.event | {enduser, issuer: .detail.identity.issuer, run_id: .detail.identity.claims.run_id}' "$RUNNER_TEMP/starts.jsonl"
+          jq -e --arg sub "repo:${GITHUB_REPOSITORY}:" --arg run "$GITHUB_RUN_ID" \
+            'select((.event.enduser | startswith($sub)) and (.event.detail.identity.claims.run_id == $run))' \
+            "$RUNNER_TEMP/starts.jsonl" > /dev/null
 
   fuzz-smoke:
     # 60 s per target on every push; the >=24 h runs are an M4 exit item.
