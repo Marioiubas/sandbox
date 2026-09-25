@@ -26,11 +26,11 @@ fn pct(v: &[f64], p: f64) -> f64 {
 /// `CLIENTS` concurrent curl processes, each making `n` requests (one
 /// connection when `warm`, a new one per request otherwise); prints one
 /// `time_total` per request.
-fn script(url: &str, n: usize, warm: bool, extra: &str) -> String {
+fn script(url: &str, n: usize, warm: bool, extra: &str, clients: usize) -> String {
     let close = if warm { "" } else { "-H 'Connection: close'" };
     let urls: Vec<String> = (0..n).map(|i| format!("-o /dev/null '{url}?i={i}'")).collect();
     let one = format!("curl -sS {extra} {close} -w '%{{time_total}}\\n' {}", urls.join(" "));
-    let par: String = (0..CLIENTS).map(|j| format!("( {one} > \"$T/o{j}\" ) & ")).collect();
+    let par: String = (0..clients).map(|j| format!("( {one} > \"$T/o{j}\" ) & ")).collect();
     format!("T=$(mktemp -d); {par} wait; cat \"$T\"/o*")
 }
 
@@ -55,23 +55,25 @@ fn e3_latency_report() {
         loopback_grant("l7", "echo-l7.example.com", term.port, "methods = [\"GET\"]")
     ));
     let url = |s: &HttpsServer| format!("https://{}:{}/echo", s.host, s.port);
-    let direct = |s: &HttpsServer, warm: bool, n: usize| {
+    let direct = |s: &HttpsServer, warm: bool, n: usize, clients: usize| {
         let extra = format!("--cacert {} --resolve {}:{}:127.0.0.1", ca.pem_path.display(), s.host, s.port);
-        let out =
-            std::process::Command::new("/bin/sh").arg("-c").arg(script(&url(s), n, warm, &extra)).output().unwrap();
-        times(&String::from_utf8_lossy(&out.stdout), n * CLIENTS)
+        let sh = script(&url(s), n, warm, &extra, clients);
+        let out = std::process::Command::new("/bin/sh").arg("-c").arg(sh).output().unwrap();
+        times(&String::from_utf8_lossy(&out.stdout), n * clients)
     };
-    let brokered = |s: &HttpsServer, warm: bool, n: usize| {
-        let r = h.sh(&script(&url(s), n, warm, ""));
+    let brokered = |s: &HttpsServer, warm: bool, n: usize, clients: usize| {
+        let r = h.sh(&script(&url(s), n, warm, "", clients));
         assert_eq!(r.code, 0, "{r:?}");
-        times(&r.stdout, n * CLIENTS)
+        times(&r.stdout, n * clients)
     };
     let _ = h.sh("true"); // start the daemon outside the measurements
 
     let mut rows = Vec::new();
     for (path, s) in [("splice (L4)", &splice), ("terminated (L7)", &term)] {
-        for (conn, warm, n) in [("warm", true, WARM), ("new", false, NEW)] {
-            let (d, b) = (direct(s, warm, n), brokered(s, warm, n));
+        for (conn, warm, n, clients) in
+            [("warm", true, WARM, CLIENTS), ("new", false, NEW, CLIENTS), ("new/1", false, NEW, 1)]
+        {
+            let (d, b) = (direct(s, warm, n, clients), brokered(s, warm, n, clients));
             rows.push(json!({
                 "path": path, "connection": conn, "requests": b.len(),
                 "direct_ms": { "p50": pct(&d, 0.5), "p95": pct(&d, 0.95), "p99": pct(&d, 0.99) },
@@ -92,22 +94,36 @@ fn e3_latency_report() {
             .collect()
     };
     let fmt = "-H 'Connection: close' -o /dev/null -w '%{time_connect} %{time_appconnect} %{time_starttransfer}\\n'";
+    // A direct baseline that loads a bundle as large as the session's (the
+    // system roots plus the test CA), so CA loading is not counted as broker
+    // time.
+    let big = ca_dir.path().join("big-bundle.pem");
+    let system = ["/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/cert.pem"]
+        .iter()
+        .find_map(|p| std::fs::read(p).ok())
+        .unwrap_or_default();
+    std::fs::write(&big, [system, std::fs::read(&ca.pem_path).unwrap()].concat()).unwrap();
     for s in [&splice, &term] {
         let urls: String = (0..10).map(|i| format!(" '{}?p={i}'", url(s))).collect();
         let b = h.sh(&format!("for u in{urls}; do curl -sS {fmt} \"$u\"; done"));
-        let extra = format!("--cacert {} --resolve {}:{}:127.0.0.1", ca.pem_path.display(), s.host, s.port);
-        let d = std::process::Command::new("/bin/sh")
-            .arg("-c")
-            .arg(format!("for u in{urls}; do curl -sS {extra} {fmt} \"$u\"; done"))
-            .output()
-            .unwrap();
-        for (who, v) in [("broker", phases(&b.stdout)), ("direct", phases(&String::from_utf8_lossy(&d.stdout)))] {
+        let run_direct = |cafile: &std::path::Path| {
+            let extra = format!("--cacert {} --resolve {}:{}:127.0.0.1", cafile.display(), s.host, s.port);
+            let d = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(format!("for u in{urls}; do curl -sS {extra} {fmt} \"$u\"; done"))
+                .output()
+                .unwrap();
+            phases(&String::from_utf8_lossy(&d.stdout))
+        };
+        for (who, v) in
+            [("broker", phases(&b.stdout)), ("direct", run_direct(&ca.pem_path)), ("direct+bundle", run_direct(&big))]
+        {
             let col = |i: usize| v.iter().map(|x| x[i]).collect::<Vec<f64>>();
             if v.is_empty() {
                 continue;
             }
             println!(
-                "phases {} {:<6} connect p50 {:>6.2} ms  tls-done p50 {:>6.2} ms  first-byte p50 {:>6.2} ms",
+                "phases {} {:<13} connect p50 {:>6.2} ms  tls-done p50 {:>6.2} ms  first-byte p50 {:>6.2} ms",
                 s.host,
                 who,
                 pct(&col(0), 0.5),
