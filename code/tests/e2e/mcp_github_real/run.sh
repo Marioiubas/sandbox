@@ -73,6 +73,9 @@ for e in rows:
     hosts[(h, d)] += 1
 for (h, d), n in sorted(hosts.items()):
     print(f"  {d:5} {n:3}  {h}")
+for e in rows:
+    if e.get("kind") == "request.decision" and (e.get("decision") or {}).get("result") == "deny":
+        print("  denied:", e.get("reason"), (e.get("detail") or {}).get("verb") or "")
 allowed_elsewhere = [h for (h, d) in hosts if d == "allow" and h not in ("api.github.com",) and not h.endswith(".mcp.broker.internal")]
 allowed_elsewhere and fail.append(f"allowed connections outside api.github.com: {allowed_elsewhere}")
 # GraphQL verbs (ADR-035): each names its root field; none refused.

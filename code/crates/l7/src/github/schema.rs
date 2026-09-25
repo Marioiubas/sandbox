@@ -255,6 +255,11 @@ mod tests {
             ("Issue", "trackedIssues"),
             ("Issue", "timelineItems"),
             ("Issue", "projectItems"),
+            // Organisation issue fields may be `ORG_ONLY`: their values on a
+            // public repository's issue are not public.
+            ("Issue", "issueFieldValues"),
+            ("Issue", "parent"),
+            ("Issue", "closedByPullRequestsReferences"),
             ("User", "repositories"),
             ("User", "issues"),
             ("User", "email"),
