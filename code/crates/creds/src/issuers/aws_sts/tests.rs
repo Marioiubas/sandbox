@@ -217,13 +217,20 @@ fn s3_requests_are_resigned_with_the_session() {
 }
 
 /// Cross-check the canonicalisation against an independent signer: curl's
-/// `--aws-sigv4` (skipped where curl lacks it).
+/// `--aws-sigv4`, from curl 8 on. The AWS test-suite vectors in `sigv4`
+/// are the authority; curl 7.81 (Ubuntu 22.04) signs this request
+/// differently from both curl 8.x and those rules, so older curls are
+/// skipped rather than trusted.
 #[test]
 fn signatures_match_curl() {
     use std::io::{Read, Write};
-    let has = std::process::Command::new("curl").arg("--help").arg("all").output();
-    if !has.map(|o| String::from_utf8_lossy(&o.stdout).contains("aws-sigv4")).unwrap_or(false) {
-        eprintln!("curl without --aws-sigv4: skipped");
+    let version = std::process::Command::new("curl").arg("--version").output();
+    let major = version
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().nth(1).map(str::to_string))
+        .and_then(|v| v.split('.').next().and_then(|m| m.parse::<u32>().ok()));
+    if major.is_none_or(|m| m < 8) {
+        eprintln!("curl older than 8 (or missing): skipped");
         return;
     }
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
