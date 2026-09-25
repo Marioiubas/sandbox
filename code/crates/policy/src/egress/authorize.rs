@@ -9,7 +9,9 @@ use super::*;
 type ActionRequest<'a> = (String, Value, Vec<Value>, Box<dyn Fn(Mode) -> Value + 'a>);
 
 impl EgressPolicy {
-    fn action_request(&self, adm: &Admission, a: &Action) -> ActionRequest<'_> {
+    /// `adapted`: the request's actions include a GitHub or S3 verb, which
+    /// decides whether it writes (the Rule of Two keys on the verb).
+    fn action_request(&self, adm: &Admission, a: &Action, adapted: bool) -> ActionRequest<'_> {
         let mut ents = self.host_entities(&adm.host);
         let port = adm.port;
         let dest_class = adm.addr_classes.first().cloned().unwrap_or_else(|| "public".into());
@@ -20,7 +22,7 @@ impl EgressPolicy {
                     json!({
                         "session": self.session_ctx(m), "port": port, "method": method,
                         "path": ent::path_record(&path), "path_str": path, "sni": host, "host_header": host,
-                        "body_bytes": 0, "dest_class": dest_class,
+                        "body_bytes": 0, "dest_class": dest_class, "adapted": adapted,
                     })
                 };
                 let name = cedar::compile::http_action(a.method().unwrap_or(""));
@@ -71,8 +73,9 @@ impl EgressPolicy {
         let mut would: Option<Reason> = None;
         let mut full: Option<BTreeSet<usize>> = None;
         let mut determining = Vec::new();
+        let adapted = actions.iter().any(|a| matches!(a, Action::GitHub { .. } | Action::S3 { .. }));
         for (k, a) in actions.iter().enumerate() {
-            let (name, res, ents, ctx) = self.action_request(adm, a);
+            let (name, res, ents, ctx) = self.action_request(adm, a, adapted);
             let (v, shadow) = self.eval(&name, &res, ents, ctx);
             let explain = || explained.actions.get(k).and_then(|(_, r)| r.err()).unwrap_or(Reason::PolicyDenied);
             let r = if v.allowed { Ok(()) } else { Err(self.deny_reason(&v, explain)) };

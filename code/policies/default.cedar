@@ -16,6 +16,25 @@ when { context.session.now >= principal.expires_at };
 @id("rule-of-two")
 @reason("rule_of_two")
 forbid (principal, action in [Broker::Action::"http.write", Broker::Action::"git.push"], resource)
+when {
+  !(context has adapted && context.adapted) &&
+  context.session.trifecta.untrusted_input && context.session.trifecta.sensitive_read
+}
+unless { context.session.approved };
+
+// On GitHub and S3 hosts the verb decides (a GraphQL query is a POST that
+// writes nothing); every write those adapters map is one of these.
+@id("rule-of-two-verbs")
+@reason("rule_of_two")
+forbid (
+  principal,
+  action in [
+    Broker::Action::"pr.create", Broker::Action::"pr.merge", Broker::Action::"issue.comment",
+    Broker::Action::"contents.write", Broker::Action::"gist.create",
+    Broker::Action::"s3.put", Broker::Action::"s3.delete"
+  ],
+  resource
+)
 when { context.session.trifecta.untrusted_input && context.session.trifecta.sensitive_read }
 unless { context.session.approved };
 

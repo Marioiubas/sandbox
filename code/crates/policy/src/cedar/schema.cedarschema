@@ -27,8 +27,10 @@ namespace Broker {
   entity File in [Dir];
 
   type ConnCtx = { session: Session, port: Long, addr_classes: Set<String> };
+  // adapted: a protocol adapter (GitHub, S3) classified the request, so its
+  // verb or operation, not the HTTP method, says whether it writes.
   type HttpCtx = { session: Session, port: Long, method: String, path: Path, path_str: String,
-                   sni: String, host_header: String, body_bytes: Long, dest_class: String };
+                   sni: String, host_header: String, body_bytes: Long, dest_class: String, adapted: Bool };
   type GitCtx  = { session: Session, port: Long, ref: String, force: Bool };
   type CredCtx = { session: Session, dest_host: String, dest_domains: Set<String>, port: Long, method: String,
                    path_str: String, verb: String };

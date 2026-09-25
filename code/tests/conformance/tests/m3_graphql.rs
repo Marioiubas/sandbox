@@ -218,8 +218,15 @@ fn graphql_requests_map_to_verbs_or_deny() {
 #[test]
 fn the_toxic_flow_over_graphql_is_stopped_at_the_public_write() {
     let f = setup(r#"["repo.read", "pr.create", "github.read"]"#);
-    let (codes, evs) = f.run(&[("gql", &q(ISSUES)), ("gql", &q(SECRET)), ("gql", &create_pr("R_public"))]);
-    assert_eq!(codes, "200 200 403");
+    let (codes, evs) = f.run(&[
+        ("gql", &q(ISSUES)),
+        ("gql", &q(SECRET)),
+        // Reads still pass with both labels live: a GraphQL query is a POST,
+        // but the verb decides (ADR-035).
+        ("gql", &q(ISSUES)),
+        ("gql", &create_pr("R_public")),
+    ]);
+    assert_eq!(codes, "200 200 200 403");
     assert_eq!(denies(&evs), vec![Reason::RuleOfTwo]);
     assert!(f.mutations_seen().is_empty(), "the PR never reached GitHub");
 }

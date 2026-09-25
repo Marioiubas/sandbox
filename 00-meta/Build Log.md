@@ -280,3 +280,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Tests:** 23 new unit and property tests (`l7::graphql`, `l7::github::graphql`, `l7::github::schema`), `m3_graphql` (4 end-to-end tests with node lookups against a fake GitHub), updated `m3_github`; full workspace suite green on macOS (322 tests, SymCC solver required). Fuzz target `graphql`: 3.16 M runs in 3 minutes, no findings; added to the CI smoke and nightly lists.
 - **Open:** whether GraphQL follows transferred issues ([[Open Questions and Unverified Claims]]); the `real-mcp` job now expects `list_issues` to succeed over GraphQL.
 - **CI:** run 36186497093 green on all jobs (macOS 15/26, Ubuntu 22.04/24.04, lint, fuzz smoke with `graphql`, latency, ci-mode, real-github, real-mcp). Against the real GitHub MCP server, `list_issues` now works over GraphQL; its query counts as a sensitive read because it selects organisation issue-field values (which can be `ORG_ONLY`) and follows sub-issue parents and closing PRs across repositories. Recorded in ADR-035; `issueFieldValues`, `parent` and `closedByPullRequestsReferences` are pinned outside the allowlist by `l7::github::schema::tests::the_known_escapes_are_not_listed`.
+
+### 2026-09-26: the Rule of Two keys on the verb on GitHub and S3 hosts
+
+- **Found (real-server run, CI 36188997307):** with both labels live, a GraphQL read was refused by the Rule of Two because the forbid keyed on `http.write` and GraphQL queries are POSTs.
+- **Fixed:** HTTP actions carry `adapted`; `rule-of-two` skips adapted ones and the new `rule-of-two-verbs` covers every GitHub and S3 write verb ([[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]], item 11). Policy tests (SymCC gates with the solver required) and the GitHub, GraphQL, S3 and MCP conformance tests pass.
+

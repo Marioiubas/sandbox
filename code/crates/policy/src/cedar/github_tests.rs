@@ -101,6 +101,23 @@ fn verbs_decide_and_the_rule_of_two_fires() {
     assert_eq!(decide(&p, gh("pr.create", public, Visibility::Public, "POST")), Err(Reason::RuleOfTwo));
     assert_eq!(decide(&p, gh("issue.comment", web, Visibility::Private, "POST")), Err(Reason::RuleOfTwo));
     assert_eq!(decide(&p, gh("repo.read", web, Visibility::Private, "GET")), Ok(()));
+    // GraphQL reads are POSTs: the verb, not the method, decides (ADR-035).
+    assert_eq!(decide(&p, gh("github.read", None, Visibility::Unknown, "POST")), Ok(()));
+    assert_eq!(decide(&p, gh("repo.read", web, Visibility::Private, "POST")), Ok(()));
+    // Every write verb is stopped, whatever method carries it.
+    for (verb, repo) in [("pr.create", public), ("issue.comment", web)] {
+        for m in ["POST", "PUT", "GET"] {
+            assert_eq!(decide(&p, gh(verb, repo, Visibility::Public, m)), Err(Reason::RuleOfTwo), "{verb} {m}");
+        }
+    }
+    // A plain HTTP write without a verb is still covered by the method.
+    let adm = {
+        let mut a = p.admit_host(&canon_host(b"api.github.com").unwrap(), 443).unwrap();
+        p.admit_addrs(&mut a, &["140.82.112.5".parse().unwrap()]).unwrap();
+        a
+    };
+    let post = [Action::Http { method: "POST".into(), path: "/x".into() }];
+    assert_eq!(p.authorize_l7(&adm, &post).result, Err(Reason::RuleOfTwo));
 }
 
 fn arb_verb() -> impl Strategy<Value = &'static str> {
