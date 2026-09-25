@@ -55,8 +55,17 @@ fn e3_latency_report() {
         loopback_grant("l7", "echo-l7.example.com", term.port, "methods = [\"GET\"]")
     ));
     let url = |s: &HttpsServer| format!("https://{}:{}/echo", s.host, s.port);
+    // The direct baseline trusts a bundle as large as the session's (the
+    // system roots plus the test CA): the sandbox's clients load the session
+    // bundle, and that load (slow with OpenSSL 3) is not broker time.
+    let big = ca_dir.path().join("big-bundle.pem");
+    let system = ["/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/cert.pem"]
+        .iter()
+        .find_map(|p| std::fs::read(p).ok())
+        .unwrap_or_default();
+    std::fs::write(&big, [system, std::fs::read(&ca.pem_path).unwrap()].concat()).unwrap();
     let direct = |s: &HttpsServer, warm: bool, n: usize, clients: usize| {
-        let extra = format!("--cacert {} --resolve {}:{}:127.0.0.1", ca.pem_path.display(), s.host, s.port);
+        let extra = format!("--cacert {} --resolve {}:{}:127.0.0.1", big.display(), s.host, s.port);
         let sh = script(&url(s), n, warm, &extra, clients);
         let out = std::process::Command::new("/bin/sh").arg("-c").arg(sh).output().unwrap();
         times(&String::from_utf8_lossy(&out.stdout), n * clients)
@@ -94,15 +103,6 @@ fn e3_latency_report() {
             .collect()
     };
     let fmt = "-H 'Connection: close' -o /dev/null -w '%{time_connect} %{time_appconnect} %{time_starttransfer}\\n'";
-    // A direct baseline that loads a bundle as large as the session's (the
-    // system roots plus the test CA), so CA loading is not counted as broker
-    // time.
-    let big = ca_dir.path().join("big-bundle.pem");
-    let system = ["/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/cert.pem"]
-        .iter()
-        .find_map(|p| std::fs::read(p).ok())
-        .unwrap_or_default();
-    std::fs::write(&big, [system, std::fs::read(&ca.pem_path).unwrap()].concat()).unwrap();
     for s in [&splice, &term] {
         let urls: String = (0..10).map(|i| format!(" '{}?p={i}'", url(s))).collect();
         let b = h.sh(&format!("for u in{urls}; do curl -sS {fmt} \"$u\"; done"));
@@ -116,7 +116,7 @@ fn e3_latency_report() {
             phases(&String::from_utf8_lossy(&d.stdout))
         };
         for (who, v) in
-            [("broker", phases(&b.stdout)), ("direct", run_direct(&ca.pem_path)), ("direct+bundle", run_direct(&big))]
+            [("broker", phases(&b.stdout)), ("direct/1 CA", run_direct(&ca.pem_path)), ("direct", run_direct(&big))]
         {
             let col = |i: usize| v.iter().map(|x| x[i]).collect::<Vec<f64>>();
             if v.is_empty() {
