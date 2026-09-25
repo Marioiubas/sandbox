@@ -87,6 +87,12 @@ pub struct HttpsServer {
 impl HttpsServer {
     /// Serve `host` (the certificate's only name) on a loopback port.
     pub fn start(ca: &TestCa, host: &str, handler: Handler) -> HttpsServer {
+        Self::start_with(ca, host, handler, true)
+    }
+
+    /// As [`start`](Self::start), leaving Nagle on when `nodelay` is false
+    /// (as Java servers do by default), for latency measurements.
+    pub fn start_with(ca: &TestCa, host: &str, handler: Handler, nodelay: bool) -> HttpsServer {
         let std_l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         std_l.set_nonblocking(true).unwrap();
         let port = std_l.local_addr().unwrap().port();
@@ -102,7 +108,9 @@ impl HttpsServer {
                     let Ok((s, _)) = l.accept().await else { continue };
                     // As most production servers (Go, nginx keep-alive):
                     // replies are not held back for the peer's delayed ACK.
-                    let _ = s.set_nodelay(true);
+                    if nodelay {
+                        let _ = s.set_nodelay(true);
+                    }
                     let (acceptor, handler, seen) = (acceptor.clone(), handler.clone(), seen2.clone());
                     tokio::spawn(async move {
                         let Ok(tls) = acceptor.accept(s).await else { return };

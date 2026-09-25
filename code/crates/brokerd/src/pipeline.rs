@@ -270,6 +270,7 @@ where
             // (TLS handshake records) waits for the upstream's delayed ACK,
             // which added ~50 ms to every new connection on Linux.
             let _ = s.set_nodelay(true);
+            crate::upstream::quickack(&s);
             upstream = Some(s);
             break;
         }

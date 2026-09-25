@@ -47,12 +47,14 @@ fn e3_latency_report() {
     let ca = TestCa::new(ca_dir.path());
     let echo: Handler = std::sync::Arc::new(|_s: &Seen| Reply::new(200, "ok"));
     let splice = HttpsServer::start(&ca, "echo-splice.example.com", echo.clone());
-    let term = HttpsServer::start(&ca, "echo-l7.example.com", echo);
+    let term = HttpsServer::start(&ca, "echo-l7.example.com", echo.clone());
+    let nagle = HttpsServer::start_with(&ca, "echo-nagle.example.com", echo, false);
     let h = Harness::new(&format!(
-        "version = 1\n[tls]\nextra_roots = [\"{}\"]\n{}{}",
+        "version = 1\n[tls]\nextra_roots = [\"{}\"]\n{}{}{}",
         ca.pem_path.display(),
         loopback_grant("splice", "echo-splice.example.com", splice.port, ""),
-        loopback_grant("l7", "echo-l7.example.com", term.port, "methods = [\"GET\"]")
+        loopback_grant("l7", "echo-l7.example.com", term.port, "methods = [\"GET\"]"),
+        loopback_grant("nagle", "echo-nagle.example.com", nagle.port, "methods = [\"GET\"]")
     ));
     let url = |s: &HttpsServer| format!("https://{}:{}/echo", s.host, s.port);
     // The direct baseline trusts a bundle as large as the session's (the
@@ -103,7 +105,7 @@ fn e3_latency_report() {
             .collect()
     };
     let fmt = "-H 'Connection: close' -o /dev/null -w '%{time_connect} %{time_appconnect} %{time_starttransfer}\\n'";
-    for s in [&splice, &term] {
+    for s in [&splice, &term, &nagle] {
         let urls: String = (0..10).map(|i| format!(" '{}?p={i}'", url(s))).collect();
         let b = h.sh(&format!("for u in{urls}; do curl -sS {fmt} \"$u\"; done"));
         let run_direct = |cafile: &std::path::Path| {
@@ -164,6 +166,7 @@ fn e3_latency_report() {
     ];
     show("L7 first request", &term.host, true, first);
     show("L7 later requests", &term.host, false, &[&["authorized_us"], &["logged_us"], &["response_us"]]);
+    show("L7 first, Nagle upstream", &nagle.host, true, first);
     let mut starts = Vec::new();
     for _ in 0..20 {
         let t = Instant::now();

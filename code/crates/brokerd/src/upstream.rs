@@ -34,6 +34,32 @@ pub async fn connect_addrs(addrs: &[IpAddr], port: u16) -> Option<TcpStream> {
     None
 }
 
+/// Linux: acknowledge the upstream's segments at once rather than after the
+/// delayed-ACK timer. An upstream that leaves Nagle on (Java servers by
+/// default) otherwise holds its first response behind its TLS session
+/// tickets until our delayed ACK: ~40 ms on a fresh connection. The kernel
+/// may leave quick-ACK mode again, so it is re-armed at the points that
+/// matter (after connect, after the handshake). Best effort.
+pub fn quickack(s: &TcpStream) {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        let one: libc::c_int = 1;
+        // SAFETY: a valid, open socket fd and a correctly sized c_int value.
+        let _ = unsafe {
+            libc::setsockopt(
+                s.as_raw_fd(),
+                libc::IPPROTO_TCP,
+                libc::TCP_QUICKACK,
+                (&one as *const libc::c_int).cast(),
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            )
+        };
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = s;
+}
+
 /// TLS toward the upstream, verified for exactly the canonical host.
 pub async fn tls_connect(
     cfg: &Arc<ClientConfig>,
@@ -42,7 +68,10 @@ pub async fn tls_connect(
 ) -> Result<TlsStream<TcpStream>, Reason> {
     let name = tls::upstream::server_name(host).map_err(|_| Reason::UpstreamTls)?;
     match tokio::time::timeout(TLS_TIMEOUT, TlsConnector::from(cfg.clone()).connect(name, tcp)).await {
-        Ok(Ok(s)) => Ok(s),
+        Ok(Ok(s)) => {
+            quickack(s.get_ref().0);
+            Ok(s)
+        }
         _ => Err(Reason::UpstreamTls),
     }
 }
