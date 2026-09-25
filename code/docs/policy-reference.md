@@ -266,6 +266,33 @@ also embed owner and repository IDs; the `repository` claim is recorded too). A 
 check out stops the run. The token is never given to the agent or sent
 anywhere else.
 
+## Signing in (M3)
+
+```toml
+[identity.login]                        # user or org policy only
+issuer = "https://acme.okta.com"        # or https://login.microsoftonline.com/<tenant>/v2.0
+client_id = "0oa1b2c3d4"                # a public client with the device flow enabled
+scopes = ["openid", "profile", "groups", "offline_access"]   # openid is required
+# groups_claim = "groups"               # the ID-token claim listing the user's groups
+# required = true                       # refuse sessions until someone signs in
+# max_age = "12h"                       # sign in again after this (at most 7d)
+```
+
+`broker login` prints a web address and a short code. Open the address,
+check that it shows the same code, and sign in there. The broker checks
+the ID token it receives (issuer, audience, expiry and signature) and from
+then on names every new session, and every row in the audit log, after
+your IdP subject and groups. Policies can test group membership
+(`principal.owner in Broker::Group::"eng"`). `broker login --status` shows
+who is signed in; `broker logout` signs out.
+
+The login lives in the daemon's memory only: no token is written to disk,
+given to an agent, logged, or sent to any upstream or MCP server. The
+daemon renews the ID token with a refresh token when one was issued
+(`offline_access`), and stays running while you are signed in. After a
+restart, sign in again. Without `required`, sessions with no current login
+are named after the local user.
+
 ## Amazon S3 through STS (M3)
 
 ```toml

@@ -9,7 +9,7 @@ status: verified
 confidence: medium
 milestone: phase3
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 related: ["[[Entra Agent ID]]", "[[RFC 8693 Token Exchange]]", "[[MCP Authorization Spec]]", "[[Just-in-Time Credential Minting]]", "[[M3 CI Identity and MCP]]", "[[MVP Plan]]", "[[Agent Identity Brokers]]", "[[Control Plane and Policy Bundles]]", "[[Open Questions and Unverified Claims]]"]
 ---
 
@@ -92,3 +92,7 @@ In the phased plan, M3 delivers OIDC device login to Okta/Entra dev tenants; pha
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-25: step 1 of the integration (OIDC device login, identity only) is built generically ([[ADR-034 Device Login as Built]]); the Okta tenant run and ID-JAG are not.

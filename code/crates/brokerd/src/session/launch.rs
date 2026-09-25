@@ -155,11 +155,13 @@ impl Daemon {
 
         // Start the data plane before the agent, so its first request has a
         // listener (I2); then launch, which verifies the layers from inside.
+        let groups = identity.as_ref().map(|i| i.groups.clone()).unwrap_or_default();
         let stats = Arc::new(Stats::default());
         let egress_mode = egress.mode().as_str();
         let ctx = Arc::new(PipelineCtx {
             session: id.clone(),
             enduser: enduser.clone(),
+            groups: groups.clone(),
             agent: params.argv[0].clone(),
             sandbox: self.backend.name().to_string(),
             policy: Arc::new(egress),
@@ -211,6 +213,7 @@ impl Daemon {
             ev = ev.detail("shadow", serde_json::json!({ "candidate": sha, "error": r.as_ref().err() }));
         }
         ev.enduser = Some(enduser.clone());
+        ev.enduser_groups = groups.clone();
         ev.agent = Some(params.argv[0].clone());
         ev.agent_sha256 = agent_sha;
         ev.sandbox = Some(self.backend.name().to_string());
@@ -246,6 +249,7 @@ impl Daemon {
             .session(id)
             .detail("layers", serde_json::to_value(&handle.verified).unwrap_or_default());
         ready.enduser = Some(enduser.clone());
+        ready.enduser_groups = groups.clone();
         ready.agent = Some(params.argv[0].clone());
         ready.sandbox = Some(self.backend.name().to_string());
         if self.recorder.append(&ready).is_err() {
@@ -283,6 +287,7 @@ impl Daemon {
             backend_name: self.backend.name().to_string(),
             agent: params.argv[0].clone(),
             enduser,
+            groups,
         })
     }
 }

@@ -73,6 +73,29 @@ pub struct Identity {
     pub subject: String,
     /// All claims (for attribution; never forwarded).
     pub claims: Map<String, Value>,
+    /// Groups, when the daemon was told which claim carries them
+    /// (`broker login`); empty otherwise.
+    pub groups: Vec<String>,
+}
+
+impl Identity {
+    /// The string members of claim `name` (at most 200, each 1-256 bytes;
+    /// anything else is ignored).
+    pub fn groups_from(&self, name: &str) -> Vec<String> {
+        let mut g: Vec<String> = match self.claims.get(name) {
+            Some(Value::Array(a)) => a
+                .iter()
+                .filter_map(|v| v.as_str())
+                .filter(|s| !s.is_empty() && s.len() <= 256 && !s.chars().any(char::is_control))
+                .take(200)
+                .map(str::to_string)
+                .collect(),
+            _ => vec![],
+        };
+        g.sort();
+        g.dedup();
+        g
+    }
 }
 
 /// The issuer a token claims, before verification (to pick its key set).
@@ -109,7 +132,7 @@ pub fn verify(token: &str, trusted: &[IssuerConfig], jwks: &Jwks, now: i64) -> R
     }
     let subject = j.claims.get("sub").and_then(|s| s.as_str()).filter(|s| !s.is_empty() && s.len() <= 512);
     let subject = subject.ok_or(OidcError::Subject)?.to_string();
-    Ok(Identity { issuer: iss, subject, claims: j.claims })
+    Ok(Identity { issuer: iss, subject, claims: j.claims, groups: vec![] })
 }
 
 #[cfg(test)]

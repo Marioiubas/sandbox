@@ -41,6 +41,8 @@ pub struct Daemon {
     hash_cache: Mutex<HashMap<(PathBuf, u64, i64, u64), String>>,
     /// Identity token issuers' key sets (M3 CI identity).
     pub jwks: crate::identity::JwksCache,
+    /// `broker login` state (identity and refresh token, memory only).
+    pub logins: crate::login::Logins,
 }
 
 impl Daemon {
@@ -60,6 +62,7 @@ impl Daemon {
             sessions: Mutex::new(HashMap::new()),
             hash_cache: Mutex::new(HashMap::new()),
             jwks: Default::default(),
+            logins: Default::default(),
         }
     }
 
@@ -94,6 +97,7 @@ pub struct Running {
     backend_name: String,
     agent: String,
     enduser: String,
+    groups: Vec<String>,
 }
 
 impl Daemon {
@@ -158,15 +162,15 @@ impl Daemon {
 
         // Identity: a verified token names the session; an unverifiable one
         // refuses it (never a silent fall-back to the local user).
+        // Otherwise a `broker login` names it (refused when policy requires
+        // a login and none is held).
+        let user_policy = load_user_policy(&self.dirs)?;
+        let roots = crate::identity::roots(&self.dirs, &user_policy)?;
         let identity = match params.identity_token.as_ref().filter(|t| !t.0.is_empty()) {
-            None => None,
+            None => crate::login::session_identity(self, &user_policy, &roots)
+                .await
+                .map_err(|e| format!("identity: {e}"))?,
             Some(t) => {
-                let user_policy = load_user_policy(&self.dirs)?;
-                let mut roots = Vec::new();
-                for r in &user_policy.tls.extra_roots {
-                    let p = if r.starts_with('/') { PathBuf::from(r) } else { self.dirs.config_dir.join(r) };
-                    roots.extend(tls::trust_bundle::load_pem_certs(&p)?);
-                }
                 let id = crate::identity::verify(&self.jwks, &self.dirs, &user_policy, &roots, &t.0)
                     .await
                     .map_err(|e| format!("identity token rejected: {e}"))?;

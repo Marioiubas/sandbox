@@ -285,6 +285,7 @@ dependencies = [
  "rustls-pki-types",
  "serde_json",
  "tempfile",
+ "time",
  "tls",
  "tokio",
 ]
@@ -326,6 +327,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "toml",
+ "zeroize",
 ]
 
 [[package]]
@@ -951,6 +953,7 @@ dependencies = [
  "rustls-pki-types",
  "serde_json",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]

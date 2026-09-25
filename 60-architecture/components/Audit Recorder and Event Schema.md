@@ -219,3 +219,4 @@ Exports feed [[Control Plane and Policy Bundles]]; traces feed [[Policy Learning
 - 2026-09-25 (M3): `enduser` is the verified identity token's `sub` for CI sessions; `session.start` carries `identity` (issuer, subject, claims); the token is never logged ([[ADR-031 CI Identity as Built]]).
 - 2026-09-25 (M3): reasons `s3_route_unknown` and `s3_prefix_not_allowed`; allow rows for S3 carry `credential_kind: aws_sts` with `credential_origin` `mint` then `reuse` ([[ADR-032 AWS STS and S3 Adapter as Built]]).
 - 2026-09-25 (M3): reason `public_sink_after_untrusted_input` ([[ADR-033 Public-Sink Rule as Built]]).
+- 2026-09-25 (M3): `enduser_groups` on every row of a `broker login` session (omitted when empty, so older rows hash as before); OCSF `actor.user.groups` ([[ADR-034 Device Login as Built]]).

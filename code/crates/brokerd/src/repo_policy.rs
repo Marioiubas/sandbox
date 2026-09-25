@@ -100,7 +100,7 @@ pub fn parse_toml(text: &str) -> anyhow::Result<PolicyFile> {
     if !p.tls.extra_roots.is_empty() {
         anyhow::bail!("[tls] is not allowed in repository policy (it would confer authority; I4)");
     }
-    if !p.identity.oidc.is_empty() {
+    if p.identity != Default::default() {
         anyhow::bail!("[identity] is not allowed in repository policy: it decides who a session is (I4)");
     }
     if p.trifecta != Default::default() {
@@ -177,6 +177,10 @@ mod tests {
             "version = 1\n[issuers.github_app.x]\napp_id = \"1\"\ninstallation_id = \"2\"\nprivate_key = \"env:K\"\n",
             "version = 1\n[tls]\nextra_roots = [\"/tmp/evil.pem\"]\n",
             "version = 1\n[filesystem]\nwrite = [\"~/\"]\n",
+            "version = 1\n[identity.login]\nissuer = \"https://idp.example\"\nclient_id = \"x\"\n",
+            "version = 1\n[[identity.oidc]]\nissuer = \"https://idp.example\"\naudience = \"x\"\n",
+            "version = 1\n[issuers.aws_sts.x]\nrole_arn = \"arn:aws:iam::1:role/r\"\nregion = \"us-east-1\"\naccess_key_id = \"env:A\"\nsecret_access_key = \"env:B\"\n",
+            "version = 1\n[trifecta]\ndeny_public_sinks_after_untrusted_input = true\n",
         ] {
             assert!(parse_toml(bad).is_err(), "{bad}");
         }

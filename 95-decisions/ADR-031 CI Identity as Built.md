@@ -65,4 +65,4 @@ Upholds I1 (no identity token or job secret in the agent tree), I5 (binaries and
 ## Implementation notes
 
 - 2026-09-25: on this repository's runners the `sub` claim embeds immutable owner and repository IDs (`repo:<owner>@<id>/<repo>@<id>:ref:refs/heads/main`), so policies and checks that need the repository should use the `repository` claim, which `session.start` records, rather than parse the subject. The CI check was changed accordingly.
-
+- 2026-09-25: `IdentitySection` and `OidcIssuerSpec` moved to `code/crates/policy/src/config/identity.rs` (500-line rule; same public paths); `[identity.login]` joined them ([[ADR-034 Device Login as Built]]).

@@ -218,3 +218,15 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **D7:** `m3_identity::d7_the_identity_token_never_reaches_an_upstream` checks the upstream side directly.
 - **Found (CI):** attribution works on the runner; the check failed because this repository's OIDC subject embeds owner and repository IDs (`repo:<owner>@<id>/<repo>@<id>:ref:…`), so it now checks the `repository` and `run_id` claims. The Ubuntu 22.04 curl (7.81) signs the cross-check request differently from curl 8 and the AWS vectors; the curl cross-check now needs curl 8.
 - **ADRs:** [[ADR-033 Public-Sink Rule as Built]].
+
+### 2026-09-25: M3, `broker login`
+
+- **Milestone:** [[M3 CI Identity and MCP]] (in progress).
+- **Built:** `[identity.login]` (user or org policy); `grant::device` (RFC 8628 messages); `brokerd::login` (discovery on the issuer's host, device authorization, polling with `slow_down`, ID-token verification, groups, refresh with rotation, memory-only state, `required`); `broker login`, `broker login --status`, `broker logout`; groups as Cedar `Group` parents and `enduser_groups` on every audit row and in OCSF.
+- **Verified:** RFC 8628's parameters and error handling from the RFC text (2026-09-25).
+- **Found:** repository policy rejected `[identity]` only when it listed OIDC issuers; any `[identity]` is now rejected. The build directory filled the disk again (link failure); it was cleaned and builds now always use reduced debug info.
+- **Tests:** `m3_login::*` (stand-in IdP: device flow, subject and groups on every row, refresh with rotation, no token in the agent environment or audit log, logout, `required`, denied sign-in), `grant::device::tests::*` (including property tests), `cedar::tests::idp_groups_are_cedar_groups`, `config::tests::login_settings_are_validated`, `repo_policy::tests::authority_keys_are_rejected`; fuzz target `device_flow` (8.7 M runs locally).
+- **Moved:** the `[identity]` types and validation from `code/crates/policy/src/config.rs` to `code/crates/policy/src/config/identity.rs` (500-line rule; same public paths).
+- **ADRs:** [[ADR-034 Device Login as Built]].
+- **Next step:** M3 acceptance now waits only on outside accounts (Okta/Entra tenants for D2, an AWS account for D6 on real S3, a GitHub token for D3 on the real MCP server).
+

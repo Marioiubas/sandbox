@@ -140,6 +140,7 @@ pub fn to_ocsf(s: &StoredEvent) -> Option<Value> {
             "session": e.session.as_ref().map(|x| x.to_string()),
             "request_id": e.request_id.as_ref().map(|x| x.to_string()),
             "enduser": e.enduser,
+            "enduser_groups": e.enduser_groups,
             "agent": e.agent,
             "mode": format!("{:?}", d.mode).to_lowercase(),
             "policy_ids": d.policy_ids,
@@ -171,7 +172,9 @@ pub fn to_ocsf(s: &StoredEvent) -> Option<Value> {
             "service": { "name": "git" },
             "request": { "uid": e.request_id.as_ref().map(|x| x.to_string()) },
         });
-        v["actor"] = json!({ "user": { "name": e.enduser.clone().unwrap_or_default() }, "app_name": e.agent });
+        let groups: Vec<Value> = e.enduser_groups.iter().map(|g| json!({ "name": g })).collect();
+        v["actor"] =
+            json!({ "user": { "name": e.enduser.clone().unwrap_or_default(), "groups": groups }, "app_name": e.agent });
         v["src_endpoint"] = json!({ "name": e.sandbox.clone().unwrap_or_default() });
     }
     Some(v)

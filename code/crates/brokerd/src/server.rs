@@ -68,7 +68,11 @@ impl Server {
                     });
                 }
                 _ = tick.tick() => {
-                    if self.daemon.active_sessions() > 0 || self.open_conns.load(Ordering::SeqCst) > 0 {
+                    // A held login keeps the daemon (and so the login) alive.
+                    if self.daemon.active_sessions() > 0
+                        || self.open_conns.load(Ordering::SeqCst) > 0
+                        || self.daemon.logins.held()
+                    {
                         last_busy = Instant::now();
                     } else if last_busy.elapsed() >= self.idle_exit {
                         break;
@@ -157,6 +161,19 @@ impl Server {
                 },
                 Err(e) => proto::err(id, codes::INVALID_PARAMS, e, None),
             },
+            "login.start" => match crate::login::start(d).await {
+                Ok(v) => proto::ok(id, v),
+                Err(e) => proto::err(id, codes::INVALID_PARAMS, e, None),
+            },
+            "login.wait" => {
+                let lid = req.params.get("login_id").and_then(Value::as_str).unwrap_or_default();
+                match crate::login::wait(d, lid).await {
+                    Ok(v) => proto::ok(id, v),
+                    Err(e) => proto::err(id, codes::INVALID_PARAMS, e, None),
+                }
+            }
+            "login.status" => proto::ok(id, crate::login::status(d)),
+            "login.logout" => proto::ok(id, json!({ "signed_out": crate::login::logout(d) })),
             other => proto::err(id, codes::METHOD_NOT_FOUND, format!("unknown method {other}"), None),
         }
     }

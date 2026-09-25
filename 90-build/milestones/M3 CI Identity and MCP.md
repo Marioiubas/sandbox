@@ -57,8 +57,8 @@ The motivating incidents: a public issue drove an agent to read private repos wi
 
 **Identity**
 
-- [ ] `crates/broker-cli/src/cmd/login.rs`: OIDC device-code login to Okta and Entra; cache tokens in `brokerd` memory and keychain; never forward the user's IdP token as-is to an upstream or MCP server ([[CLAUDE]] section 3).
-- [ ] Audit: populate `enduser.id` (IdP subject) and groups on every event ([[Audit Recorder and Event Schema]]). — partly: CI sessions carry the token subject on every row and its claims on `session.start`; Okta/Entra groups wait for device login.
+- [x] `crates/broker-cli/src/cmd/login.rs`: OIDC device-code login to Okta and Entra; cache tokens in `brokerd` memory and keychain; never forward the user's IdP token as-is to an upstream or MCP server ([[CLAUDE]] section 3). (built with `brokerd::login` and `grant::device`; memory only, no keychain: [[ADR-034 Device Login as Built]])
+- [x] Audit: populate `enduser.id` (IdP subject) and groups on every event ([[Audit Recorder and Event Schema]]). — CI sessions carry the token subject; `broker login` sessions carry subject and groups (`enduser`, `enduser_groups`) on every row ([[ADR-034 Device Login as Built]]).
 
 **MCP guard (crate `mcpguard`)**
 
@@ -168,3 +168,4 @@ Next milestone: [[M4 Harden and Ship]].
 - 2026-09-25: the org public-sink option built ([[ADR-033 Public-Sink Rule as Built]]): `m3_github::with_the_org_option_the_public_pr_after_a_public_issue_is_denied`; the gates prove it a narrowing.
 - 2026-09-25: D7 checked directly: `m3_identity::d7_the_identity_token_never_reaches_an_upstream` (a session with a verified identity token calls a granted API; the upstream receives the brokered credential and no part of the token). The D2 (Okta/Entra) runs still need tenants.
 - 2026-09-25: D1 passes in CI on a real GitHub runner (`ci-mode`, run 36080416094): the untrusted-issue fixture found no runner token, job secret or checkout token in the agent tree, and the session was attributed to the run's OIDC identity (the subject embeds owner and repository IDs; [[ADR-031 CI Identity as Built]]). All CI jobs green on macOS 15/26 and Ubuntu 22.04/24.04.
+- 2026-09-25: `broker login` built ([[ADR-034 Device Login as Built]]): D2 passes against a stand-in identity provider (`m3_login::d2_a_device_login_names_the_session_and_every_row_with_subject_and_groups`, `m3_login::a_required_login_refuses_sessions_without_one_and_a_denied_sign_in_signs_in_nobody`); the Okta and Entra runs need the dev tenants.

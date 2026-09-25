@@ -9,7 +9,7 @@ status: verified
 confidence: high
 milestone: phase3
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 related: ["[[Okta Cross App Access]]", "[[RFC 8693 Token Exchange]]", "[[Just-in-Time Credential Minting]]", "[[M3 CI Identity and MCP]]", "[[Control Plane and Policy Bundles]]", "[[MVP Plan]]", "[[MCP Authorization Spec]]"]
 ---
 
@@ -109,3 +109,7 @@ Because agent identities cannot use `/authorize`, all consent is admin-side, whi
 ## Sources
 
 See `sources:` in the frontmatter; every URL is cited inline above.
+
+## Build log
+
+- 2026-09-25: OIDC device login is built generically ([[ADR-034 Device Login as Built]]); the Entra dev-tenant run (and group overage handling) is not.

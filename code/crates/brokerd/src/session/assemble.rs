@@ -85,6 +85,7 @@ impl Daemon {
             task_id: format!("task-{id}"),
             user: identity.map(|i| i.subject.clone()).unwrap_or_else(|| format!("local:{username}")),
             idp: identity.map(|i| i.issuer.clone()).unwrap_or_else(|| "local".into()),
+            groups: identity.map(|i| i.groups.clone()).unwrap_or_default(),
             agent: agent_base,
             agent_sha256: agent_path.as_deref().and_then(|p| self.hash_binary(p)).unwrap_or_default(),
             repo: repo_remote.as_ref().map(|r| format!("{}/{}", r.owner(), r.name())).unwrap_or_default(),

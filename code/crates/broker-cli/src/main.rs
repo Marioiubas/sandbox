@@ -82,6 +82,15 @@ pub enum Command {
         #[command(subcommand)]
         action: McpCmd,
     },
+    /// Sign in to the identity provider in `[identity.login]` (OIDC device
+    /// login); new sessions are attributed to that identity and its groups.
+    Login {
+        /// Show who is signed in instead.
+        #[arg(long)]
+        status: bool,
+    },
+    /// Forget the current login.
+    Logout,
     /// Manage the per-user daemon.
     Daemon {
         #[command(subcommand)]
@@ -266,6 +275,8 @@ fn main() {
         Command::Mcp { action: McpCmd::Connect { name } } => cmd::mcp::connect(&name),
         Command::Mcp { action: McpCmd::Approve { name, sha } } => cmd::mcp::approve(&name, sha),
         Command::Mcp { action: McpCmd::List } => cmd::mcp::list(),
+        Command::Login { status } => cmd::login::login(status),
+        Command::Logout => cmd::login::logout(),
         Command::Daemon { action: DaemonCmd::Status } => cmd::daemon::status(),
         Command::Daemon { action: DaemonCmd::Stop } => cmd::daemon::stop(),
     };

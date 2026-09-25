@@ -61,6 +61,17 @@ async fn load(spec: &OidcIssuerSpec, dirs: &BrokerDirs, roots: &[CertificateDer<
     Jwks::parse(&crate::fetch::get(&url, roots, MAX_DOC).await?).map_err(|e| e.to_string())
 }
 
+/// The extra roots user or org policy trusts for upstream verification
+/// (`[tls] extra_roots`; never added to the host trust store).
+pub fn roots(dirs: &BrokerDirs, user: &PolicyFile) -> Result<Vec<CertificateDer<'static>>, String> {
+    let mut roots = Vec::new();
+    for r in &user.tls.extra_roots {
+        let p = if r.starts_with('/') { std::path::PathBuf::from(r) } else { dirs.config_dir.join(r) };
+        roots.extend(tls::trust_bundle::load_pem_certs(&p).map_err(|e| format!("{e:#}"))?);
+    }
+    Ok(roots)
+}
+
 /// Verify `token` for a session.
 pub async fn verify(
     cache: &JwksCache,

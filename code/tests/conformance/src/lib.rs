@@ -192,6 +192,20 @@ impl Harness {
         self.run_argv(None, &["/bin/sh".to_string(), "-c".to_string(), script.to_string()], &[])
     }
 
+    /// Any `broker` subcommand on the host (not in a session).
+    pub fn broker(&self, args: &[&str]) -> ProbeResult {
+        let mut c = Command::new(&self.bins.broker);
+        c.args(args)
+            .current_dir(self.repo.path())
+            .env("BROKER_HOME", self.home.path())
+            .env("BROKER_DAEMON_IDLE_SECS", "3")
+            .stdin(Stdio::null());
+        for (k, v) in &self.daemon_env {
+            c.env(k, v);
+        }
+        ProbeResult::from(c.output().expect("broker"))
+    }
+
     /// `broker why <id>` on the host.
     pub fn why(&self, rid: &str) -> String {
         let out = Command::new(&self.bins.broker)

@@ -4437,5 +4437,28 @@
     "sources": [
       "https://simonwillison.net/2025/Nov/2/new-prompt-injection-papers/"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-034 Device Login as Built.md",
+    "title": "ADR-034 Device Login as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "broker login runs the OIDC device flow (RFC 8628) through brokerd; the verified ID token's subject and groups name every new session and audit row and become Cedar groups; identity and refresh token stay in daemon memory only.",
+    "links_to": [
+      "M3 CI Identity and MCP",
+      "ADR-031 CI Identity as Built",
+      "Okta Cross App Access",
+      "Entra Agent ID",
+      "Broker CLI and Daemon",
+      "Audit Recorder and Event Schema",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-25) from RFC 8628, ADR-031 and the m3_login tests.",
+    "aliases": [
+      "ADR-034"
+    ],
+    "sources": [
+      "https://www.rfc-editor.org/rfc/rfc8628"
+    ]
   }
 ]

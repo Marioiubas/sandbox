@@ -11,6 +11,10 @@ use serde::{Deserialize, Deserializer};
 use std::collections::BTreeMap;
 use std::path::Path;
 
+mod identity;
+
+pub use identity::{IdentitySection, LoginSpec, OidcIssuerSpec};
+
 pub const SUPPORTED_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -212,48 +216,6 @@ pub struct IssuersSection {
 impl IssuersSection {
     pub fn is_empty(&self) -> bool {
         self.github_app.is_empty() && self.aws_sts.is_empty()
-    }
-}
-
-/// Identity sources (user or org scope): OIDC issuers whose identity
-/// tokens (a CI runner's, for example) may attribute a session.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct IdentitySection {
-    #[serde(default)]
-    pub oidc: Vec<OidcIssuerSpec>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct OidcIssuerSpec {
-    /// The exact `iss` value, an `https://` URL.
-    pub issuer: String,
-    /// The `aud` value tokens must carry for this broker.
-    pub audience: String,
-    /// The issuer's key set; default: its OIDC discovery document.
-    pub jwks_url: Option<String>,
-    /// A key set file in the broker config directory (air-gapped setups).
-    pub jwks_file: Option<String>,
-}
-
-impl IdentitySection {
-    pub fn validate(&self) -> anyhow::Result<()> {
-        for o in &self.oidc {
-            if !o.issuer.starts_with("https://") || o.issuer.len() > 512 {
-                anyhow::bail!("identity.oidc issuer {:?} must be an https:// URL", o.issuer);
-            }
-            if o.audience.is_empty() || o.audience.len() > 256 {
-                anyhow::bail!("identity.oidc audience for {} must be 1-256 bytes", o.issuer);
-            }
-            if o.jwks_url.as_ref().is_some_and(|u| !u.starts_with("https://")) {
-                anyhow::bail!("identity.oidc jwks_url for {} must be https://", o.issuer);
-            }
-            if o.jwks_url.is_some() && o.jwks_file.is_some() {
-                anyhow::bail!("identity.oidc for {}: jwks_url and jwks_file are exclusive", o.issuer);
-            }
-        }
-        Ok(())
     }
 }
 

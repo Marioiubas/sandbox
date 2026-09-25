@@ -84,6 +84,7 @@ impl Running {
             .detail("exit_signal", exited.signal.map(i64::from))
             .detail("stats", self.stats.snapshot());
         ev.enduser = Some(self.enduser);
+        ev.enduser_groups = self.groups;
         ev.agent = Some(self.agent);
         ev.sandbox = Some(self.backend_name);
         let _ = self.recorder.append(&ev);

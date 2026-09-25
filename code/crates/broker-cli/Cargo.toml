@@ -30,6 +30,7 @@ launcher.workspace = true
 libc.workspace = true
 policy = { workspace = true, features = ["gates"] }
 serde_json.workspace = true
+time.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]

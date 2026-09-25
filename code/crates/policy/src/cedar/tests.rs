@@ -23,6 +23,7 @@ fn session(mode: Mode) -> SessionInfo {
         task_id: "task-1".into(),
         user: "local:dev".into(),
         idp: "local".into(),
+        groups: vec![],
         agent: "claude".into(),
         agent_sha256: "00".into(),
         repo: "acme/web".into(),
@@ -399,4 +400,25 @@ fn plain_grants_carry_no_l7_authority() {
     p.admit_addrs(&mut w, &["93.184.216.34".parse().unwrap()]).unwrap();
     assert_eq!(p.path_choice(&w), PathChoice::L4);
     assert!(p.engine().base().policies().all(|x| !x.id().to_string().ends_with("#any")));
+}
+
+#[test]
+fn idp_groups_are_cedar_groups() {
+    // A (repository or org) forbid can require membership of an IdP group.
+    let toml = "version = 1\n[[egress]]\nhost = \"api.example.com\"\nmethods = [\"GET\"]\n";
+    let p = crate::config::parse_policy_str(toml).unwrap();
+    // The repository layer is conjoined, so it permits and then narrows.
+    let only_eng = "permit (principal, action, resource);\n\
+                    forbid (principal, action, resource) unless { principal.owner in Broker::Group::\"eng\" };";
+    let decide = |groups: Vec<String>| {
+        let s = SessionInfo { groups, ..session(Mode::Enforce) };
+        let e = EgressPolicy::compile_with([("user", p.egress.as_slice())], &env_with(s.clone()))
+            .unwrap()
+            .with_repo_layer(&[], Some(only_eng), &env_with(s))
+            .unwrap();
+        e.admit_host(&canon_host(b"api.example.com").unwrap(), 443).map(|_| ())
+    };
+    assert_eq!(decide(vec!["eng".into(), "sre".into()]), Ok(()));
+    assert!(decide(vec!["sales".into()]).is_err());
+    assert!(decide(vec![]).is_err());
 }

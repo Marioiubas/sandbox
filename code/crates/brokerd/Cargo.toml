@@ -31,6 +31,7 @@ rustls.workspace = true
 tokio-rustls.workspace = true
 getrandom.workspace = true
 hex.workspace = true
+zeroize.workspace = true
 launcher.workspace = true
 libc.workspace = true
 mcpguard.workspace = true

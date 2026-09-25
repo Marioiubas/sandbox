@@ -3,6 +3,7 @@ pub mod ctl;
 pub mod daemon;
 pub mod doctor;
 pub mod export;
+pub mod login;
 pub mod mcp;
 pub mod policy;
 pub mod run;

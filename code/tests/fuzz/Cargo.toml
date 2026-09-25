@@ -128,3 +128,10 @@ path = "fuzz_targets/s3_route.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "device_flow"
+path = "fuzz_targets/device_flow.rs"
+test = false
+doc = false
+bench = false

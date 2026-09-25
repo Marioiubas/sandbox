@@ -58,6 +58,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-031 CI Identity as Built]] | A CI runner's OIDC token, verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience), names the session and every audit row; it never reaches the agent or an upstream; unverifiable tokens refuse the launch. |
 | [[ADR-032 AWS STS and S3 Adapter as Built]] | S3 grants map each request to s3.get/list/put/delete on a bucket and key prefix or deny it; an `aws_sts` credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker re-signs with SigV4. |
 | [[ADR-033 Public-Sink Rule as Built]] | An opt-in `[trifecta]` switch denies writes to repositories not known to be private, pushes, gists and package publishes once a session has read untrusted input (Willison's [A]+[C]). |
+| [[ADR-034 Device Login as Built]] | `broker login` runs the OIDC device flow through brokerd; the verified ID token's subject and groups name every new session and audit row; identity and refresh token stay in daemon memory. |
 
 ## Where the value is
 
@@ -121,6 +122,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-031 CI Identity as Built]] — A CI runner's OIDC token, verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience), names the session and every audit row; it never reaches the agent or an upstream; unverifiable tokens refuse the launch.
 - [[ADR-032 AWS STS and S3 Adapter as Built]] — S3 grants map each request to s3.get/list/put/delete on a bucket and key prefix or deny it; an `aws_sts` credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker re-signs with SigV4.
 - [[ADR-033 Public-Sink Rule as Built]] — An opt-in `[trifecta]` switch denies writes to repositories not known to be private, pushes, gists and package publishes once a session has read untrusted input (Willison's [A]+[C]).
+- [[ADR-034 Device Login as Built]] — `broker login` runs the OIDC device flow through brokerd; the verified ID token's subject and groups name every new session and audit row; identity and refresh token stay in daemon memory.
 
 ## How this section connects
 

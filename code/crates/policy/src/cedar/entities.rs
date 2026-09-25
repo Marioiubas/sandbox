@@ -18,6 +18,8 @@ pub struct SessionInfo {
     pub user: String,
     /// Who vouches for `user`: `local`, or the token issuer's URL.
     pub idp: String,
+    /// The user's IdP groups (`broker login`); `User in [Group]` in Cedar.
+    pub groups: Vec<String>,
     pub agent: String,
     pub agent_sha256: String,
     /// `owner/name` of the session repository, or empty.
@@ -56,6 +58,7 @@ impl Default for SessionInfo {
             task_id: "task-unset".into(),
             user: "local:unknown".into(),
             idp: "local".into(),
+            groups: vec![],
             agent: "unknown".into(),
             agent_sha256: String::new(),
             repo: String::new(),
@@ -80,8 +83,11 @@ pub fn task_uid(s: &SessionInfo) -> Value {
 
 /// Task, User and Agent entities for the session.
 pub fn principal_entities(s: &SessionInfo) -> Vec<Value> {
-    vec![
-        json!({ "uid": uid("User", &s.user), "attrs": { "idp": s.idp, "subject": s.user }, "parents": [] }),
+    let groups: Vec<Value> = s.groups.iter().map(|g| uid("Group", g)).collect();
+    let mut out: Vec<Value> =
+        s.groups.iter().map(|g| json!({ "uid": uid("Group", g), "attrs": {}, "parents": [] })).collect();
+    out.extend([
+        json!({ "uid": uid("User", &s.user), "attrs": { "idp": s.idp, "subject": s.user }, "parents": groups }),
         json!({ "uid": uid("Agent", &s.agent), "attrs": { "vendor": s.agent, "binary_sha256": s.agent_sha256 }, "parents": [] }),
         json!({
             "uid": task_uid(s),
@@ -94,7 +100,8 @@ pub fn principal_entities(s: &SessionInfo) -> Vec<Value> {
             },
             "parents": []
         }),
-    ]
+    ]);
+    out
 }
 
 /// Proper label-boundary suffixes of a name: `a.b.c` → `b.c`, `c`.

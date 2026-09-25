@@ -55,6 +55,8 @@ impl Stats {
 pub struct PipelineCtx {
     pub session: SessionId,
     pub enduser: String,
+    /// The end user's IdP groups (on every row).
+    pub groups: Vec<String>,
     pub agent: String,
     pub sandbox: String,
     pub policy: Arc<EgressPolicy>,
@@ -97,6 +99,7 @@ impl PipelineCtx {
     pub(crate) fn event(&self, kind: EventKind, rid: &RequestId) -> AuditEvent {
         let mut ev = AuditEvent::new(kind).session(&self.session).request(rid);
         ev.enduser = Some(self.enduser.clone());
+        ev.enduser_groups = self.groups.clone();
         ev.agent = Some(self.agent.clone());
         ev.sandbox = Some(self.sandbox.clone());
         ev

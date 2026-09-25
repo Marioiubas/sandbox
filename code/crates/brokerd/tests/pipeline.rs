@@ -85,6 +85,7 @@ fn fx(
     let ctx = Arc::new(PipelineCtx {
         session: SessionId::new(),
         enduser: "local:test".into(),
+        groups: vec![],
         agent: "probe".into(),
         sandbox: "test".into(),
         policy: Arc::new(policy),

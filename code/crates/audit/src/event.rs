@@ -105,9 +105,12 @@ pub struct AuditEvent {
     pub session: Option<SessionId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<RequestId>,
-    /// IdP subject; the local OS user until M3 identity lands.
+    /// IdP subject (`broker login`, a CI identity token), else `local:<user>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enduser: Option<String>,
+    /// The end user's IdP groups, when the login carries them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub enduser_groups: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,6 +141,7 @@ impl AuditEvent {
             session: None,
             request_id: None,
             enduser: None,
+            enduser_groups: Vec::new(),
             agent: None,
             agent_sha256: None,
             task: None,
