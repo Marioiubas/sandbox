@@ -162,7 +162,7 @@ jobs:
       - name: Measure
         run: |
           cargo test --release -p conformance --test m4_latency --locked -- --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/latency.txt"
-          { echo '```'; grep -E "added p50|broker run --|audit append" "$RUNNER_TEMP/latency.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '```'; grep -E "added p50|broker run --|audit append|^phases" "$RUNNER_TEMP/latency.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   fuzz-smoke:
     # 60 s per target on every push; the >=24 h runs are an M4 exit item.

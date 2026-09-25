@@ -80,6 +80,42 @@ fn e3_latency_report() {
             }));
         }
     }
+    // Where a new connection's time goes (curl's phases): TCP connect (to
+    // the proxy, or the server when direct), CONNECT + TLS handshake done,
+    // first response byte.
+    let phases = |out: &str| -> Vec<[f64; 3]> {
+        out.lines()
+            .filter_map(|l| {
+                let v: Vec<f64> = l.split_whitespace().filter_map(|x| x.parse::<f64>().ok()).collect();
+                (v.len() == 3).then(|| [v[0] * 1000.0, v[1] * 1000.0, v[2] * 1000.0])
+            })
+            .collect()
+    };
+    let fmt = "-H 'Connection: close' -o /dev/null -w '%{time_connect} %{time_appconnect} %{time_starttransfer}\\n'";
+    for s in [&splice, &term] {
+        let urls: String = (0..10).map(|i| format!(" '{}?p={i}'", url(s))).collect();
+        let b = h.sh(&format!("for u in{urls}; do curl -sS {fmt} \"$u\"; done"));
+        let extra = format!("--cacert {} --resolve {}:{}:127.0.0.1", ca.pem_path.display(), s.host, s.port);
+        let d = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(format!("for u in{urls}; do curl -sS {extra} {fmt} \"$u\"; done"))
+            .output()
+            .unwrap();
+        for (who, v) in [("broker", phases(&b.stdout)), ("direct", phases(&String::from_utf8_lossy(&d.stdout)))] {
+            let col = |i: usize| v.iter().map(|x| x[i]).collect::<Vec<f64>>();
+            if v.is_empty() {
+                continue;
+            }
+            println!(
+                "phases {} {:<6} connect p50 {:>6.2} ms  tls-done p50 {:>6.2} ms  first-byte p50 {:>6.2} ms",
+                s.host,
+                who,
+                pct(&col(0), 0.5),
+                pct(&col(1), 0.5),
+                pct(&col(2), 0.5)
+            );
+        }
+    }
     let mut starts = Vec::new();
     for _ in 0..20 {
         let t = Instant::now();
