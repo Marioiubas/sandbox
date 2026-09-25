@@ -238,3 +238,4 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Checked:** no code comment, CLI string, doc or Action text claims the broker stops prompt injection.
 - **Category 11 (covert channels) measured:** `m4_covert`: query strings ≈81 KB/s, path choice ≈93 bytes/s, request timing ≈0.9 bytes/s on an allowed host (macOS, debug build); reported in `docs/threat-model.md`, never claimed zero.
 - **`broker doctor`:** per-grant TLS mode, identity and protocol matrix; **found** that it compiled the user policy without its issuers, so valid GitHub App or AWS credentials showed as INVALID; fixed, with `m4_doctor`.
+- **Docs:** `docs/deployment/laptop.md` and `docs/deployment/ci.md`.
