@@ -272,3 +272,11 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found:** the server's `list_issues` uses GraphQL, which the GitHub adapter refuses (`github_graphql_unsupported`); a utility gap, GraphQL support stays open.
 - **Found (test only):** `broker mcp approve github | head -2` killed the command before it recorded the approval (the approval is written after the full review, by design); the test writes the review to a file, and its checker now counts JSON-RPC error replies as failures.
 - **Remaining for M3:** D2 against Okta/Entra (dev tenants), D6 against real AWS (test account).
+
+### 2026-09-25: GitHub GraphQL mapped; host-wide reads now sensitive
+
+- **Built:** [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]]: a strict GraphQL parser (`code/crates/l7/src/graphql.rs`), JSON-only `POST /graphql`, operation choice by name or uniqueness, five mutations mapped to `pr.create`, `pr.merge` and `issue.comment` on repositories the broker resolves from node IDs with the grant's own credential, `repository(owner:, name:)` reads confined by a schema allowlist, everything else a sensitive host-wide `github.read`. Schema facts checked against GitHub's GraphQL reference (2026-09-25).
+- **Found (security):** host-wide `github.read` (code search, repository lists, notifications) never raised `sensitive_read`, so public issue → code search → public PR passed the Rule-of-Two forbid. Fixed; the test fails under the old rule (`200 200 201`) and passes under the new one (`200 200 403`).
+- **Tests:** 23 new unit and property tests (`l7::graphql`, `l7::github::graphql`, `l7::github::schema`), `m3_graphql` (4 end-to-end tests with node lookups against a fake GitHub), updated `m3_github`; full workspace suite green on macOS (322 tests, SymCC solver required). Fuzz target `graphql`: 3.16 M runs in 3 minutes, no findings; added to the CI smoke and nightly lists.
+- **Open:** whether GraphQL follows transferred issues ([[Open Questions and Unverified Claims]]); the `real-mcp` job now expects `list_issues` to succeed over GraphQL.
+

@@ -73,6 +73,11 @@ pub enum Action {
         bodies: bool,
         method: String,
         path: String,
+        /// GraphQL: the node ID naming the repository (mutations); the
+        /// broker resolves it to `repo` before deciding. Unresolved denies.
+        node: Option<String>,
+        /// GraphQL: the root field this verb came from (audit only).
+        field: Option<String>,
     },
     /// An S3 operation class (`s3.get`, `s3.list`, `s3.put`, `s3.delete`)
     /// on a bucket and key (for listings, the requested prefix); emitted
@@ -93,10 +98,19 @@ impl Action {
             Action::GitPushAdvertise { repo } => {
                 serde_json::json!({ "kind": "git.advertise", "repo": repo.to_string() })
             }
-            Action::GitHub { verb, repo, visibility, .. } => serde_json::json!({
-                "kind": "github", "verb": verb, "repo": repo.as_ref().map(|r| r.to_string()),
-                "visibility": visibility.as_str(),
-            }),
+            Action::GitHub { verb, repo, visibility, node, field, .. } => {
+                let mut v = serde_json::json!({
+                    "kind": "github", "verb": verb, "repo": repo.as_ref().map(|r| r.to_string()),
+                    "visibility": visibility.as_str(),
+                });
+                if let Some(n) = node {
+                    v["node"] = n.clone().into();
+                }
+                if let Some(f) = field {
+                    v["graphql"] = f.clone().into();
+                }
+                v
+            }
             Action::GitPush { repo, refname, force, update } => serde_json::json!({
                 "kind": "git.push", "repo": repo.to_string(), "ref": refname, "force": force, "update": update,
             }),
@@ -121,6 +135,8 @@ impl Action {
                 bodies: false,
                 method: String::new(),
                 path: String::new(),
+                node: None,
+                field: None,
             },
             "git.push" => Action::GitPush {
                 repo: repo()?,

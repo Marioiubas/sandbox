@@ -67,6 +67,9 @@ pub struct L7Ctx {
     pub max_body: usize,
     /// GitHub repository visibility learned this session (repo → visibility).
     pub visibility: std::sync::Mutex<std::collections::HashMap<String, policy::github::Visibility>>,
+    /// GitHub GraphQL node IDs resolved this session (node → type, repo).
+    pub nodes:
+        std::sync::Mutex<std::collections::HashMap<String, (String, policy::RepoId, policy::github::Visibility)>>,
 }
 
 struct Upstream {
@@ -197,6 +200,19 @@ impl Conn {
         if let Err(r) = s3::check_headers(&plan, &parts.headers) {
             return self.deny(&rid, r, vec![], &[format!("http {method} {}", path.path())], None, None);
         }
+        let graphql = matches!(plan, l7::classify::Plan::GitHubGraphql(_, Ok(_)));
+        if graphql && !l7::github::graphql_content_type_ok(&parts.headers) {
+            let ct = parts.headers.get(http::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("");
+            let verb = format!("http {method} {}", path.path());
+            return self.deny(
+                &rid,
+                Reason::GithubGraphqlInvalid,
+                vec![],
+                &[verb],
+                Some(("content_type", ct.into())),
+                None,
+            );
+        }
 
         // 5a. Client credentials: sentinels for this host only (I7).
         let sentinels = &self.l7.creds.sentinels;
@@ -224,12 +240,13 @@ impl Conn {
         // 3. Classify (buffering the body only when the adapter must read it).
         let mut body = Some(body);
         let mut buffered: Option<Bytes> = None;
+        let limit = if graphql { l7::github::graphql::MAX_BODY } else { self.l7.max_body };
         let decoded = if plan.needs_body() {
-            let raw = match collect(body.take().expect("body"), self.l7.max_body).await {
+            let raw = match collect(body.take().expect("body"), limit).await {
                 Ok(b) => b,
                 Err(r) => return self.deny(&rid, r, vec![], &[], None, None),
             };
-            let d = match decode_body(&parts.headers, &raw, self.l7.max_body) {
+            let d = match decode_body(&parts.headers, &raw, limit) {
                 Ok(d) => d,
                 Err(r) => return self.deny(&rid, r, vec![], &[], None, None),
             };
@@ -243,6 +260,12 @@ impl Conn {
             Err(r) => return self.deny(&rid, r, vec![], &[], None, None),
         };
         drop(decoded);
+
+        // 3b. GraphQL node IDs → repositories (unresolved denies).
+        let node_cred = match self.graphql_nodes(&rid, &mut actions).await {
+            Ok(c) => c,
+            Err(denied) => return denied,
+        };
         self.fill_visibility(&mut actions);
         let verbs: Vec<String> = actions.iter().map(|a| a.verb()).collect();
         let actions_json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
@@ -302,6 +325,11 @@ impl Conn {
                 return self.deny(&rid, Reason::AmbiguousCredential, again.policy_ids, &verbs, None, push.as_ref());
             }
             dec = again;
+        }
+        if let Some(c) = node_cred
+            && c != dec.binding.as_ref().map(|b| b.credential().id.clone())
+        {
+            return self.deny(&rid, Reason::AmbiguousCredential, dec.policy_ids, &verbs, None, push.as_ref());
         }
         let actions_json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
         let shadow = self.shadow_note(&actions, true);

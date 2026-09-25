@@ -7,7 +7,7 @@ tags: [sandbox/meta, meta, evidence/unverified]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: "Every gap, source conflict and unverified claim from the report and research notes, each linked to the note that must carry the caveat."
 related: ["[[Landlock]]", "[[Filesystem Control and Rollback]]", "[[Audit Recorder and Event Schema]]", "[[EchoLeak M365 Copilot Exfiltration]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]", "[[Mythos Preview Evaluation Escape]]", "[[Broker Cedar Schema]]", "[[Tech Stack]]", "[[Netguard Ingress]]", "[[Measurement Gaps]]", "[[Macaroons and Biscuit]]", "[[July 2026 Artifactory Egress Incident]]"]
 sources: []
@@ -43,6 +43,7 @@ Source keys: **R** = the report; **N01-N05** = research notes (01 isolation, 02 
 - [ ] ⚙ Terminal-Bench 2.0 task count (~89, unverified) and the "4.0.0" version string on the docs page; how SWE-bench and Terminal-Bench set container networking during rollout needs code inspection. → [[L3 Real-Work Utility]] (N04a Q2)
 - [ ] ⚙ Exact AgentDojo pipeline/defense hook API names not re-verified. → [[L2 Injection Benchmarks]] (N04a Q1)
 - [ ] ⚙ HTTP Garden repository URL and gateway coverage (Squid, Envoy...) not verified. → [[L1 Conformance Suite]] (N04a Q4)
+- [ ] ⚙ GitHub GraphQL: does `Repository.issue(number:)` (or `pullRequest`, `issueOrPullRequest`) return an issue that was transferred to another repository? REST answers with a redirect the broker does not follow; if GraphQL follows the transfer, a confined read of the old number returns the new (possibly private) repository's content under the old repository's label. Verify with two throwaway repositories before relying on confined reads for `sensitive_read`. → [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]], [[GitHub API Adapter]] (2026-09-25, M3 build)
 
 ## Source conflicts
 

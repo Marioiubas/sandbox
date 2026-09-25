@@ -62,7 +62,7 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
 | L7 rules (M1) | terminated hosts: Host = SNI = CONNECT, method/path rules deny by default, git pushes authorized per repository, ref and force | same |
 | Policy engine (M2) | every decision is a Cedar authorization; repository policy is approved by content hash and can only narrow; `broker policy check` runs formal gates on a change (narrowing, org ceiling, credential confinement), as CI does | same |
 | Learning (M2) | record mode and `broker suggest` propose least-privilege policy from observed runs; nothing is applied without a human; shadow mode logs what a candidate would decide | same |
-| GitHub API (M3) | each request is a verb (read, PR, merge, comment, contents) on a repository, or denied; GraphQL is denied; merges need approval | same |
+| GitHub API (M3) | each request is a verb (read, PR, merge, comment, contents) on a repository, or denied; GraphQL maps to the same verbs (five mutations; others denied); host-wide reads count as sensitive; merges need approval | same |
 | Session labels (M3) | reading untrusted input and a sensitive source in one session blocks further writes unless approved (Rule of Two); an optional rule blocks public writes after untrusted input alone | same |
 | MCP servers (M3) | servers are pinned in user or org policy, run in their own sandbox with their own grants, and are revoked when their tool list changes; each tool call is authorized and logged | same |
 | Identity (M3) | a CI runner's identity token or a `broker login` names the session and every audit row (with IdP groups); no identity token reaches the agent or an upstream | same |
@@ -77,6 +77,10 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
   every later write is treated as possibly driven by it; a session that never
   reads anything marked untrusted gets no such protection. Arbitrary web
   pages are not yet counted as untrusted input.
+- **GitHub GraphQL reads are labelled by the repository they name.** If
+  GitHub's GraphQL follows an issue transferred to another repository when
+  asked for its old number (unverified), such a read is labelled by the old
+  repository. Reads that reach beyond one repository count as sensitive.
 - **A login lives in the daemon.** `broker login` keeps the identity and
   refresh token in the daemon's memory; after a restart, sign in again.
 - **Pinned MCP servers are trusted code within their grants.** Pinning

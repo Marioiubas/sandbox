@@ -7,7 +7,7 @@ tags: [sandbox/decisions, moc]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: "The fifteen architecture decision records with the alternatives each rejected, and how to add a new one."
 related: ["[[ADR-001 Value Lives in the Broker]]", "[[ADR-002 OS Process Sandbox by Default with VM Hard Tier]]", "[[ADR-003 Topology-Enforced Egress]]", "[[ADR-004 Selective TLS Termination with Per-Session CA]]", "[[ADR-005 Mint Credentials Per Task]]", "[[ADR-006 Deny Unmatched L7 Requests]]", "[[ADR-007 Cedar with a TOML Front-End]]", "[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[ADR-009 Broker-Only DNS Resolution]]", "[[ADR-010 Session-Level Trifecta Labels in the MVP]]", "[[ADR-011 Verified Policy Learning Loop]]", "[[ADR-012 MCP Servers as Pinned Sandboxed Principals]]", "[[ADR-013 Seatbelt for macOS MVP with VZ Hedge]]", "[[ADR-014 Apache-2.0 Endpoint with Commercial ee]]", "[[ADR-015 Rust for the Endpoint and Custom Proxy]]", "[[MOC Architecture]]", "[[Risk Register]]", "[[CLAUDE]]"]
 sources: []
@@ -59,6 +59,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-032 AWS STS and S3 Adapter as Built]] | S3 grants map each request to s3.get/list/put/delete on a bucket and key prefix or deny it; an `aws_sts` credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker re-signs with SigV4. |
 | [[ADR-033 Public-Sink Rule as Built]] | An opt-in `[trifecta]` switch denies writes to repositories not known to be private, pushes, gists and package publishes once a session has read untrusted input (Willison's [A]+[C]). |
 | [[ADR-034 Device Login as Built]] | `broker login` runs the OIDC device flow through brokerd; the verified ID token's subject and groups name every new session and audit row; identity and refresh token stay in daemon memory. |
+| [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] | GitHub GraphQL is parsed strictly and mapped to the REST verbs (mutation node IDs resolved by the broker; reads confined to one repository or counted as host-wide); host-wide `github.read` raises `sensitive_read` unless known public. |
 
 ## Where the value is
 
@@ -123,6 +124,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-032 AWS STS and S3 Adapter as Built]] — S3 grants map each request to s3.get/list/put/delete on a bucket and key prefix or deny it; an `aws_sts` credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker re-signs with SigV4.
 - [[ADR-033 Public-Sink Rule as Built]] — An opt-in `[trifecta]` switch denies writes to repositories not known to be private, pushes, gists and package publishes once a session has read untrusted input (Willison's [A]+[C]).
 - [[ADR-034 Device Login as Built]] — `broker login` runs the OIDC device flow through brokerd; the verified ID token's subject and groups name every new session and audit row; identity and refresh token stay in daemon memory.
+- [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] — GitHub GraphQL is parsed strictly and mapped to the REST verbs (mutation node IDs resolved by the broker; reads confined to one repository or counted as host-wide); host-wide `github.read` raises `sensitive_read` unless known public.
 
 ## How this section connects
 

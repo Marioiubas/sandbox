@@ -4,7 +4,8 @@
 //! - [`git`]: smart-HTTP routes, pkt-line, receive-pack and pack parsing,
 //!   per-ref `git.push` actions with force derived from the pushed pack.
 //! - [`filter`]: the streaming response filter (I1).
-//! - [`github`], [`s3`]: REST adapters that map requests to verbs.
+//! - [`github`], [`s3`]: REST adapters that map requests to verbs; GitHub
+//!   GraphQL through the strict [`graphql`] parser.
 //! - [`classify`]: request → policy actions for the protocols a host has.
 //!
 //! brokerd wires these into the TLS/HTTP pipeline; every parser here has
@@ -14,5 +15,6 @@ pub mod classify;
 pub mod filter;
 pub mod git;
 pub mod github;
+pub mod graphql;
 pub mod head;
 pub mod s3;

@@ -82,6 +82,7 @@ pub fn setup(
         channel_sentinel,
         max_body: MAX_INSPECTED_BODY,
         visibility: Default::default(),
+        nodes: Default::default(),
     });
     Ok(L7Setup { ctx, env, bundle, credentials })
 }

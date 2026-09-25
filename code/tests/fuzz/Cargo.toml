@@ -142,3 +142,9 @@ path = "fuzz_targets/path_differential.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "graphql"
+path = "fuzz_targets/graphql.rs"
+test = false
+doc = false

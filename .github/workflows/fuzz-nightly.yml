@@ -33,7 +33,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [canon, connect, socks5, sni, jsonrpc, pktline, pack, delta, filter, remote_url, foreign,
-                 github_route, mcp_frame, jwt, s3_route, device_flow, path_differential]
+                 github_route, mcp_frame, jwt, s3_route, device_flow, path_differential, graphql]
     steps:
       - uses: actions/checkout@v4
       - name: Install nightly and cargo-fuzz

@@ -196,14 +196,38 @@ private_key = "keychain:broker-github-app-acme"
 Every request on a GitHub grant is a verb, or it is denied: `repo.read`
 (`GET` under `/repos/{owner}/{repo}`), `pr.create`, `pr.merge`,
 `issue.comment`, `contents.write`, `gist.create`, and `github.read` (other
-reads). Unmapped routes are denied, and so is GraphQL for now. `pr.merge`
-also needs approval. The broker looks up each repository's visibility
-itself and tracks two session labels: reading a private repository sets
-**sensitive read**, and reading issue or PR text (or search results) from a
-public repository sets **untrusted input**. Once both are set, every write
-in that session is denied (the Rule of Two). A new `broker run` starts a
-new session. Mark a credential `risk = "high"` to treat any use of it as a
-sensitive read.
+reads). Unmapped routes are denied. `pr.merge` also needs approval. The
+broker looks up each repository's visibility itself and tracks two session
+labels: reading a private repository sets **sensitive read**, and reading
+issue or PR text (or search results) from a public repository sets
+**untrusted input**. Host-wide reads (`github.read`: search, your
+repository list, notifications) count as sensitive reads too, because they
+can return private repositories; only API metadata, rate limits and
+license, gitignore and code-of-conduct templates do not. Once both labels
+are set, every write in that session is denied (the Rule of Two). A new
+`broker run` starts a new session. Mark a credential `risk = "high"` to
+treat any use of it as a sensitive read.
+
+**GraphQL** (`POST /graphql`, which `gh` and the GitHub MCP server use)
+maps to the same verbs:
+
+| GraphQL | Verb |
+|---|---|
+| `repository(owner:, name:) { … }` | `repo.read` on that repository |
+| `viewer`, `user`, `repositoryOwner`, `rateLimit`, introspection | `github.read` (public data) |
+| `createPullRequest` | `pr.create` |
+| `mergePullRequest`, `enablePullRequestAutoMerge`, `enqueuePullRequest` | `pr.merge` |
+| `addComment` | `issue.comment` |
+| any other query field (`search`, `node`, `organization`, …) | `github.read` (sensitive) |
+
+Any other mutation is denied. Mutations name repositories by node ID; the
+broker asks GitHub which repository an ID belongs to (with the grant's own
+credential) before deciding. A read that reaches beyond one repository
+(an owner's other repositories, a pull request's fork, timelines,
+projects) also counts as a sensitive host-wide `github.read`. The request
+must be JSON (`Content-Type: application/json`) without a query string;
+documents the broker cannot read strictly are denied
+(`github_graphql_invalid`).
 
 For a stricter rule, your own or your org's policy can deny writes to
 public destinations as soon as a session has read untrusted input, even if

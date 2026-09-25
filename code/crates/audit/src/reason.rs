@@ -96,8 +96,14 @@ pub enum Reason {
     GitForcePush,
     /// GitHub API: a route the adapter does not map to a verb.
     GithubRouteUnknown,
-    /// GitHub API: GraphQL is not mapped yet (mutations could hide).
+    /// GitHub API: a GraphQL request other than a POST of a JSON body.
     GithubGraphqlUnsupported,
+    /// GitHub API: a GraphQL request the adapter cannot read strictly
+    /// (bad JSON or document, ambiguous operation, subscription, a node ID
+    /// or repository it cannot determine).
+    GithubGraphqlInvalid,
+    /// GitHub API: a GraphQL mutation the adapter does not map to a verb.
+    GithubGraphqlMutationUnknown,
     /// GitHub API: the verb is not granted.
     GithubVerbNotAllowed,
     /// GitHub API: the verb is granted, but not on this repository.
@@ -222,6 +228,8 @@ impl Reason {
         Reason::GitForcePush,
         Reason::GithubRouteUnknown,
         Reason::GithubGraphqlUnsupported,
+        Reason::GithubGraphqlInvalid,
+        Reason::GithubGraphqlMutationUnknown,
         Reason::GithubVerbNotAllowed,
         Reason::GithubRepoNotAllowed,
         Reason::S3RouteUnknown,
@@ -303,6 +311,8 @@ impl Reason {
             Reason::GitForcePush => "git_force_push",
             Reason::GithubRouteUnknown => "github_route_unknown",
             Reason::GithubGraphqlUnsupported => "github_graphql_unsupported",
+            Reason::GithubGraphqlInvalid => "github_graphql_invalid",
+            Reason::GithubGraphqlMutationUnknown => "github_graphql_mutation_unknown",
             Reason::GithubVerbNotAllowed => "github_verb_not_allowed",
             Reason::GithubRepoNotAllowed => "github_repo_not_allowed",
             Reason::S3RouteUnknown => "s3_route_unknown",
@@ -368,6 +378,8 @@ impl Reason {
             | GitForcePush
             | GithubRouteUnknown
             | GithubGraphqlUnsupported
+            | GithubGraphqlInvalid
+            | GithubGraphqlMutationUnknown
             | GithubVerbNotAllowed
             | GithubRepoNotAllowed
             | S3RouteUnknown

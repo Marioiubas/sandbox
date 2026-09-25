@@ -53,7 +53,13 @@ impl Reason {
                 "the update is a force push (non-fast-forward, delete or undeterminable) and force is not granted"
             }
             GithubRouteUnknown => "the GitHub API route is not mapped to a verb, so it is denied",
-            GithubGraphqlUnsupported => "GitHub GraphQL requests are denied until they can be mapped to verbs",
+            GithubGraphqlUnsupported => {
+                "GitHub GraphQL is accepted only as a POST of a JSON body to the GraphQL endpoint"
+            }
+            GithubGraphqlInvalid => {
+                "the GitHub GraphQL request could not be read strictly (JSON, document, operation choice, or a repository or node ID it names)"
+            }
+            GithubGraphqlMutationUnknown => "the GitHub GraphQL mutation is not one the broker maps to a verb",
             GithubVerbNotAllowed => "the GitHub verb (for example pr.merge) is not granted",
             GithubRepoNotAllowed => "the GitHub verb is granted, but not on this repository",
             S3RouteUnknown => {

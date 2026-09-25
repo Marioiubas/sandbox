@@ -6,6 +6,7 @@ use crate::git;
 use audit::Reason;
 use netguard::CanonicalHost;
 use policy::Action;
+use policy::github::Visibility;
 use policy::l7::Protocol;
 use std::collections::BTreeSet;
 
@@ -18,13 +19,16 @@ pub enum Plan {
     Git(git::Route),
     /// A GitHub API request: its Http action and its verb (or why none).
     GitHub(Action, Result<crate::github::Route, Reason>),
+    /// A GitHub GraphQL request: its Http action and the repository host
+    /// (or why it is refused before the body is read).
+    GitHubGraphql(Action, Result<netguard::CanonicalHost, Reason>),
     /// An S3 request: its Http action and its operation (or why none).
     S3(Action, Result<crate::s3::Route, Reason>),
 }
 
 impl Plan {
     pub fn needs_body(&self) -> bool {
-        matches!(self, Plan::Git(r) if r.needs_body())
+        matches!(self, Plan::Git(r) if r.needs_body()) || matches!(self, Plan::GitHubGraphql(_, Ok(_)))
     }
 }
 
@@ -45,6 +49,9 @@ pub fn plan(
     }
     let http = Action::Http { method: method.to_string(), path: path.to_string() };
     if protocols.contains(&Protocol::GitHub) {
+        if let Some(g) = crate::github::graphql_endpoint(host, method, path, query) {
+            return Plan::GitHubGraphql(http, g);
+        }
         return Plan::GitHub(http, crate::github::route(host, method, path));
     }
     if protocols.contains(&Protocol::S3) {
@@ -67,12 +74,34 @@ pub fn actions(plan: &Plan, body: Option<&[u8]>) -> Result<(Vec<Action>, Option<
             let verb = Action::GitHub {
                 verb: r.verb.to_string(),
                 repo: r.repo.clone(),
-                visibility: policy::github::Visibility::Unknown,
+                visibility: if r.public { Visibility::Public } else { Visibility::Unknown },
                 bodies: r.bodies,
                 method,
                 path,
+                node: None,
+                field: None,
             };
             Ok((vec![http.clone(), verb], None))
+        }
+        Plan::GitHubGraphql(_, Err(reason)) => Err(*reason),
+        Plan::GitHubGraphql(http, Ok(authority)) => {
+            let path = match http {
+                Action::Http { path, .. } => path.clone(),
+                _ => return Err(Reason::L7NoRuleMatched),
+            };
+            let mapped = crate::github::graphql::map(authority, body.ok_or(Reason::GithubGraphqlInvalid)?)?;
+            let mut out = vec![http.clone()];
+            out.extend(mapped.into_iter().map(|m| Action::GitHub {
+                verb: m.verb.to_string(),
+                repo: m.repo,
+                visibility: if m.public { Visibility::Public } else { Visibility::Unknown },
+                bodies: m.bodies,
+                method: "POST".into(),
+                path: path.clone(),
+                node: m.node,
+                field: Some(m.field),
+            }));
+            Ok((out, None))
         }
         Plan::S3(_, Err(reason)) => Err(*reason),
         Plan::S3(http, Ok(r)) => {

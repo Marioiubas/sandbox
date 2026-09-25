@@ -32,6 +32,8 @@ fn gh(verb: &str, repo: Option<&str>, vis: Visibility, method: &str) -> Action {
         bodies: false,
         method: method.into(),
         path: "/x".into(),
+        node: None,
+        field: None,
     }
 }
 

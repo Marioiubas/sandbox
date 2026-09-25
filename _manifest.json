@@ -4460,5 +4460,34 @@
     "sources": [
       "https://www.rfc-editor.org/rfc/rfc8628"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built.md",
+    "title": "ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "GitHub GraphQL is parsed strictly and mapped to the REST verbs: mutation node IDs resolved by the broker with the bound credential, reads confined to one repository by a schema allowlist or counted as host-wide; host-wide github.read raises sensitive_read unless known public.",
+    "links_to": [
+      "GitHub API Adapter",
+      "ADR-029 GitHub API Adapter and Session Labels as Built",
+      "Trifecta Session Labels",
+      "GitHub MCP Toxic Flow",
+      "M3 CI Identity and MCP",
+      "MCP Guard",
+      "Conformance Probe Matrix",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-25) from GitHub's GraphQL reference and guide, the real github-mcp-server D3 run, and the m3_graphql tests.",
+    "aliases": [
+      "ADR-035"
+    ],
+    "sources": [
+      "https://docs.github.com/en/graphql/guides/forming-calls-with-graphql",
+      "https://docs.github.com/en/graphql/reference/pulls",
+      "https://docs.github.com/en/graphql/reference/issues",
+      "https://docs.github.com/en/graphql/reference/repos",
+      "https://docs.github.com/en/graphql/reference/users",
+      "https://spec.graphql.org/"
+    ]
   }
 ]

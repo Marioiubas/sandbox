@@ -7,9 +7,9 @@ tags: [sandbox/decisions, decision, topic/policy, topic/credentials, invariant/i
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: "GitHub REST requests map to verbs from a verified route table (GraphQL denied until parsed); `protocol = \"github\"` grants `verbs` on `repos` (default: the task repository); the broker looks up repository visibility itself with the bound credential and re-decides; session labels are raise-only, raised from API facts before forwarding, logged per decision and as `session.label` events; credential risk comes from config."
-related: ["[[GitHub API Adapter]]", "[[Trifecta Session Labels]]", "[[ADR-010 Session-Level Trifecta Labels in the MVP]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[GitHub MCP Toxic Flow]]", "[[M3 CI Identity and MCP]]", "[[MOC Decisions]]"]
+related: ["[[GitHub API Adapter]]", "[[Trifecta Session Labels]]", "[[ADR-010 Session-Level Trifecta Labels in the MVP]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[GitHub MCP Toxic Flow]]", "[[M3 CI Identity and MCP]]", "[[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]]", "[[MOC Decisions]]"]
 sources: ["https://docs.github.com/en/rest/pulls/pulls", "https://docs.github.com/en/rest/issues/comments", "https://docs.github.com/en/rest/repos/contents", "https://docs.github.com/en/rest/repos/repos", "https://docs.github.com/en/rest/gists/gists", "https://docs.github.com/en/rest/issues/issues"]
 superseded_by: 
 ---
@@ -20,7 +20,7 @@ superseded_by:
 
 ## Status
 
-built (2026-09-24, M3 step 1).
+built (2026-09-24, M3 step 1). Amended by [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]]: GraphQL is now mapped (item 1), and host-wide `github.read` raises `sensitive_read` unless known public (item 4).
 
 ## Context
 

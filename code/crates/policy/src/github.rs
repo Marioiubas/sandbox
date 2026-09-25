@@ -171,8 +171,11 @@ impl Labels {
     }
 }
 
-/// The labels a GitHub action raises, given the repository's visibility:
-/// a read of a non-public repository is a sensitive read; issue, PR and
+/// The labels a GitHub action raises, given the visibility of what it
+/// reads: a read of anything not known to be public is a sensitive read
+/// (for `github.read`, host-wide reads such as search, `/user/repos` or
+/// GraphQL `viewer { repositories }` can return private repositories, so
+/// only routes known to return public data carry `Public`); issue, PR and
 /// comment bodies (or search results) from a non-private source are
 /// untrusted input; any write verb is an external effect.
 pub fn labels_for(verb: &str, visibility: Visibility, bodies: bool) -> Vec<Label> {
@@ -181,7 +184,7 @@ pub fn labels_for(verb: &str, visibility: Visibility, bodies: bool) -> Vec<Label
         out.push(Label::ExternalEffect);
         return out;
     }
-    if verb == "repo.read" && visibility != Visibility::Public {
+    if visibility != Visibility::Public {
         out.push(Label::SensitiveRead);
     }
     if bodies && visibility != Visibility::Private {
@@ -224,7 +227,9 @@ mod tests {
         assert_eq!(labels_for("repo.read", Unknown, true), vec![Label::SensitiveRead, Label::UntrustedInput]);
         assert_eq!(labels_for("repo.read", Public, true), vec![Label::UntrustedInput]);
         assert!(labels_for("repo.read", Public, false).is_empty());
-        assert_eq!(labels_for("github.read", Unknown, true), vec![Label::UntrustedInput]);
+        assert_eq!(labels_for("github.read", Unknown, true), vec![Label::SensitiveRead, Label::UntrustedInput]);
+        assert_eq!(labels_for("github.read", Unknown, false), vec![Label::SensitiveRead]);
+        assert!(labels_for("github.read", Public, false).is_empty());
         assert_eq!(labels_for("pr.create", Public, false), vec![Label::ExternalEffect]);
     }
 }

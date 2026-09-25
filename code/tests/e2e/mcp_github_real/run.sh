@@ -60,7 +60,8 @@ t, err = text(5)
 print("private README:", t[:120] if err else "ok"); err and fail.append("get_file_contents: " + t[:200])
 print("merge_pull_request:", reason(6)); reason(6) != "mcp_tool_not_allowed" and fail.append("merge was not refused")
 t, err = text(7)
-print("list_issues (GraphQL):", ("error, as expected: " + t[:120]) if err else "ok")
+print("list_issues (GraphQL):", t[:120] if err else "ok", "(issue #1 listed)" if "broker MCP test" in t else "")
+(err or "broker MCP test" not in t) and fail.append("list_issues: " + t[:200])
 rows = [json.loads(l)["event"] for l in open("audit.jsonl")]
 hosts = {}
 for e in rows:
@@ -74,8 +75,15 @@ for (h, d), n in sorted(hosts.items()):
     print(f"  {d:5} {n:3}  {h}")
 allowed_elsewhere = [h for (h, d) in hosts if d == "allow" and h not in ("api.github.com",) and not h.endswith(".mcp.broker.internal")]
 allowed_elsewhere and fail.append(f"allowed connections outside api.github.com: {allowed_elsewhere}")
-graphql = [e for e in rows if e.get("reason") == "github_graphql_unsupported"]
-print("GraphQL refused and logged:", len(graphql))
+# GraphQL verbs (ADR-035): each names its root field; none refused.
+gql = [a for e in rows if e.get("kind") == "request.decision"
+       for a in ((e.get("detail") or {}).get("actions") or []) if a.get("graphql")]
+for a in gql:
+    print("  graphql", a.get("graphql"), "->", a.get("verb"), a.get("repo") or "", a.get("visibility"))
+gql_denied = [e.get("reason") for e in rows if (e.get("reason") or "").startswith("github_graphql")]
+gql_denied and fail.append(f"GraphQL refused: {gql_denied}")
+any(a.get("verb") == "repo.read" and (a.get("repo") or "").endswith("/sandboxpublictest") for a in gql) \
+    or fail.append("no GraphQL repo.read of sandboxpublictest logged")
 blob = open("audit.jsonl").read() + open("calls.out").read()
 (token in blob) and fail.append("the token appears in replies or the audit log")
 print("token in replies or audit:", token in blob)

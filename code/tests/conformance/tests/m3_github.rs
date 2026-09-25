@@ -149,7 +149,8 @@ fn unmapped_or_ungranted_github_requests_deny_with_their_reason() {
         denies(&evs),
         vec![
             Reason::GithubVerbNotAllowed,
-            Reason::GithubGraphqlUnsupported,
+            // A form-encoded body: GraphQL must be a JSON request (ADR-035).
+            Reason::GithubGraphqlInvalid,
             Reason::GithubRouteUnknown,
             Reason::GithubRepoNotAllowed
         ]
