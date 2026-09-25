@@ -162,3 +162,4 @@ All six layers of the [[Evaluation Harness]]: L1 (hard gate), L2 and L3 (first r
 - 2026-09-25: `broker doctor` shows how TLS is handled per grant and the protocol matrix, and compiles the user policy with its issuers (before, a valid policy with GitHub App or AWS credentials was reported INVALID); test `m4_doctor`.
 - 2026-09-25: deployment guides for laptop (requirements per OS, install outside writable mounts, paths, first run) and CI (the Action, identity trust, credentials from the broker, attribution by claims).
 - 2026-09-25: Linux latency (CI): new connections added ~47-59 ms (threshold 15 ms), warm terminated p50 7.4 ms (threshold 5 ms); the bridge now sets `TCP_NODELAY`; re-measurement pending.
+- 2026-09-25: the bridge `TCP_NODELAY` change did not fix Linux latency; the per-row synchronous audit commit is the next suspect (append latency now measured in the harness).

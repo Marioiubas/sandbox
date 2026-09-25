@@ -86,7 +86,35 @@ fn e3_latency_report() {
         assert_eq!(h.run_argv(None, &["/usr/bin/true".into()], &[]).code, 0);
         starts.push(t.elapsed().as_secs_f64() * 1000.0);
     }
+    // The audit append (write-ahead, durable before forwarding, I9) on the
+    // disk the daemon uses: sequential, then from 8 threads at once.
+    let adir = tempfile::Builder::new().prefix("bkaud.").tempdir_in("/tmp").unwrap();
+    let rec = std::sync::Arc::new(audit::SqliteRecorder::open(&adir.path().join("audit.db")).unwrap());
+    let one = |rec: &audit::SqliteRecorder| {
+        let t = Instant::now();
+        audit::Recorder::append(rec, &audit::AuditEvent::new(audit::EventKind::RequestDecision)).unwrap();
+        t.elapsed().as_secs_f64() * 1000.0
+    };
+    let seq: Vec<f64> = (0..100).map(|_| one(&rec)).collect();
+    let par: Vec<f64> = (0..CLIENTS)
+        .map(|_| {
+            let r = rec.clone();
+            std::thread::spawn(move || (0..25).map(|_| one(&r)).collect::<Vec<f64>>())
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .flat_map(|h| h.join().unwrap())
+        .collect();
+    println!(
+        "audit append: sequential p50 {:.2} ms p95 {:.2} ms; {CLIENTS} threads p50 {:.2} ms p95 {:.2} ms",
+        pct(&seq, 0.5),
+        pct(&seq, 0.95),
+        pct(&par, 0.5),
+        pct(&par, 0.95)
+    );
     let report = json!({
+        "audit_append_ms": { "sequential": { "p50": pct(&seq, 0.5), "p95": pct(&seq, 0.95) },
+                             "concurrent": { "p50": pct(&par, 0.5), "p95": pct(&par, 0.95) } },
         "os": std::env::consts::OS, "arch": std::env::consts::ARCH, "clients": CLIENTS,
         "paths": rows,
         "broker_run_true_ms": { "p50": pct(&starts, 0.5), "p95": pct(&starts, 0.95) },

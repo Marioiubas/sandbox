@@ -29,15 +29,16 @@ fn authority(host: &CanonicalHost, port: u16) -> String {
 
 impl RepoId {
     pub fn new(host: &CanonicalHost, port: u16, owner: &str, name: &str) -> Option<RepoId> {
-        let name = name.strip_suffix(".git").unwrap_or(name);
-        if !segment_ok(owner) || !segment_ok(name) {
+        // Lower-case first, so `Web.GIT` and `web` are one repository; one
+        // `.git` suffix is URL syntax, and a name still ending in `.git`
+        // after it is refused (parsing stays idempotent: fuzz target
+        // `remote_url`).
+        let lower = name.to_ascii_lowercase();
+        let name = lower.strip_suffix(".git").unwrap_or(&lower);
+        if !segment_ok(owner) || !segment_ok(name) || name.ends_with(".git") {
             return None;
         }
-        Some(RepoId {
-            authority: authority(host, port),
-            owner: owner.to_ascii_lowercase(),
-            name: name.to_ascii_lowercase(),
-        })
+        Some(RepoId { authority: authority(host, port), owner: owner.to_ascii_lowercase(), name: name.to_string() })
     }
 
     /// Parse `host[:port]/owner/repo` (policy text).
@@ -228,6 +229,24 @@ mod tests {
             "/local/path",
         ] {
             assert!(RepoId::from_remote_url(bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_git_suffix_in_any_case_names_the_same_repository() {
+        // Regression (fuzz target `remote_url`, CI 2026-09-25): `.GIT` survived
+        // the first parse and was stripped by the second.
+        let a = RepoId::from_remote_url("https://github.com/Acme/Web.GIT").unwrap();
+        assert_eq!(a, RepoId::parse("github.com/acme/web").unwrap());
+        assert_eq!(RepoId::parse(&a.to_string()), Some(a));
+        let odd = "fs.lggggggggggggggggggggggggggggggggggggggggggg.gitz";
+        let r =
+            RepoId::from_remote_url(&format!("https://{odd}/6/zs.lggggggggggggggggggggggggggggggggggggggggggg.GIT"));
+        if let Some(r) = r {
+            assert_eq!(RepoId::parse(&r.to_string()), Some(r));
+        }
+        for bad in ["github.com/acme/web.git.git", "github.com/acme/.git", "github.com/acme/x.GIT.git"] {
+            assert_eq!(RepoId::parse(bad), None, "{bad}");
         }
     }
 

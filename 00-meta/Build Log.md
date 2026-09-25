@@ -240,3 +240,5 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **`broker doctor`:** per-grant TLS mode, identity and protocol matrix; **found** that it compiled the user policy without its issuers, so valid GitHub App or AWS credentials showed as INVALID; fixed, with `m4_doctor`.
 - **Docs:** `docs/deployment/laptop.md` and `docs/deployment/ci.md`.
 - **Found (Linux latency):** on the CI runner new connections added ~47-59 ms and warm terminated requests 7.4 ms p50, over the L4 thresholds, while macOS met them. The in-namespace bridge relayed TCP without `TCP_NODELAY`; fixed, re-measurement pending.
+- **Correction:** `TCP_NODELAY` on the bridge did not change the Linux numbers; the latency follows the number of write-ahead audit rows (each a full synchronous SQLite commit, no group commit yet). The harness now measures append latency.
+- **Found (fuzz smoke):** `RepoId` stripped `.git` before lower-casing, so `Web.GIT` and `web` were different repositories depending on which parser saw them; fixed (lower-case first, reject names still ending in `.git`), regression test `repo::tests::a_git_suffix_in_any_case_names_the_same_repository`.
