@@ -93,6 +93,9 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
   sandboxed agent could tamper with other programs' temporary files there.
 - **Tools that ignore proxy variables fail** on macOS: nothing else is
   reachable, which fails closed.
+- **Go programs cannot use HTTPS in a macOS session**: they verify only
+  through the system trust service, which is unreachable in the sandbox, and
+  ignore `SSL_CERT_FILE`. They fail closed; run them on Linux.
 - **Local servers**: the agent cannot open listening sockets that other
   processes connect to, and on Linux with Landlock ABI 4 or newer it can only
   connect to the bridge port, so test suites that start local servers may

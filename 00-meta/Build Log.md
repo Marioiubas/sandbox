@@ -259,3 +259,10 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found:** macOS's keychain credential helper logs `failed to store: -50` inside sessions (blocked by Seatbelt; harmless).
 - **Next:** automate the real-app run in CI (needs the app key as a CI secret); then the AWS test account (M3 D6).
 - **Automated:** the real-GitHub B2/B3 run is now the CI job `real-github` (`code/tests/e2e/github_app_real/`), using the app key from the `BROKER_GH_APP_KEY` Actions secret; one fixed branch `agent/ci` is fast-forwarded per run.
+
+### 2026-09-25: M3 D3 with the real GitHub MCP server (macOS: blocked)
+
+- **Ran:** github-mcp-server v1.12.2 (checksum-verified release) pinned in a test policy with a fine-grained token for the two test repositories; the broker pinned its 42-tool manifest and refused `merge_pull_request`.
+- **Found:** Go programs on macOS (the GitHub MCP server, `gh`, many CLIs) verify TLS only through the system trust service: they ignore `SSL_CERT_FILE` (checked: `gh` outside the sandbox still reaches GitHub with `SSL_CERT_FILE` pointing at an empty file), so they cannot trust the per-session CA; and inside a Seatbelt session `trustd` is unreachable (by design, [[ADR-016 macOS M0 Compatibility Exceptions]]), so their verification fails for every host (`x509: OSStatus -26276`, seen with github-mcp-server 1.12.2). Installing the session CA into a trust store is ruled out by the build contract. On Linux, Go reads `SSL_CERT_FILE` and works.
+- **Next:** run D3 on Linux (the token as a CI secret), and record the macOS limitation (done: deployment guide, threat model, Risk Register R8, Open Questions).
+

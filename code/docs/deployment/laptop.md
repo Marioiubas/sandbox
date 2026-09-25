@@ -71,6 +71,17 @@ Useful commands: `broker audit verify` checks the hash chain,
 session for `broker suggest`, and `broker daemon stop` stops the daemon
 (it also exits on its own when idle and nobody is signed in).
 
+## Known limitation: Go programs on macOS
+
+Programs written in Go (for example `gh` and the GitHub MCP server) verify
+TLS certificates on macOS only through the system's trust service. They
+ignore `SSL_CERT_FILE`, so they cannot trust the broker's per-session
+certificate authority, and inside a session the trust service is not
+reachable at all. Their HTTPS requests fail with `x509: OSStatus -26276`.
+The broker never adds its authority to a system trust store, so there is
+no workaround on macOS today; run such tools under the broker on Linux,
+where Go honours `SSL_CERT_FILE`.
+
 ## What it does not do
 
 The broker limits what an agent can reach and keeps secrets out of it; it
