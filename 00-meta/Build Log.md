@@ -216,4 +216,5 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Also:** the `ci-mode` attribution step prints the subject, issuer and run ID and checks them with `jq` (the D1 fixture passed on CI after the canary fix; the attribution grep did not match, and the step now shows why).
 - **Tests:** `cedar::github_tests::the_org_option_denies_public_sinks_after_untrusted_input`, `gates::tests::the_public_sink_option_is_a_proved_narrowing`, `m3_github::with_the_org_option_the_public_pr_after_a_public_issue_is_denied`.
 - **D7:** `m3_identity::d7_the_identity_token_never_reaches_an_upstream` checks the upstream side directly.
+- **Found (CI):** attribution works on the runner; the check failed because this repository's OIDC subject embeds owner and repository IDs (`repo:<owner>@<id>/<repo>@<id>:ref:…`), so it now checks the `repository` and `run_id` claims. The Ubuntu 22.04 curl (7.81) signs the cross-check request differently from curl 8 and the AWS vectors; the curl cross-check now needs curl 8.
 - **ADRs:** [[ADR-033 Public-Sink Rule as Built]].

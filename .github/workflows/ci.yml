@@ -133,8 +133,12 @@ jobs:
           broker audit query --kind session.start --json > "$RUNNER_TEMP/starts.jsonl"
           # Subject, issuer and run ID only (no token is ever logged).
           jq -c '.event | {enduser, issuer: .detail.identity.issuer, run_id: .detail.identity.claims.run_id}' "$RUNNER_TEMP/starts.jsonl"
-          jq -e --arg sub "repo:${GITHUB_REPOSITORY}:" --arg run "$GITHUB_RUN_ID" \
-            'select((.event.enduser | startswith($sub)) and (.event.detail.identity.claims.run_id == $run))' \
+          # The subject's format varies (it may embed owner and repository
+          # IDs), so the check uses the repository and run ID claims.
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg run "$GITHUB_RUN_ID" \
+            'select((.event.enduser | startswith("repo:"))
+                    and (.event.detail.identity.claims.repository == $repo)
+                    and (.event.detail.identity.claims.run_id == $run))' \
             "$RUNNER_TEMP/starts.jsonl" > /dev/null
 
   fuzz-smoke:

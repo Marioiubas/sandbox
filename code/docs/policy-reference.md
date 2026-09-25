@@ -261,7 +261,8 @@ runner for an OIDC token with this audience and passes it to `broker run`
 outside the agent's environment. The broker checks it against the issuers
 listed here (RS256 signature, exact issuer and audience, not expired). The
 session and every audit row are then attributed to the token's subject,
-for example `repo:acme/web:ref:refs/heads/main`. A token that does not
+for example `repo:acme/web:ref:refs/heads/main` (some repositories' subjects
+also embed owner and repository IDs; the `repository` claim is recorded too). A token that does not
 check out stops the run. The token is never given to the agent or sent
 anywhere else.
 

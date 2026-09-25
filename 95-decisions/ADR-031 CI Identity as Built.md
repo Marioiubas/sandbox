@@ -33,7 +33,7 @@ built (2026-09-25, M3 step 3).
 3. **Transport**: the GitHub Action requests the token for its `audience` and passes it to `broker run` as `BROKER_IDENTITY_TOKEN`; the CLI moves it into `StartParams.identity_token` (a redacting wrapper) and removes it from the environment it forwards. The daemon verifies it before assembling policy. A token that does not verify, or a token with no configured issuer, refuses the launch.
 4. **Attribution**: the session's `User` principal is the token's `sub` with `idp` = the issuer (Cedar can test `principal.owner.idp`); every row's `enduser` is the `sub`; `session.start` records the issuer, subject and claims (repository, ref, workflow, run ID, …). The token itself is not logged.
 5. **The Action** (`code/integrations/github-action/action.yml`): removes the token `actions/checkout` persists in `.git/config`, requests the OIDC token, runs `broker run -- /bin/sh -c <command>`. Broker binaries must be installed outside the workspace (the broker refuses binaries inside a writable mount, I5).
-6. **D1 fixture** (`code/tests/e2e/ci_untrusted_issue/`) runs in CI (`ci-mode` job): an attacker-authored issue asks for the environment, `.git/config` and a job secret; the scripted agent checks runner tokens and the job secret are absent from its environment, the checkout token is gone, and a hex-passed canary is nowhere in the environment, `/proc`, the workspace, home or `/tmp`; then the audit log must name this run's `repo:<owner>/<repo>:…` subject and run ID.
+6. **D1 fixture** (`code/tests/e2e/ci_untrusted_issue/`) runs in CI (`ci-mode` job): an attacker-authored issue asks for the environment, `.git/config` and a job secret; the scripted agent checks runner tokens and the job secret are absent from its environment, the checkout token is gone, and a hex-passed canary is nowhere in the environment, `/proc`, the workspace, home or `/tmp`; then the audit log must attribute the session to a `repo:` subject carrying this repository and run ID in its claims.
 
 ## Alternatives considered
 
@@ -61,3 +61,8 @@ Upholds I1 (no identity token or job secret in the agent tree), I5 (binaries and
 ## Build log
 
 - 2026-09-25: created and built. Code: `code/crates/grant/src/{jwt,oidc}.rs`, `code/crates/brokerd/src/{fetch,identity}.rs`, `code/crates/brokerd/src/session.rs`, `code/crates/brokerd/src/session/assemble.rs`, `code/crates/brokerd/src/proto.rs` (`Redacted`), `code/crates/broker-cli/src/cmd/run.rs`, `code/crates/policy/src/config.rs` (`[identity]`), `code/integrations/github-action/`, `code/tests/e2e/ci_untrusted_issue/`, `.github/workflows/ci.yml` (`ci-mode`). Tests: `grant::jwt::tests::*`, `grant::oidc::tests::a_runner_token_verifies_and_everything_else_is_refused`, `m3_identity::{a_runner_token_attributes_the_session_and_never_reaches_the_agent, a_token_that_does_not_verify_refuses_the_launch}`; fuzz target `jwt` (5.7 M runs locally); the `ci-mode` job for D1 with the real runner token.
+
+## Implementation notes
+
+- 2026-09-25: on this repository's runners the `sub` claim embeds immutable owner and repository IDs (`repo:<owner>@<id>/<repo>@<id>:ref:refs/heads/main`), so policies and checks that need the repository should use the `repository` claim, which `session.start` records, rather than parse the subject. The CI check was changed accordingly.
+
