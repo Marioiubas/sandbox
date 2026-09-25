@@ -49,6 +49,7 @@ fn e3_latency_report() {
     let splice = HttpsServer::start(&ca, "echo-splice.example.com", echo.clone());
     let term = HttpsServer::start(&ca, "echo-l7.example.com", echo.clone());
     let nagle = HttpsServer::start_with(&ca, "echo-nagle.example.com", echo, false);
+    println!("nagle-upstream-port {}", nagle.port);
     let h = Harness::new(&format!(
         "version = 1\n[tls]\nextra_roots = [\"{}\"]\n{}{}{}",
         ca.pem_path.display(),

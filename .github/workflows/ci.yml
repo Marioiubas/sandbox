@@ -161,7 +161,16 @@ jobs:
         run: cargo build --release --workspace --bins --locked
       - name: Measure
         run: |
+          # Diagnostic: loopback capture, to see where a Nagle-on upstream's
+          # first response waits (L4 Product Metrics, known residual).
+          sudo tcpdump -i lo -nn -s 128 -w "$RUNNER_TEMP/lo.pcap" tcp > /dev/null 2>&1 &
+          sleep 1
           cargo test --release -p conformance --test m4_latency --locked -- --ignored --nocapture 2>&1 | tee "$RUNNER_TEMP/latency.txt"
+          sudo pkill tcpdump || true
+          sleep 1
+          port=$(grep -oE "nagle-upstream-port [0-9]+" "$RUNNER_TEMP/latency.txt" | awk '{print $2}')
+          echo "segments to/from the Nagle-on upstream (port $port), first 80:"
+          sudo tcpdump -r "$RUNNER_TEMP/lo.pcap" -nn -tt "tcp port $port" 2>/dev/null | head -80 || true
           { echo '```'; grep -E "added p50|broker run --|audit append|^phases|^stages" "$RUNNER_TEMP/latency.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
   fuzz-smoke:
