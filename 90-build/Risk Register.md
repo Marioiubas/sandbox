@@ -7,7 +7,7 @@ tags: [sandbox/build, risk, topic/build, topic/market, topic/tls, topic/learning
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -90,3 +90,10 @@ Scale: likelihood and impact are High / Medium / Low over the next 12 months.
 - Report: risk table; ECH watch item; "custom proxy repeatedly introduced vulnerabilities".
 - Research note 05 section 5.5 (parser differential ~5.5 months; buyer budget row; per-OS maintenance) and gaps.
 - Scoreboard (24% of CISOs have a separate AI-security budget line).
+
+## Build log
+
+- 2026-09-25 (M4 evidence): **R3 confirmed in our own code.** The category 8 differential test and the `path_differential` fuzz target found three path-rule bypasses in the canonicaliser in one day (`..;/`, overlong UTF-8 dots, a malformed escape that stopped decoding), and fuzz smoke found a repository-identity mismatch (`.GIT`); all fixed with regression tests ([[I6 Single Canonicaliser]], [[Conformance Probe Matrix]]). Likelihood stays High; the differential tests and nightly fuzzing are now the main detectors.
+- 2026-09-25: **R10/L4 friction, new evidence.** Release builds meet every latency threshold on macOS; on the Linux CI runner warm requests and start time meet them but new connections add 40-80 ms (under investigation with per-stage timings, [[L4 Product Metrics]]).
+- 2026-09-25: **R11 update:** AWS STS session policies now narrow S3 credentials to the grant's prefixes ([[ADR-032 AWS STS and S3 Adapter as Built]]); GitHub installation tokens still have no branch scope (the broker's ref rules remain the only branch bound).
+
