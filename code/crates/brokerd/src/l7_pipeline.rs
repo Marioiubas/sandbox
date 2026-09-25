@@ -87,6 +87,8 @@ struct Conn {
     requests: AtomicU64,
     /// Shadow mode: the candidate policy's admission of this connection.
     shadow_adm: Option<Result<Admission, Reason>>,
+    /// Connection-stage timings, reported on the first request's outcome.
+    conn_timing: std::sync::Mutex<Option<serde_json::Value>>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -103,6 +105,7 @@ pub async fn serve<S>(
     dest: Dest,
     conn_rid: RequestId,
     shadow_adm: Option<Result<Admission, Reason>>,
+    conn_timing: serde_json::Value,
 ) -> Outcome
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -139,6 +142,7 @@ where
         upstream: tokio::sync::Mutex::new(Upstream { first: Some(upstream_tcp), sender: None }),
         requests: AtomicU64::new(0),
         shadow_adm,
+        conn_timing: std::sync::Mutex::new(Some(conn_timing)),
     });
     let c2 = conn.clone();
     let svc = hyper::service::service_fn(move |req: Request<Incoming>| {
@@ -179,6 +183,8 @@ impl Conn {
     async fn handle(self: &Arc<Self>, req: Request<Incoming>) -> Response<RespBody> {
         self.requests.fetch_add(1, Ordering::Relaxed);
         let rid = RequestId::new();
+        let t0 = std::time::Instant::now();
+        let us = |t: std::time::Instant| t.elapsed().as_micros() as u64;
         let (mut parts, body) = req.into_parts();
 
         // 2. Host/SNI/CONNECT agreement and the canonical path.
@@ -301,6 +307,7 @@ impl Conn {
         let shadow = self.shadow_note(&actions, true);
         let high_risk = dec.binding.as_ref().is_some_and(|b| b.credential().high_risk);
 
+        let authorized_us = us(t0);
         // Write-ahead audit of the allow (I9): no row, no request.
         let mut ev = self
             .base_event(EventKind::RequestDecision, &rid, &verbs)
@@ -330,6 +337,7 @@ impl Conn {
         if self.ctx.recorder.append(&ev).is_err() {
             return self.deny(&rid, Reason::AuditUnavailable, dec.policy_ids, &verbs, None, push.as_ref());
         }
+        let logged_us = us(t0);
         self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
         self.raise_labels(&rid, &actions, high_risk);
 
@@ -404,7 +412,14 @@ impl Conn {
         };
         let cut = Arc::new(AtomicBool::new(false));
         let redirect = rparts.headers.get(http::header::LOCATION).and_then(|v| v.to_str().ok()).map(str::to_string);
-        let mut out = self.base_event(EventKind::RequestOutcome, &rid, &[]).detail("status", status);
+        let mut timing = serde_json::json!({
+            "authorized_us": authorized_us, "logged_us": logged_us, "response_us": us(t0),
+        });
+        if let Some(c) = self.conn_timing.lock().ok().and_then(|mut c| c.take()) {
+            timing["connection"] = c;
+        }
+        let mut out =
+            self.base_event(EventKind::RequestOutcome, &rid, &[]).detail("status", status).detail("timing", timing);
         if let Some(l) = redirect {
             // Logged, not followed: the client's next request is evaluated afresh.
             out = out.detail("redirect", audit::event::describe_raw_host(l.as_bytes()));

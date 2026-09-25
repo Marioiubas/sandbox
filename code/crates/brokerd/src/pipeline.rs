@@ -165,6 +165,12 @@ where
 {
     ctx.stats.connections.fetch_add(1, Ordering::Relaxed);
     let rid = RequestId::new();
+    // Stage timings for the L4 latency metrics (integer microseconds).
+    let t0 = std::time::Instant::now();
+    let mut timing = serde_json::Map::new();
+    let mut mark = |k: &str| {
+        timing.insert(k.to_string(), (t0.elapsed().as_micros() as u64).into());
+    };
 
     // 1. Handshake.
     let raw = match ingress::handshake(&mut client, &ctx.auth).await {
@@ -237,6 +243,7 @@ where
         return deny_noted(ctx, &mut client, kind, rid, reason, dest, adm.policy_ids.clone(), shadow_note(false)).await;
     }
 
+    mark("admitted_us");
     // 6. Write-ahead audit of the allow.
     let dest = dest_for(kind, Some(&host), None, Some(raw.port), &addrs);
     let mut allow_ev = ctx.event(EventKind::RequestDecision, &rid).allow(adm.policy_ids.clone()).dest(dest.clone());
@@ -251,6 +258,7 @@ where
         return deny(ctx, &mut client, kind, rid, Reason::AuditUnavailable, dest, adm.policy_ids.clone()).await;
     }
 
+    mark("logged_us");
     // 7. Connect to exactly an admitted address (IPv4 first).
     let mut ordered = addrs.clone();
     ordered.sort_by_key(|a| a.is_ipv6());
@@ -273,6 +281,7 @@ where
         return Outcome::Denied { request_id: rid, reason: Reason::MalformedRequest };
     }
 
+    mark("connected_us");
     // 8. The tunnel must start with a ClientHello whose SNI is this host
     //    (domain fronting, non-TLS protocols and SNI-less tunnels denied).
     let mut buf = raw.leftover;
@@ -314,6 +323,8 @@ where
         return Outcome::Denied { request_id: rid, reason };
     }
 
+    mark("hello_us");
+    let timing = serde_json::Value::Object(timing);
     // 9a. Hosts with L7 rules or credentials are terminated, never spliced.
     if ctx.policy.path_choice(&adm) == PathChoice::L7 {
         let Some(l7) = ctx.l7.clone() else {
@@ -340,6 +351,7 @@ where
             dest,
             rid,
             shadow_adm,
+            timing,
         )
         .await;
     }
@@ -353,7 +365,8 @@ where
         .event(EventKind::RequestOutcome, &rid)
         .dest(dest)
         .detail("bytes_out", stats.bytes_out)
-        .detail("bytes_in", stats.bytes_in);
+        .detail("bytes_in", stats.bytes_in)
+        .detail("timing", timing);
     if let Err(e) = ctx.recorder.append(&out) {
         eprintln!("brokerd: audit append failed for outcome {rid}: {e:#}");
     }

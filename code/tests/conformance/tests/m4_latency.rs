@@ -116,6 +116,38 @@ fn e3_latency_report() {
             );
         }
     }
+    // The broker's own stage timings (audit outcome rows, microseconds).
+    let evs = h.events();
+    let stage = |host: &str, first: bool, path: &[&str]| -> Option<f64> {
+        let v: Vec<f64> = evs
+            .iter()
+            .filter(|e| e.kind == audit::EventKind::RequestOutcome)
+            .filter(|e| e.dest.as_ref().and_then(|d| d.host.as_deref()) == Some(host))
+            .filter_map(|e| e.detail.get("timing"))
+            .filter(|t| t.get("connection").is_some() == first || t.get("hello_us").is_some())
+            .filter_map(|t| path.iter().try_fold(t, |acc, k| acc.get(*k)).and_then(|x| x.as_u64()))
+            .map(|x| x as f64 / 1000.0)
+            .collect();
+        (!v.is_empty()).then(|| pct(&v, 0.5))
+    };
+    let show = |label: &str, host: &str, first: bool, keys: &[&[&str]]| {
+        let parts: Vec<String> = keys
+            .iter()
+            .filter_map(|k| stage(host, first, k).map(|v| format!("{} {:.2}", k.last().unwrap(), v)))
+            .collect();
+        println!("stages {label:<22} p50 ms: {}", parts.join("  "));
+    };
+    let conn: &[&[&str]] = &[&["admitted_us"], &["logged_us"], &["connected_us"], &["hello_us"]];
+    show("splice (per connection)", &splice.host, true, conn);
+    let first: &[&[&str]] = &[
+        &["connection", "admitted_us"],
+        &["connection", "hello_us"],
+        &["authorized_us"],
+        &["logged_us"],
+        &["response_us"],
+    ];
+    show("L7 first request", &term.host, true, first);
+    show("L7 later requests", &term.host, false, &[&["authorized_us"], &["logged_us"], &["response_us"]]);
     let mut starts = Vec::new();
     for _ in 0..20 {
         let t = Instant::now();
