@@ -56,6 +56,56 @@ fn hex_val(b: u8) -> Option<u8> {
     }
 }
 
+/// Characters that compatibility normalisation (NFKC) turns into `.`, and
+/// into `/` or `\`: a server that normalises would see a dot segment or a
+/// separator the broker did not.
+const DOT_LIKE: &[char] = &['\u{FF0E}', '\u{FE52}', '\u{2024}'];
+const SLASH_LIKE: &[char] = &['\u{FF0F}', '\u{FF3C}', '\u{2215}', '\u{2216}', '\u{2044}', '\u{FE68}', '\u{29F5}'];
+
+fn pct_decode(s: &str) -> Option<Vec<u8>> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            out.push((hex_val(*b.get(i + 1)?)? << 4) | hex_val(*b.get(i + 2)?)?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    Some(out)
+}
+
+/// A segment must stay a plain segment however many times (up to three) a
+/// server percent-decodes it: no dot segment, also behind `;params` or an
+/// escape (Tomcat's `..;/`), no separator, no look-alike of either, and
+/// valid UTF-8 (no overlong `C0 AE`). Found by the category 8 differential
+/// test (conformance `m4_differential`).
+fn segment_check(seg: &str) -> Result<(), Reject> {
+    let mut cur = seg.to_string();
+    for level in 0..3 {
+        if level > 0 && (cur.contains('/') || cur.contains('\\')) {
+            return Err(Reject::EncodedSeparator);
+        }
+        if cur.chars().any(|c| SLASH_LIKE.contains(&c)) {
+            return Err(Reject::EncodedSeparator);
+        }
+        let mapped: String = cur.chars().map(|c| if DOT_LIKE.contains(&c) { '.' } else { c }).collect();
+        let head = mapped.split([';', '%']).next().unwrap_or("");
+        if head == "." || head == ".." {
+            return Err(Reject::DotSegment);
+        }
+        if !cur.contains('%') {
+            break;
+        }
+        let Some(next) = pct_decode(&cur) else { break };
+        cur = String::from_utf8(next).map_err(|_| Reject::NonCanonicalPath)?;
+    }
+    Ok(())
+}
+
 /// Canonicalise an origin-form request target. Percent-escapes of unreserved
 /// characters are decoded; other escapes are kept in upper case; encoded
 /// `/`, `\`, NUL and `.` are rejected; `.` and `..` segments, empty segments,
@@ -103,9 +153,7 @@ pub fn canon_path(raw: &[u8]) -> Result<CanonicalPath, Reject> {
         i += 1;
     }
     for (idx, seg) in out.split('/').enumerate().skip(1) {
-        if seg == "." || seg == ".." {
-            return Err(Reject::DotSegment);
-        }
+        segment_check(seg)?;
         // An empty segment is only allowed as the trailing slash or the root.
         if seg.is_empty() && idx != out.split('/').count() - 1 {
             return Err(Reject::NonCanonicalPath);

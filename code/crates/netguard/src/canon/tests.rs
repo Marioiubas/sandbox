@@ -166,6 +166,30 @@ fn paths() {
     assert_eq!(p("/a/%2e%2e/b"), Err(Reject::DotSegment));
     assert_eq!(p("/a/../b"), Err(Reject::DotSegment));
     assert_eq!(p("/a/./b"), Err(Reject::DotSegment));
+    // Dot segments behind path parameters or escapes (Tomcat `..;/`; found
+    // by the category 8 differential test).
+    for bad in [
+        "/a/..;/b",
+        "/a/..;x/b",
+        "/a/.;/b",
+        "/a/..%3B/b",
+        "/a/..%253B/b",
+        "/a/.%20/b",
+        "/a/%252e%252e/b",
+        "/a/%EF%BC%8E%EF%BC%8E/b",
+    ] {
+        assert_eq!(p(bad), Err(Reject::DotSegment), "{bad}");
+    }
+    for bad in ["/a/%252F/b", "/a/%255C/b", "/a/x%EF%BC%8Fy", "/a/x%E2%88%95y"] {
+        assert_eq!(p(bad), Err(Reject::EncodedSeparator), "{bad}");
+    }
+    for bad in ["/a/%C0%AE%C0%AE/b", "/a/%25C0%25AE/b", "/a/%FF"] {
+        assert_eq!(p(bad), Err(Reject::NonCanonicalPath), "{bad}");
+    }
+    assert!(p("/a/..%00x").is_err());
+    for ok in ["/a/..b", "/a/...", "/a/x..;y", "/a/.well-known/x", "/a/;/b", "/a/x%20y", "/a/%C3%A9", "/a/100%25"] {
+        assert!(p(ok).is_ok(), "{ok}");
+    }
     assert_eq!(p("/a//b"), Err(Reject::NonCanonicalPath));
     assert_eq!(p("/a\\b"), Err(Reject::ForbiddenByte(b'\\')));
     assert_eq!(p("/a#frag"), Err(Reject::ForbiddenByte(b'#')));

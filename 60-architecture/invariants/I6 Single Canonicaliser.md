@@ -7,7 +7,7 @@ tags: [sandbox/architecture, concept, invariant/i6, topic/egress, topic/dns, con
 status: proposal
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: "One canonicaliser for every hostname and path; match on the canonical name and on the broker-resolved address; reject what cannot be canonicalised."
 related: ["[[Hostname Canonicaliser]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]", "[[sandbox-runtime Empty Allowlist Bypass]]", "[[Broker DNS Resolver]]", "[[L1 Conformance Suite]]", "[[Cedar]]", "[[Risk Register]]", "[[Netguard Ingress]]", "[[Policy Engine and Entity Builder]]", "[[Claude Code Path and Command Injection CVEs]]", "[[Gemini CLI Prefix Allowlist Bypass]]", "[[Cursor DuneSlide Sandbox Escape]]", "[[Conformance Probe Matrix]]", "[[M0 Contained Run]]", "[[ADR-009 Broker-Only DNS Resolution]]"]
 sources: ["https://oddguan.com/blog/second-time-same-sandbox-anthropic-claude-code-network-allowlist-bypass-data-exfiltration/", "https://github.com/advisories/GHSA-9gqj-5w7c-vx47", "https://cymulate.com/blog/cve-2025-547954-54795-claude-inverseprompt/", "https://tracebit.com/blog/code-exec-deception-gemini-ai-cli-hijack", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://arxiv.org/abs/2405.17737"]
@@ -96,3 +96,4 @@ Every allow decision on a destination requires **both** the canonical name and t
 ## Build log
 
 - 2026-09-24: tests: canonicaliser unit and property tests, `bypass_corpus_denied_with_reason_through_every_ingress_mode`, `i6_bypass_corpus_end_to_end`, `connect_and_socks5_agree`, `cat04_ip_literals_and_encodings`, the lint `lint_single_canonicaliser.rs`, and the `canon` fuzz target. Name and resolved address are both matched; SNI is compared as `CanonicalHost`.
+- 2026-09-25 (M4): `canon_path` now checks each segment at up to three percent-decoding levels: no dot segment, also behind `;params` or an escape (Tomcat's `..;/`, `..%3B`, `..%253B`), no encoded separator (`%252F`), no look-alike of a dot or slash (full-width, division slash), and valid UTF-8 (no overlong `C0 AE`). Found by the category 8 differential test (`code/tests/conformance/tests/m4_differential.rs`): `/allowed/..;/secret` and `/allowed/%C0%AE%C0%AE/secret` passed under `paths = ["/allowed/**"]` although Tomcat-style or lenient servers would serve `/secret`. Unit cases in `canon::tests::paths`.

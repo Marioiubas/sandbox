@@ -43,7 +43,7 @@ The hardening emphasis follows the record: the sandbox-runtime NUL-byte parser d
 **Fuzzing and differential testing**
 
 - [ ] Run each `tests/fuzz/fuzz_targets/*` for ≥24 h (continuous nightly jobs accumulate toward this); triage and fix every crash; add each crashing input to the corpus. — started: `.github/workflows/fuzz-nightly.yml` runs all 16 targets for 2 h each per night with the corpus cached between runs and crash inputs uploaded.
-- [ ] HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici ([arXiv 2405.17737](https://arxiv.org/abs/2405.17737)); acceptance is 0 decision-changing discrepancies ([[L1 Conformance Suite]]).
+- [ ] HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici ([arXiv 2405.17737](https://arxiv.org/abs/2405.17737)); acceptance is 0 decision-changing discrepancies ([[L1 Conformance Suite]]). — started: `m4_differential` (broker path decision vs server normalisations) found and closed two canonicaliser bypasses; generated inputs and client-parser comparisons remain.
 - [ ] Complete all 12 categories of the [[Conformance Probe Matrix]], including category 11 (covert channels: bandwidth measured and reported, not claimed zero) and category 12 (boundary escape). — 1-10 automated (M0-M3); 11 measured by `m4_covert` (query strings ≈81 KB/s, path choice ≈93 B/s, timing ≈0.9 B/s on one laptop); 12 not started (needs nested VMs).
 
 **Evaluation (eval/)**
@@ -165,3 +165,4 @@ All six layers of the [[Evaluation Harness]]: L1 (hard gate), L2 and L3 (first r
 - 2026-09-25: the bridge `TCP_NODELAY` change did not fix Linux latency; the per-row synchronous audit commit is the next suspect (append latency now measured in the harness).
 - 2026-09-25: audit appends measure ~0.4 ms on the Linux runner, so they do not explain its new-connection latency; group commit built anyway (the recorder's design); the `latency` job now measures release builds.
 - 2026-09-25: release builds: macOS meets every latency threshold; Linux meets warm and start, but new connections added ~52 ms; the pipeline's upstream socket now sets `TCP_NODELAY`; re-measurement pending.
+- 2026-09-25: category 8 differential test found two canonicaliser bypasses (`..;/`, overlong UTF-8 dots) that allowed paths outside a `paths` rule for lenient servers; fixed in `canon_path` (`canon_path` now checks each segment at up to three percent-decoding levels: no dot segment, also behind `;params` or an escape (Tomcat's `..;/`, `..%3B`, `..%253B`), no encoded separator (`%252F`), no look-alike of a dot or slash (full-width, division slash), and valid UTF-8 (no overlong `C0 AE`)).
