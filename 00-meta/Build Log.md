@@ -237,3 +237,4 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Measured (macOS 26, Apple silicon, debug build):** splice warm added p50 0.05 ms / p95 0.06 ms; splice new added p50 4.0 ms; terminated warm added p50 2.2 ms / p95 4.5 ms; terminated new added p50 7.5 ms / p95 11.6 ms; `broker run -- /usr/bin/true` p50 58.8 ms / p95 61.9 ms.
 - **Checked:** no code comment, CLI string, doc or Action text claims the broker stops prompt injection.
 - **Category 11 (covert channels) measured:** `m4_covert`: query strings ≈81 KB/s, path choice ≈93 bytes/s, request timing ≈0.9 bytes/s on an allowed host (macOS, debug build); reported in `docs/threat-model.md`, never claimed zero.
+- **`broker doctor`:** per-grant TLS mode, identity and protocol matrix; **found** that it compiled the user policy without its issuers, so valid GitHub App or AWS credentials showed as INVALID; fixed, with `m4_doctor`.
