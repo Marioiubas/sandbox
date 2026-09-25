@@ -62,20 +62,25 @@ fn hex_val(b: u8) -> Option<u8> {
 const DOT_LIKE: &[char] = &['\u{FF0E}', '\u{FE52}', '\u{2024}'];
 const SLASH_LIKE: &[char] = &['\u{FF0F}', '\u{FF3C}', '\u{2215}', '\u{2216}', '\u{2044}', '\u{FE68}', '\u{29F5}'];
 
-fn pct_decode(s: &str) -> Option<Vec<u8>> {
+/// Percent-decode as a lenient server does: a `%` without two hex digits
+/// stays literal and decoding continues after it.
+fn pct_decode(s: &str) -> Vec<u8> {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
     while i < b.len() {
-        if b[i] == b'%' {
-            out.push((hex_val(*b.get(i + 1)?)? << 4) | hex_val(*b.get(i + 2)?)?);
-            i += 3;
-        } else {
-            out.push(b[i]);
-            i += 1;
+        match (b[i], b.get(i + 1).copied().and_then(hex_val), b.get(i + 2).copied().and_then(hex_val)) {
+            (b'%', Some(h), Some(l)) => {
+                out.push((h << 4) | l);
+                i += 3;
+            }
+            (c, ..) => {
+                out.push(c);
+                i += 1;
+            }
         }
     }
-    Some(out)
+    out
 }
 
 /// A segment must stay a plain segment however many times (up to three) a
@@ -100,8 +105,7 @@ fn segment_check(seg: &str) -> Result<(), Reject> {
         if !cur.contains('%') {
             break;
         }
-        let Some(next) = pct_decode(&cur) else { break };
-        cur = String::from_utf8(next).map_err(|_| Reject::NonCanonicalPath)?;
+        cur = String::from_utf8(pct_decode(&cur)).map_err(|_| Reject::NonCanonicalPath)?;
     }
     Ok(())
 }

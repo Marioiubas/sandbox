@@ -135,3 +135,10 @@ path = "fuzz_targets/device_flow.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "path_differential"
+path = "fuzz_targets/path_differential.rs"
+test = false
+doc = false
+bench = false

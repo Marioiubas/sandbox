@@ -180,7 +180,7 @@ fn paths() {
     ] {
         assert_eq!(p(bad), Err(Reject::DotSegment), "{bad}");
     }
-    for bad in ["/a/%252F/b", "/a/%255C/b", "/a/x%EF%BC%8Fy", "/a/x%E2%88%95y"] {
+    for bad in ["/a/%252F/b", "/a/%255C/b", "/a/x%EF%BC%8Fy", "/a/x%E2%88%95y", "/a/;;,..%25%255C../;/L;"] {
         assert_eq!(p(bad), Err(Reject::EncodedSeparator), "{bad}");
     }
     for bad in ["/a/%C0%AE%C0%AE/b", "/a/%25C0%25AE/b", "/a/%FF"] {

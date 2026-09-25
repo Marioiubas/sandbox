@@ -175,6 +175,6 @@ jobs:
           cargo +nightly install cargo-fuzz --locked
       - name: Fuzz each parser for 60 s
         run: |
-          for t in canon connect socks5 sni jsonrpc pktline pack delta filter remote_url foreign github_route mcp_frame jwt s3_route device_flow; do
+          for t in canon connect socks5 sni jsonrpc pktline pack delta filter remote_url foreign github_route mcp_frame jwt s3_route device_flow path_differential; do
             cargo +nightly fuzz run --fuzz-dir tests/fuzz "$t" -- -max_total_time=60 -rss_limit_mb=2048
           done
