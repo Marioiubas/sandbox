@@ -4,10 +4,10 @@ aliases: ["M1"]
 type: milestone
 section: build
 tags: [sandbox/build, milestone, milestone/m1, topic/tls, topic/credentials, topic/git, control/cred-out, control/task-tok, control/egress, invariant/i1, invariant/i6, invariant/i7, platform/macos, platform/linux]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -186,3 +186,4 @@ Next milestone: [[M2 Policy Audit and Learn]], which replaces the interim rule t
 - 2026-09-24: decisions: [[ADR-020 Brokered Agent Credentials End the Keychain Exception]], [[ADR-021 L7 Path Choices for M1]]. Fuzz targets `pktline`, `pack`, `delta`, `filter`, `remote_url`, `foreign` ran 60 s each without crashes (0.7-2.9 M executions). CI status recorded in [[Build Log]].
 - 2026-09-24: not `built` yet: B2/B3 against a real GitHub App and the CI run on the four OS cells are the remaining items.
 - 2026-09-24: CI run 36012256447 (commit 4c2a1ef) green on macOS 15, macOS 26, Ubuntu 22.04 and Ubuntu 24.04: all B1-B8 tests pass on both platforms; fuzz smoke over all eleven targets green. Remaining before `built`: B2/B3 against a real throwaway GitHub App.
+- 2026-09-25: **B2 and B3 pass against a real throwaway GitHub App (app 5073081, installation 164792503 on `Marioiubas/sandboxpublictest` and `Marioiubas/sandboxprivatetest` only; key in `~/.config/broker/gh-app.pem`, mode 0600, outside every writable mount), macOS 26, 2026-09-25.** B2: `broker run -- git push -u origin agent/broker-test` from a clone of the public repo pushed the branch (commit `7e7040c`) with an installation token minted for the ref advertisement and reused for the push (same fingerprint); the sandbox held no credential. B3: push to `main` → `git_ref_not_allowed` (req-01M3C6PV2SMN2A2XV0HNZH9GS5); force push → `git_force_push` (`not_provably_fast_forward`, req-01M3C6PW5N31X2DWT0BKN8FCQ1); delete → `git_force_push` (`delete`, req-01M3C6PX5XFB6D70R857ZWGNMQ); push to the private repo → `git_repo_not_allowed` at the advertisement, nothing minted (req-01M3C6PXA8NETJV31X9KCEC3FR); `broker why` names repo, ref and update kind for each; an anonymous `git ls-remote` afterwards shows `main` and `agent/broker-test` unchanged by the denied pushes. Also: the private repo fetched through the broker (the host without credentials cannot). Seen along the way: git's `-u` cannot write `.git/config` (read-only by I5, as intended), and macOS's keychain credential helper logs `failed to store: -50` inside the sandbox (blocked, harmless). The real-app run is manual; automating it in CI needs the app key as a CI secret. With the CI matrix already green (B1-B8), M1 is `built`.

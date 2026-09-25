@@ -251,3 +251,11 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Reverted:** `TCP_QUICKACK` on upstream sockets did not remove the ~40 ms first-request delay against a Nagle-on upstream on Linux; the residual is documented and measured, the cause still unidentified.
 - **Fixed (latency):** a loopback capture on the CI runner showed a Nagle-on upstream holding its first response behind its TLS session tickets until the broker's 40 ms delayed ACK; upstream TLS sockets now re-arm `TCP_QUICKACK` after every write (Linux); confirmed: warm terminated added p50 3.1 ms; new terminated 6.7 ms (8 clients) / 3.2 ms (1 client); new spliced 3.6 / 1.9 ms; first request to a Nagle-on upstream answered in 1.4 ms inside the broker (was 42 ms). The capture diagnostic was removed from CI afterwards.
 - **Closed:** the trust-bundle load cost is not broker overhead (the system bundle an OpenSSL client loads without the broker is about as large); no latency follow-ups remain open.
+
+### 2026-09-25: M1 B2/B3 against a real GitHub App; M1 built
+
+- **Milestone:** [[M1 Secrets Outside]] → `built`.
+- **Ran:** with a real throwaway GitHub App (app 5073081, installation 164792503 on `Marioiubas/sandboxpublictest` and `Marioiubas/sandboxprivatetest` only; key in `~/.config/broker/gh-app.pem`, mode 0600, outside every writable mount), macOS 26, 2026-09-25: an agent-branch push succeeded with a minted, repository-limited token (the sandbox held none); pushes to `main`, force, delete and to another repository were refused before reaching GitHub, each explained by `broker why`; GitHub was unchanged afterwards (anonymous `ls-remote`); the private repository fetched only through the broker.
+- **Found:** macOS's keychain credential helper logs `failed to store: -50` inside sessions (blocked by Seatbelt; harmless).
+- **Next:** automate the real-app run in CI (needs the app key as a CI secret); then the AWS test account (M3 D6).
+

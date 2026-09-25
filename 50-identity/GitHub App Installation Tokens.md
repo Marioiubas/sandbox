@@ -9,7 +9,7 @@ status: verified
 confidence: high
 milestone: M1
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-25
 related: ["[[Just-in-Time Credential Minting]]", "[[Credential Injector and Issuers]]", "[[Git Smart-HTTP Adapter]]", "[[GitHub API Adapter]]", "[[M1 Secrets Outside]]", "[[GitHub MCP Toxic Flow]]", "[[ADR-005 Mint Credentials Per Task]]", "[[Policy Miner Safeguards]]", "[[Open Questions and Unverified Claims]]", "[[Core Trait Contracts]]", "[[Tech Stack]]", "[[I1 No Secrets in the Sandbox]]"]
 ---
 
@@ -115,3 +115,4 @@ See `sources:` in the frontmatter; every URL is cited inline above.
 ## Build log
 
 - 2026-09-24: the issuer always sends both `repositories` and `permissions` and rejects responses whose permissions exceed the request (except the implicit `metadata: read`), whose `repository_selection` is `all`, or that list an unrequested repository (`responses_beyond_the_request_are_refused`). Branch scope is still enforced only by the [[Git Smart-HTTP Adapter]].
+- 2026-09-25: minted for real (app 5073081): repository-limited installation tokens with `contents:write`, minted per push advertisement and reused within the session scope; see [[M1 Secrets Outside]].
