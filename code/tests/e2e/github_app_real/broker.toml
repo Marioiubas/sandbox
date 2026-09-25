@@ -1,0 +1,17 @@
+version = 1
+
+# M1 B2/B3 in CI: a real throwaway GitHub App (app 5073081, installed only on
+# Marioiubas/sandboxpublictest and Marioiubas/sandboxprivatetest). The key is
+# the BROKER_GH_APP_KEY Actions secret, written to the broker config
+# directory (mode 0600), outside every writable mount.
+[[egress]]
+host = "github.com"
+id = "git"
+protocol = "git"
+allow = { fetch = ["${repo_remote}"], push = { repo = "${repo_remote}", refs = ["agent/*"] } }
+credential = { kind = "github_app", issuer = "test", permissions = { contents = "write" }, repos = ["${repo_remote}"], ttl = "30m" }
+
+[issuers.github_app.test]
+app_id = "5073081"
+installation_id = "164792503"
+private_key = "file:gh-app.pem"

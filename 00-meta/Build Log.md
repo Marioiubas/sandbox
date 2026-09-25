@@ -258,4 +258,4 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Ran:** with a real throwaway GitHub App (app 5073081, installation 164792503 on `Marioiubas/sandboxpublictest` and `Marioiubas/sandboxprivatetest` only; key in `~/.config/broker/gh-app.pem`, mode 0600, outside every writable mount), macOS 26, 2026-09-25: an agent-branch push succeeded with a minted, repository-limited token (the sandbox held none); pushes to `main`, force, delete and to another repository were refused before reaching GitHub, each explained by `broker why`; GitHub was unchanged afterwards (anonymous `ls-remote`); the private repository fetched only through the broker.
 - **Found:** macOS's keychain credential helper logs `failed to store: -50` inside sessions (blocked by Seatbelt; harmless).
 - **Next:** automate the real-app run in CI (needs the app key as a CI secret); then the AWS test account (M3 D6).
-
+- **Automated:** the real-GitHub B2/B3 run is now the CI job `real-github` (`code/tests/e2e/github_app_real/`), using the app key from the `BROKER_GH_APP_KEY` Actions secret; one fixed branch `agent/ci` is fast-forwarded per run.

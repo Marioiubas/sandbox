@@ -141,6 +141,49 @@ jobs:
                     and (.event.detail.identity.claims.run_id == $run))' \
             "$RUNNER_TEMP/starts.jsonl" > /dev/null
 
+  real-github:
+    # M1 B2/B3 against a real throwaway GitHub App installed only on two test
+    # repositories. Pushes to main of this repository only: pull requests
+    # (and forks) have no access to the key, and the job skips without it.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: real-github
+      cancel-in-progress: false
+    env:
+      HAS_KEY: ${{ secrets.BROKER_GH_APP_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+      - name: Install bubblewrap
+        if: env.HAS_KEY == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          gate=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$gate" ] && [ "$(cat "$gate")" = "1" ]; then
+            sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Build
+        if: env.HAS_KEY == 'true'
+        run: cargo build --workspace --bins --locked
+      - name: Install the broker and its policy outside the workspace
+        if: env.HAS_KEY == 'true'
+        env:
+          KEY: ${{ secrets.BROKER_GH_APP_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin" "$RUNNER_TEMP/broker/config"
+          cp target/debug/broker target/debug/brokerd target/debug/broker-sandbox-shim "$RUNNER_TEMP/bin/"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          echo "BROKER_HOME=$RUNNER_TEMP/broker" >> "$GITHUB_ENV"
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/broker/config/gh-app.pem"
+          cp tests/e2e/github_app_real/broker.toml "$RUNNER_TEMP/broker/config/broker.toml"
+      - name: Pushes through the broker (M1 B2/B3)
+        if: env.HAS_KEY == 'true'
+        run: sh tests/e2e/github_app_real/run.sh Marioiubas/sandboxpublictest Marioiubas/sandboxprivatetest agent/ci "$RUNNER_TEMP/work"
+
   latency:
     # M4 E3: measured and reported (step summary), not gated; thresholds in
     # the L4 Product Metrics note. Release build (what users run), loopback
