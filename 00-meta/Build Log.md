@@ -192,7 +192,7 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 
 - **Milestone:** [[M3 CI Identity and MCP]] (in progress).
 - **Built:** the `grant` crate (strict JWS parsing, RS256 verification, OIDC identity checks); `[[identity.oidc]]` issuers in user/org policy; `brokerd` verifies a runner token before assembling a session (keys via discovery, `jwks_url` or `jwks_file`; public addresses only; cached, refetched once on key rotation) and attributes the session and every row to its subject; the GitHub Action (`code/integrations/github-action`) and the D1 untrusted-issue fixture, run by a new `ci-mode` CI job with the real runner token.
-- **Found:** running the fixture locally from the repository root was refused because the broker binaries sat inside the agent's writable working tree (I5, correct); the CI job and the action README install the binaries outside the workspace.
+- **Found:** running the fixture locally from the repository root was refused because the broker binaries sat inside the agent's writable working tree (I5, correct); the CI job and the action README install the binaries outside the workspace. The first `ci-mode` run failed because the job canary was written inline in `ci.yml`, which the agent can read in its checkout (the scan was right); the canary is now random per run and never in the repository.
 - **Tests:** `grant` unit and property tests, `m3_identity` (attribution, token never in the agent, refusal on audience, expiry, signature, malformed token and unconfigured issuer), fuzz target `jwt` (5.7 M runs locally).
 - **Moved:** the launch step from `crates/brokerd/src/session.rs` to `crates/brokerd/src/session/launch.rs` (500-line rule; no behaviour change).
 - **ADRs:** [[ADR-031 CI Identity as Built]].

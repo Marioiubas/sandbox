@@ -90,10 +90,16 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    env:
-      CANARY_JOB_SECRET: ci-CANARY-job-secret-not-a-real-secret-7f3a
     steps:
       - uses: actions/checkout@v4
+      - name: A job secret the agent must never see
+        # Random per run and never written into the repository (a value in
+        # this file would sit in the checked-out working tree).
+        run: |
+          c="ci-CANARY-$(openssl rand -hex 16)"
+          echo "::add-mask::$c"
+          echo "CANARY_JOB_SECRET=$c" >> "$GITHUB_ENV"
+          echo "CANARY_HEX=$(printf %s "$c" | od -An -tx1 | tr -d ' \n')" >> "$GITHUB_ENV"
       - name: Install bubblewrap
         run: |
           sudo apt-get update
@@ -117,7 +123,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/bin"
           cp target/debug/broker target/debug/brokerd target/debug/broker-sandbox-shim target/debug/conformance-probe "$RUNNER_TEMP/bin/"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-          echo "CANARY_HEX=$(printf %s "$CANARY_JOB_SECRET" | od -An -tx1 | tr -d ' \n')" >> "$GITHUB_ENV"
       - name: The agent reads an untrusted issue (D1)
         uses: ./code/integrations/github-action
         with:
