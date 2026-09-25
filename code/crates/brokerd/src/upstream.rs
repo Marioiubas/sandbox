@@ -34,14 +34,93 @@ pub async fn connect_addrs(addrs: &[IpAddr], port: u16) -> Option<TcpStream> {
     None
 }
 
+/// An upstream TCP stream that, on Linux, re-arms `TCP_QUICKACK` after every
+/// write. Once the broker has sent (its TLS handshake finish, a request),
+/// Linux delays ACKs expecting a reply; an upstream that leaves Nagle on
+/// (Java servers by default) then holds its response behind its TLS session
+/// tickets until that delayed ACK: 40 ms on a fresh connection (seen in a
+/// loopback capture on the CI runner). Quick-ACK mode ends when the socket
+/// sends, so it is set again after each write. Best effort.
+pub struct QuickAck(pub TcpStream);
+
+fn rearm_quickack(s: &TcpStream) {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        let one: libc::c_int = 1;
+        // SAFETY: a valid, open socket fd and a correctly sized c_int value.
+        let _ = unsafe {
+            libc::setsockopt(
+                s.as_raw_fd(),
+                libc::IPPROTO_TCP,
+                libc::TCP_QUICKACK,
+                (&one as *const libc::c_int).cast(),
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            )
+        };
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = s;
+}
+
+impl tokio::io::AsyncRead for QuickAck {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.0).poll_read(cx, buf)
+    }
+}
+
+impl tokio::io::AsyncWrite for QuickAck {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let r = std::pin::Pin::new(&mut self.0).poll_write(cx, buf);
+        if let std::task::Poll::Ready(Ok(_)) = r {
+            rearm_quickack(&self.0);
+        }
+        r
+    }
+    fn poll_write_vectored(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let r = std::pin::Pin::new(&mut self.0).poll_write_vectored(cx, bufs);
+        if let std::task::Poll::Ready(Ok(_)) = r {
+            rearm_quickack(&self.0);
+        }
+        r
+    }
+    fn is_write_vectored(&self) -> bool {
+        self.0.is_write_vectored()
+    }
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.0).poll_flush(cx)
+    }
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.0).poll_shutdown(cx)
+    }
+}
+
 /// TLS toward the upstream, verified for exactly the canonical host.
 pub async fn tls_connect(
     cfg: &Arc<ClientConfig>,
     host: &CanonicalHost,
     tcp: TcpStream,
-) -> Result<TlsStream<TcpStream>, Reason> {
+) -> Result<TlsStream<QuickAck>, Reason> {
     let name = tls::upstream::server_name(host).map_err(|_| Reason::UpstreamTls)?;
-    match tokio::time::timeout(TLS_TIMEOUT, TlsConnector::from(cfg.clone()).connect(name, tcp)).await {
+    match tokio::time::timeout(TLS_TIMEOUT, TlsConnector::from(cfg.clone()).connect(name, QuickAck(tcp))).await {
         Ok(Ok(s)) => Ok(s),
         _ => Err(Reason::UpstreamTls),
     }
