@@ -113,3 +113,42 @@ fn a_token_that_does_not_verify_refuses_the_launch() {
     assert_ne!(r.code, 0);
     assert!(r.stderr.contains("no [[identity.oidc]] issuer is configured"), "{r:?}");
 }
+
+#[test]
+fn d7_the_identity_token_never_reaches_an_upstream() {
+    // The agent calls a granted API with a brokered credential while the
+    // session carries a verified identity token: the upstream sees the
+    // broker's credential and nothing of the token.
+    use conformance::m1::*;
+    let k = key();
+    let h = setup(&k, true);
+    let ca_dir = tempfile::Builder::new().prefix("bkca.").tempdir_in("/tmp").unwrap();
+    let ca = TestCa::new(ca_dir.path());
+    let api = HttpsServer::start(&ca, "api.example.com", std::sync::Arc::new(|_: &Seen| Reply::new(200, "{}")));
+    h.write_secret("api-key", b"api-CANARY-not-a-real-key");
+    let cfg = std::fs::read_to_string(h.config_dir().join("broker.toml")).unwrap();
+    h.set_config(&format!(
+        "{cfg}[tls]\nextra_roots = [\"{}\"]\n{}",
+        ca.pem_path.display(),
+        loopback_grant(
+            "api",
+            "api.example.com",
+            api.port,
+            "credential = { kind = \"static\", ref = \"file:api-key\", env = \"API_KEY\" }"
+        )
+    ));
+    let tok = token(&k, claims("broker-test", now() + 300));
+    let script = format!(
+        "curl -sS -o /dev/null -w '%{{http_code}}' -H \"Authorization: Bearer $API_KEY\" -d x https://api.example.com:{}/v1/x",
+        api.port
+    );
+    let r = h.run_argv(None, &["/bin/sh".into(), "-c".into(), script], &[("BROKER_IDENTITY_TOKEN", &tok)]);
+    assert_eq!(r.stdout.trim(), "200", "{r:?}");
+    let seen = api.seen.lock().unwrap();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].header("authorization"), Some("Bearer api-CANARY-not-a-real-key"));
+    let everything = format!("{:?}{}", seen[0].headers, String::from_utf8_lossy(&seen[0].body));
+    for part in tok.split('.') {
+        assert!(!everything.contains(part), "no part of the identity token reaches the upstream");
+    }
+}

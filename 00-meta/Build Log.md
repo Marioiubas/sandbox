@@ -215,5 +215,5 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found:** the first version lost the forbids when the MCP permits rebuilt the engine; the end-to-end test caught it, and option policies are now part of every rebuild.
 - **Also:** the `ci-mode` attribution step prints the subject, issuer and run ID and checks them with `jq` (the D1 fixture passed on CI after the canary fix; the attribution grep did not match, and the step now shows why).
 - **Tests:** `cedar::github_tests::the_org_option_denies_public_sinks_after_untrusted_input`, `gates::tests::the_public_sink_option_is_a_proved_narrowing`, `m3_github::with_the_org_option_the_public_pr_after_a_public_issue_is_denied`.
+- **D7:** `m3_identity::d7_the_identity_token_never_reaches_an_upstream` checks the upstream side directly.
 - **ADRs:** [[ADR-033 Public-Sink Rule as Built]].
-
