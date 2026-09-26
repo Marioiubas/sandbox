@@ -80,6 +80,9 @@ pub enum Reason {
     L7NoRuleMatched,
     /// WebSocket or other protocol upgrade on a terminated host.
     UpgradeNotAllowed,
+    /// A method-override header (`X-HTTP-Method-Override` and kin): a server
+    /// could run another method than the one decided.
+    MethodOverride,
     /// The request head exceeded the broker's size or field-count limit.
     HeadTooLarge,
     /// The request body exceeded the inspection limit.
@@ -219,6 +222,7 @@ impl Reason {
         Reason::HostHeaderMismatch,
         Reason::L7NoRuleMatched,
         Reason::UpgradeNotAllowed,
+        Reason::MethodOverride,
         Reason::HeadTooLarge,
         Reason::BodyTooLarge,
         Reason::UnsupportedEncoding,
@@ -302,6 +306,7 @@ impl Reason {
             Reason::HostHeaderMismatch => "host_header_mismatch",
             Reason::L7NoRuleMatched => "l7_no_rule_matched",
             Reason::UpgradeNotAllowed => "upgrade_not_allowed",
+            Reason::MethodOverride => "method_override",
             Reason::HeadTooLarge => "head_too_large",
             Reason::BodyTooLarge => "body_too_large",
             Reason::UnsupportedEncoding => "unsupported_encoding",
@@ -369,6 +374,7 @@ impl Reason {
             HostHeaderMismatch
             | L7NoRuleMatched
             | UpgradeNotAllowed
+            | MethodOverride
             | HeadTooLarge
             | BodyTooLarge
             | UnsupportedEncoding

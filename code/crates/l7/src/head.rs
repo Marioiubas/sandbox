@@ -51,6 +51,12 @@ pub fn check(parts: &Parts, host: &CanonicalHost, port: u16) -> Result<Canonical
     if parts.method == Method::CONNECT || parts.headers.contains_key(http::header::UPGRADE) {
         return Err(Reason::UpgradeNotAllowed);
     }
+    // Frameworks (Rack's MethodOverride, others) run the method these name
+    // instead of the request's: a POST the broker allowed could become a
+    // DELETE upstream. Refused rather than stripped.
+    if METHOD_OVERRIDE.iter().any(|h| parts.headers.contains_key(*h)) {
+        return Err(Reason::MethodOverride);
+    }
     if let Some(a) = parts.uri.authority()
         && (parts.uri.scheme_str() != Some("https") || !same_target(a.as_str(), host, port))
     {
@@ -71,6 +77,9 @@ pub fn check(parts: &Parts, host: &CanonicalHost, port: u16) -> Result<Canonical
     let pq = parts.uri.path_and_query().map(|p| p.as_str()).unwrap_or("");
     canon_path(pq.as_bytes()).map_err(|r| r.reason())
 }
+
+/// Headers some servers read as the request's real method.
+const METHOD_OVERRIDE: &[&str] = &["x-http-method-override", "x-http-method", "x-method-override"];
 
 /// Headers that belong to one hop and are never forwarded.
 const HOP_BY_HOP: &[&str] =
@@ -149,6 +158,11 @@ mod tests {
         let mut up = parts("/", Some("api.github.com"));
         up.headers.insert("upgrade", "websocket".parse().unwrap());
         assert_eq!(check(&up, &api(), 443).unwrap_err(), Reason::UpgradeNotAllowed);
+        for name in ["X-HTTP-Method-Override", "x-http-method", "X-Method-Override"] {
+            let mut o = parts("/", Some("api.github.com"));
+            o.headers.insert(http::HeaderName::from_bytes(name.as_bytes()).unwrap(), "DELETE".parse().unwrap());
+            assert_eq!(check(&o, &api(), 443).unwrap_err(), Reason::MethodOverride, "{name}");
+        }
         let mut h = HeaderMap::new();
         h.insert("connection", "keep-alive, x-secret-hop".parse().unwrap());
         h.insert("x-secret-hop", "1".parse().unwrap());

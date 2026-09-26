@@ -313,3 +313,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found (label review):** with both labels live, `POST api.anthropic.com` (a terminated, brokered grant) was an `http.write` held by the Rule of Two: the agent lost its model mid-session, now common after ADR-036.
 - **Fixed:** `model_api = true` on profile/user/org grants (never repository policy; plain HTTP only) exempts that host from the Rule of Two ([[ADR-039 Model API Is Not a Rule-of-Two Sink]]); the shipped profiles mark their model APIs. Test: `the_model_api_is_not_a_write_destination_for_the_rule_of_two`.
 
+### 2026-09-26: adversarial review of the GraphQL adapter; method-override headers
+
+- **Found (review agent, each proven by a failing test):** a mutation result could read the written repository with no label (a Rule-of-Two bypass); a long fragment chain overflowed the stack and aborted the daemon; one query could trigger thousands of credentialed lookups. All fixed ([[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] item 12); end-to-end test `m3_graphql::a_mutation_result_that_reads_a_private_repository_is_a_sensitive_read`.
+- **Hardened:** requests carrying `X-HTTP-Method-Override`, `X-HTTP-Method` or `X-Method-Override` are refused on terminated hosts (`method_override`): frameworks such as Rack's `MethodOverride` run the named method instead, so an allowed `POST` could become a `DELETE` upstream (`l7::head::check`, test `head::tests::paths_and_upgrades`).
+- **Review found no gap** in the verb-level Rule of Two (ADR-035 item 11).
+

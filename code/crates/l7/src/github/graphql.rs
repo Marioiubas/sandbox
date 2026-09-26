@@ -20,18 +20,23 @@
 //! GitHub resolves node IDs, follows renames and validates the document
 //! itself; the broker never rewrites the request.
 
-use super::schema;
 use super::strict_json::Strict;
-use crate::graphql::{Document, Field, Fragment, OpType, Selection, Value};
+use crate::graphql::{Document, Field, OpType, Selection, Value};
 use audit::Reason;
 use netguard::CanonicalHost;
 use policy::RepoId;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+
+#[path = "graphql_walk.rs"]
+mod walk;
+use walk::Walk;
 
 /// Largest GraphQL request body the adapter reads.
 pub const MAX_BODY: usize = 1 << 20;
 /// Most root fields in one mutation (each may cost a node lookup).
 pub const MAX_MUTATIONS: usize = 16;
+/// Most repositories one request may read (each may cost a lookup).
+pub const MAX_REPOS: usize = 16;
 /// Most selections visited in one document (fragments memoised).
 const MAX_STEPS: usize = 200_000;
 
@@ -50,6 +55,8 @@ pub fn node_types(verb: &str) -> &'static [&'static str] {
         "pr.create" => &["Repository"],
         "pr.merge" => &["PullRequest"],
         "issue.comment" => &["Issue", "PullRequest"],
+        // A mutation result's read of the written object's repository.
+        "repo.read" => &["Repository", "PullRequest", "Issue"],
         _ => &[],
     }
 }
@@ -125,14 +132,28 @@ pub fn map(authority: &CanonicalHost, body: &[u8]) -> Result<Vec<Mapped>, Reason
                 out.push(Mapped {
                     verb,
                     repo: None,
-                    node: Some(node),
+                    node: Some(node.clone()),
                     field: f.name.clone(),
                     bodies: false,
                     public: false,
                 });
-                let s = w.sel(f.selection.as_deref().unwrap_or(&[]), payload)?;
+                let result = f.selection.as_deref().unwrap_or(&[]);
+                let s = w.sel(result, payload)?;
                 if s.unconfined {
                     out.push(unconfined(&f.name));
+                }
+                // A result that reads more than the written object's identity
+                // (its repository's issues, comments, text) is a read of that
+                // repository, resolved from the same node.
+                if !w.identity_only(result)? {
+                    out.push(Mapped {
+                        verb: "repo.read",
+                        repo: None,
+                        node: Some(node),
+                        field: f.name.clone(),
+                        bodies: s.bodies,
+                        public: false,
+                    });
                 }
             }
         }
@@ -146,7 +167,13 @@ pub fn map(authority: &CanonicalHost, body: &[u8]) -> Result<Vec<Mapped>, Reason
         // Only `__typename`: still one verb, so an empty grant denies it.
         out.push(public("__typename"));
     }
-    Ok(dedup(out))
+    let out = dedup(out);
+    // Each repository read may cost a visibility lookup with the user's
+    // credential: bound them per request.
+    if out.iter().filter(|m| m.verb == "repo.read").count() > MAX_REPOS {
+        return invalid("too many repositories");
+    }
+    Ok(out)
 }
 
 fn unconfined(field: &str) -> Mapped {
@@ -222,7 +249,7 @@ fn dedup(v: Vec<Mapped>) -> Vec<Mapped> {
     let mut out: Vec<Mapped> = Vec::new();
     for m in v {
         let same = out.iter_mut().find(|o| match (o.verb, m.verb) {
-            ("repo.read", "repo.read") => o.repo == m.repo,
+            ("repo.read", "repo.read") => o.repo == m.repo && o.node == m.node,
             ("github.read", "github.read") => true,
             _ => false,
         });
@@ -311,133 +338,6 @@ impl<'a> Vars<'a> {
             && id.len() <= 200
             && id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'=' | b'+' | b'/'));
         ok.then_some(id)
-    }
-}
-
-#[derive(Clone, Copy, Default)]
-struct Summary {
-    unconfined: bool,
-    bodies: bool,
-}
-
-impl Summary {
-    fn add(&mut self, o: Summary) {
-        self.unconfined |= o.unconfined;
-        self.bodies |= o.bodies;
-    }
-}
-
-/// Walks selections against [`schema`], expanding fragments once each.
-struct Walk<'d> {
-    frags: HashMap<&'d str, &'d Fragment>,
-    memo: HashMap<&'d str, Summary>,
-    stack: Vec<&'d str>,
-    steps: usize,
-}
-
-impl<'d> Walk<'d> {
-    fn new(doc: &'d Document) -> Result<Walk<'d>, Reason> {
-        let mut frags = HashMap::new();
-        for f in &doc.fragments {
-            if frags.insert(f.name.as_str(), f).is_some() {
-                return invalid("duplicate fragment");
-            }
-        }
-        Ok(Walk { frags, memo: HashMap::new(), stack: Vec::new(), steps: 0 })
-    }
-
-    fn step(&mut self) -> Result<(), Reason> {
-        self.steps += 1;
-        if self.steps > MAX_STEPS { invalid("document too large") } else { Ok(()) }
-    }
-
-    fn fragment(&self, n: &str) -> Result<&'d Fragment, Reason> {
-        if self.stack.contains(&n) {
-            return invalid("fragment cycle");
-        }
-        self.frags.get(n).copied().ok_or(Reason::GithubGraphqlInvalid)
-    }
-
-    /// The operation's root fields, through fragments on the root type.
-    fn roots(&mut self, sel: &'d [Selection], ty: OpType) -> Result<Vec<&'d Field>, Reason> {
-        let root = match ty {
-            OpType::Query => "Query",
-            OpType::Mutation => "Mutation",
-            OpType::Subscription => "Subscription",
-        };
-        let mut out = Vec::new();
-        self.roots_into(sel, root, &mut out)?;
-        Ok(out)
-    }
-
-    fn roots_into(&mut self, sel: &'d [Selection], root: &str, out: &mut Vec<&'d Field>) -> Result<(), Reason> {
-        for s in sel {
-            self.step()?;
-            match s {
-                Selection::Field(f) => out.push(f),
-                Selection::Inline(on, inner) => {
-                    if on.as_deref().is_some_and(|t| t != root) {
-                        return invalid("root fragment on another type");
-                    }
-                    self.roots_into(inner, root, out)?;
-                }
-                Selection::Spread(n) => {
-                    let fr = self.fragment(n)?;
-                    if fr.on != root {
-                        return invalid("root fragment on another type");
-                    }
-                    self.stack.push(n);
-                    self.roots_into(&fr.selection, root, out)?;
-                    self.stack.pop();
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Summarise a selection on type `ty`.
-    fn sel(&mut self, sel: &'d [Selection], ty: &str) -> Result<Summary, Reason> {
-        let mut acc = Summary::default();
-        if schema::BODY_TYPES.contains(&ty) {
-            acc.bodies = true;
-        }
-        for s in sel {
-            self.step()?;
-            match s {
-                Selection::Field(f) if f.name == "__typename" => {}
-                Selection::Field(f) => match schema::field(ty, &f.name) {
-                    Some(None) if f.selection.is_none() => {}
-                    Some(Some(t)) => acc.add(self.sel(f.selection.as_deref().unwrap_or(&[]), t)?),
-                    _ => acc.add(Summary { unconfined: true, bodies: true }),
-                },
-                Selection::Inline(on, inner) => {
-                    let t = on.as_deref().unwrap_or(ty);
-                    if schema::is_type(t) {
-                        acc.add(self.sel(inner, t)?);
-                    } else {
-                        acc.add(Summary { unconfined: true, bodies: true });
-                    }
-                }
-                Selection::Spread(n) => {
-                    let fr = self.fragment(n)?;
-                    if let Some(m) = self.memo.get(n.as_str()) {
-                        acc.add(*m);
-                        continue;
-                    }
-                    let m = if schema::is_type(&fr.on) {
-                        self.stack.push(n);
-                        let m = self.sel(&fr.selection, &fr.on)?;
-                        self.stack.pop();
-                        m
-                    } else {
-                        Summary { unconfined: true, bodies: true }
-                    };
-                    self.memo.insert(n, m);
-                    acc.add(m);
-                }
-            }
-        }
-        Ok(acc)
     }
 }
 

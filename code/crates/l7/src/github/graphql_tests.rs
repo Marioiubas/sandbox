@@ -125,7 +125,11 @@ fn mutations_map_to_verbs_on_node_ids() {
     .unwrap();
     assert_eq!(
         short(&m),
-        vec![("pr.create", None, Some("R_1"), false, false), ("github.read", None, None, true, false)]
+        vec![
+            ("pr.create", None, Some("R_1"), false, false),
+            ("github.read", None, None, true, false),
+            ("repo.read", None, Some("R_1"), true, false)
+        ]
     );
     assert_eq!(
         short(&run("mutation { __typename }", serde_json::json!({})).unwrap()),
@@ -234,6 +238,87 @@ fn shared_fragments_are_walked_once() {
     doc += " fragment F40 on Repository { id }";
     let m = run(&doc, serde_json::json!({})).unwrap();
     assert_eq!(short(&m), vec![("repo.read", Some("github.com/a/b".into()), None, false, false)]);
+}
+
+/// Found by review (2026-09-26): a mutation's result could read the
+/// written repository (every issue and comment) with no read verb, so no
+/// label was raised. It is now a `repo.read` of the same node's repository.
+#[test]
+fn a_mutation_result_that_reads_the_repository_is_a_read_of_it() {
+    for (q, node) in [
+        (
+            r#"mutation { createPullRequest(input: {repositoryId: "R_1"}) { pullRequest { repository { issues(first: 100) { nodes { body } } } } } }"#,
+            "R_1",
+        ),
+        (
+            r#"mutation { addComment(input: {subjectId: "I_1"}) { subject { ... on Issue { repository { pullRequests(first: 100) { nodes { body } } } } } } }"#,
+            "I_1",
+        ),
+        (
+            r#"mutation { addComment(input: {subjectId: "I_1"}) { commentEdge { node { issue { comments(first: 100) { nodes { body } } } } } } }"#,
+            "I_1",
+        ),
+        (r#"mutation { mergePullRequest(input: {pullRequestId: "PR_1"}) { pullRequest { title body } } }"#, "PR_1"),
+    ] {
+        let m = run(q, serde_json::json!({})).unwrap();
+        let read =
+            m.iter().find(|x| x.verb == "repo.read").unwrap_or_else(|| panic!("no read for {q}: {:?}", short(&m)));
+        assert_eq!((read.node.as_deref(), read.bodies), (Some(node), true), "{q}");
+    }
+    // Selecting only the written object's identity needs no read (`gh pr create`).
+    for q in [
+        r#"mutation { createPullRequest(input: {repositoryId: "R_1"}) { pullRequest { id number url } } }"#,
+        r#"mutation { addComment(input: {subjectId: "I_1"}) { commentEdge { cursor node { id url } } subject { ... on Issue { id } } } }"#,
+        r#"mutation { mergePullRequest(input: {pullRequestId: "PR_1"}) { clientMutationId actor { login } pullRequest { merged } } }"#,
+    ] {
+        let m = run(q, serde_json::json!({})).unwrap();
+        assert!(m.iter().all(|x| x.verb != "repo.read"), "{q}: {:?}", short(&m));
+    }
+}
+
+/// Found by review: a chain of fragments recursed once per link and could
+/// overflow a 2 MiB worker stack (aborting the daemon). Now bounded.
+#[test]
+fn long_fragment_chains_are_refused_not_overflowed() {
+    let n = 12_000;
+    let mut doc = String::from(r#"{ repository(owner: "a", name: "b") { ...F0 } }"#);
+    for k in 0..n {
+        doc += &format!(" fragment F{k} on Repository {{ ...F{} }}", k + 1);
+    }
+    doc += &format!(" fragment F{n} on Repository {{ id }}");
+    let b = body(&doc, serde_json::json!({}));
+    assert!(b.len() <= MAX_BODY);
+    let r = std::thread::Builder::new()
+        .stack_size(2 << 20)
+        .spawn(move || map(&gh(), &b).map(|m| m.len()))
+        .unwrap()
+        .join()
+        .unwrap();
+    assert_eq!(r, Err(Reason::GithubGraphqlInvalid));
+    // The same through fragments on the root type.
+    let mut doc = String::from("{ ...Q0 }");
+    for k in 0..n {
+        doc += &format!(" fragment Q{k} on Query {{ ...Q{} }}", k + 1);
+    }
+    doc += &format!(" fragment Q{n} on Query {{ viewer {{ login }} }}");
+    let b = body(&doc, serde_json::json!({}));
+    let r = std::thread::Builder::new().stack_size(2 << 20).spawn(move || map(&gh(), &b)).unwrap().join().unwrap();
+    assert_eq!(r, Err(Reason::GithubGraphqlInvalid));
+}
+
+/// Found by review: one query could name thousands of repositories, each
+/// costing a visibility lookup with the user's credential.
+#[test]
+fn repository_reads_per_request_are_bounded() {
+    let fields = |n: usize| -> String {
+        (0..n).map(|k| format!(r#"r{k}: repository(owner: "acme", name: "x{k}") {{ id }} "#)).collect()
+    };
+    assert_eq!(run(&format!("{{ {} }}", fields(MAX_REPOS)), serde_json::json!({})).unwrap().len(), MAX_REPOS);
+    assert_eq!(
+        run(&format!("{{ {} }}", fields(MAX_REPOS + 1)), serde_json::json!({})),
+        Err(Reason::GithubGraphqlInvalid)
+    );
+    assert_eq!(run(&format!("{{ {} }}", fields(5_000)), serde_json::json!({})), Err(Reason::GithubGraphqlInvalid));
 }
 
 const ROOTS: &[&str] = &[

@@ -24,6 +24,7 @@ fn node(id: &str) -> Option<(&'static str, &'static str, &'static str)> {
         "R_evil" => ("Repository", "evil/loot", "PUBLIC"),
         "PR_1" => ("PullRequest", "acme/public", "PUBLIC"),
         "I_1" => ("Issue", "acme/public", "PUBLIC"),
+        "I_secret" => ("Issue", "acme/secret", "PRIVATE"),
         _ => return None,
     })
 }
@@ -260,4 +261,23 @@ fn a_public_issue_then_a_pr_on_that_repo_is_allowed_over_graphql() {
     let labels: Vec<&str> =
         evs.iter().filter(|e| e.kind == EventKind::SessionLabel).filter_map(|e| e.detail["label"].as_str()).collect();
     assert!(labels.contains(&"untrusted_input") && !labels.contains(&"sensitive_read"), "{labels:?}");
+}
+
+#[test]
+fn a_mutation_result_that_reads_a_private_repository_is_a_sensitive_read() {
+    // Found by review (2026-09-26): the result of a granted write could read
+    // the written repository's issues without raising any label.
+    let f = setup(r#"["repo.read", "pr.create", "issue.comment"]"#);
+    let comment = q(
+        r#"mutation { addComment(input: {subjectId: "I_secret", body: "ok"}) { subject { ... on Issue { repository { issues(first: 5) { nodes { body } } } } } } }"#,
+    );
+    let (codes, evs) = f.run(&[("gql", &q(ISSUES)), ("gql", &comment), ("gql", &create_pr("R_public"))]);
+    assert_eq!(codes, "200 200 403");
+    assert_eq!(denies(&evs), vec![Reason::RuleOfTwo]);
+    let cause = evs
+        .iter()
+        .filter(|e| e.kind == EventKind::SessionLabel)
+        .find(|e| e.detail.get("label").and_then(|v| v.as_str()) == Some("sensitive_read"))
+        .and_then(|e| e.detail.get("cause").and_then(|v| v.as_str()).map(str::to_string));
+    assert_eq!(cause.as_deref(), Some("github repo.read github.com/acme/secret"));
 }

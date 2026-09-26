@@ -9,10 +9,13 @@ fn check(m: &[l7::github::graphql::Mapped], query_only: bool) {
         assert!(policy::github::is_verb(x.verb));
         let write = !policy::github::is_read_verb(x.verb);
         assert!(!(query_only && write), "a query mapped to {}", x.verb);
-        assert_eq!(write, x.node.is_some());
-        assert!(!write || !l7::github::graphql::node_types(x.verb).is_empty());
+        // Writes name a node; so may a mutation result's read of its repository.
+        assert!(!write || x.node.is_some());
+        assert!(x.node.is_none() || write || x.verb == "repo.read");
+        assert!(x.node.is_none() || !l7::github::graphql::node_types(x.verb).is_empty());
         assert!(!x.public || (x.verb == "github.read" && !x.bodies));
-        assert_eq!(x.verb == "repo.read", x.repo.is_some());
+        assert_eq!(x.verb == "repo.read", x.repo.is_some() || x.node.is_some());
+        assert!(x.repo.is_none() || x.node.is_none());
     }
 }
 

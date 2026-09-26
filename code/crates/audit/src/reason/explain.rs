@@ -43,6 +43,9 @@ impl Reason {
             HostHeaderMismatch => "the Host header or request authority differs from the CONNECT host and SNI",
             L7NoRuleMatched => "the host is granted, but no method/path or protocol rule allows this request",
             UpgradeNotAllowed => "protocol upgrades (WebSocket, h2c) are not brokered on terminated hosts",
+            MethodOverride => {
+                "method-override headers (X-HTTP-Method-Override and similar) are refused: the server could run another method than the one the broker decided"
+            }
             HeadTooLarge => "the request head exceeded the broker's limit (64 KiB, 128 fields)",
             BodyTooLarge => "the request body exceeded the broker's inspection limit",
             UnsupportedEncoding => "the body used a content encoding the broker cannot inspect",
