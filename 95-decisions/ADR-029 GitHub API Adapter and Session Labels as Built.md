@@ -7,7 +7,7 @@ tags: [sandbox/decisions, decision, topic/policy, topic/credentials, invariant/i
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-25
+updated: 2026-09-26
 summary: "GitHub REST requests map to verbs from a verified route table (GraphQL denied until parsed); `protocol = \"github\"` grants `verbs` on `repos` (default: the task repository); the broker looks up repository visibility itself with the bound credential and re-decides; session labels are raise-only, raised from API facts before forwarding, logged per decision and as `session.label` events; credential risk comes from config."
 related: ["[[GitHub API Adapter]]", "[[Trifecta Session Labels]]", "[[ADR-010 Session-Level Trifecta Labels in the MVP]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[GitHub MCP Toxic Flow]]", "[[M3 CI Identity and MCP]]", "[[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]]", "[[MOC Decisions]]"]
 sources: ["https://docs.github.com/en/rest/pulls/pulls", "https://docs.github.com/en/rest/issues/comments", "https://docs.github.com/en/rest/repos/contents", "https://docs.github.com/en/rest/repos/repos", "https://docs.github.com/en/rest/gists/gists", "https://docs.github.com/en/rest/issues/issues"]
@@ -48,7 +48,7 @@ built (2026-09-24, M3 step 1). Amended by [[ADR-035 GitHub GraphQL and Host-Wide
 
 - The GitHub MCP toxic flow is stopped at the public write (`m3_github::d5_toxic_flow_is_stopped_at_the_public_write`); a public-issue read followed by a PR on that public repository is allowed.
 - `gh` commands that use GraphQL are denied on a GitHub grant until GraphQL parsing lands.
-- **Gap:** a clone of a private repository over git smart-HTTP does not raise `sensitive_read` in M3 (the broker has no visibility for git hosts yet); the API path does. Planned: a broker-side visibility lookup for git fetches when the API host is admitted.
+- **Gap:** a clone of a private repository over git smart-HTTP does not raise `sensitive_read` in M3 (the broker has no visibility for git hosts yet); the API path does. Planned: a broker-side visibility lookup for git fetches when the API host is admitted. **Closed 2026-09-26** by [[ADR-036 Git Fetch Visibility by Anonymous Probe]] (an anonymous `info/refs` probe on the git host instead).
 - **Not built:** "arbitrary web pages" as untrusted input, the org option forbidding public-sink writes under `untrusted_input`, author-association filtering, and the step-up approval flow (writes that need approval are denied).
 
 ## Invariants affected

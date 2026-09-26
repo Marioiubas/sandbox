@@ -291,3 +291,8 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Checked (with the user's approval):** created `Marioiubas/sandboxpublictest#2`, transferred it to `Marioiubas/sandboxprivatetest#1`, then asked for the old number. GraphQL `issue(number: 2)` and `issueOrPullRequest(number: 2)` return `null` / `NOT_FOUND`, even for the owner's token; REST answers `301` to the new location. Confined GraphQL reads therefore cannot return a transferred issue under the old repository's label; the residual in [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] and the threat model is removed.
 - **Regression guard:** `code/tests/e2e/mcp_github_real/transfer_check.sh` runs in the `real-mcp` job on every push (fails if GitHub starts resolving the old number, or the fixture changes). The probe issue is closed and kept as the fixture.
 
+### 2026-09-26: git clones count as sensitive reads
+
+- **Closed a Rule-of-Two gap** recorded in ADR-029: `git.fetch` raised no label, so public issue → `git clone` of a private repository → public PR passed the forbid. A fetch of a repository not known to be public now raises `sensitive_read`; visibility comes from one anonymous `info/refs?service=git-upload-pack` probe per repository per session on the same host ([[ADR-036 Git Fetch Visibility by Anonymous Probe]]).
+- **Tests:** `m3_git_labels::*` (public repository: no label, anonymous probe then brokered fetch; private repository: one label and one probe for two fetches); the fake forge now serves configured repositories anonymously.
+

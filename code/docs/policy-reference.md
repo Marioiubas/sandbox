@@ -203,7 +203,10 @@ issue or PR text (or search results) from a public repository sets
 **untrusted input**. Host-wide reads (`github.read`: search, your
 repository list, notifications) count as sensitive reads too, because they
 can return private repositories; only API metadata, rate limits and
-license, gitignore and code-of-conduct templates do not. Once both labels
+license, gitignore and code-of-conduct templates do not. Cloning or
+fetching a repository with git also counts as a sensitive read unless the
+repository is public (the broker checks by asking the git host, without
+credentials, whether anyone may fetch it). Once both labels
 are set, every write in that session is denied (the Rule of Two). A new
 `broker run` starts a new session. Mark a credential `risk = "high"` to
 treat any use of it as a sensitive read.

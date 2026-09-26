@@ -4489,5 +4489,27 @@
       "https://docs.github.com/en/graphql/reference/users",
       "https://spec.graphql.org/"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-036 Git Fetch Visibility by Anonymous Probe.md",
+    "title": "ADR-036 Git Fetch Visibility by Anonymous Probe",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "A git fetch of a repository not known to be public raises sensitive_read; the broker learns visibility with one anonymous info/refs probe per repository per session on the same git host. Closes ADR-029's git clone gap.",
+    "links_to": [
+      "ADR-029 GitHub API Adapter and Session Labels as Built",
+      "Git Smart-HTTP Adapter",
+      "Trifecta Session Labels",
+      "GitHub MCP Toxic Flow",
+      "M3 CI Identity and MCP",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-26) from git's http-protocol documentation and the m3_git_labels tests.",
+    "aliases": [
+      "ADR-036"
+    ],
+    "sources": [
+      "https://git-scm.com/docs/http-protocol"
+    ]
   }
 ]

@@ -367,6 +367,7 @@ impl Conn {
         }
         let logged_us = us(t0);
         self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
+        self.resolve_git_visibility(&actions).await;
         self.raise_labels(&rid, &actions, high_risk);
 
         // 5b. Strip client credentials and hop-by-hop headers; attach ours.

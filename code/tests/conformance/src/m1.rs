@@ -231,6 +231,8 @@ pub struct FakeGitHub {
     pub key_pem: Vec<u8>,
     /// Token requests as received: `{"repositories": [...], "permissions": {...}}`.
     pub mints: Arc<Mutex<Vec<serde_json::Value>>>,
+    /// Repositories (`owner/name`) anyone may fetch without credentials.
+    pub public: Arc<Mutex<Vec<String>>>,
 }
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -330,6 +332,8 @@ impl FakeGitHub {
         let tokens: Arc<Mutex<HashMap<String, Vec<String>>>> = Arc::default();
         let mints: Arc<Mutex<Vec<serde_json::Value>>> = Arc::default();
         let (rootp, m2) = (root.path().to_path_buf(), mints.clone());
+        let anon: Arc<Mutex<Vec<String>>> = Arc::default();
+        let p2 = anon.clone();
         let handler: Handler = Arc::new(move |s: &Seen| {
             if s.method == "POST" && s.path == format!("/app/installations/{INSTALLATION}/access_tokens") {
                 let jwt = s.header("authorization").and_then(|a| a.strip_prefix("Bearer ")).unwrap_or("");
@@ -366,7 +370,10 @@ impl FakeGitHub {
                 .and_then(|d| String::from_utf8(d).ok())
                 .and_then(|d| d.strip_prefix("x-access-token:").map(str::to_string))
                 .is_some_and(|t| tokens.lock().unwrap().get(&t).is_some_and(|rs| rs.contains(&repo)));
-            if !authed {
+            let owner = segs.first().copied().unwrap_or("");
+            let upload = s.path.ends_with("/git-upload-pack") || s.query.as_deref() == Some("service=git-upload-pack");
+            let anyone = upload && p2.lock().unwrap().contains(&format!("{owner}/{repo}"));
+            if !authed && !anyone {
                 return Reply::new(401, "authentication required\n").header("www-authenticate", "Basic realm=\"fake\"");
             }
             let mut r = cgi(&rootp, s);
@@ -376,7 +383,7 @@ impl FakeGitHub {
             r
         });
         let server = HttpsServer::start(ca, host, handler);
-        FakeGitHub { server, root, key_pem, mints }
+        FakeGitHub { server, root, key_pem, mints, public: anon }
     }
 
     /// A bare repository `owner/name.git` with one commit on `main` and

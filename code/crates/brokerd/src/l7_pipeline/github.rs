@@ -1,8 +1,9 @@
 //! GitHub on the L7 path (GitHub API Adapter, Trifecta Session Labels):
 //! repository visibility from a broker-originated metadata read with the
 //! credential the decision bound, GraphQL node IDs resolved to their
-//! repository the same way, and the labels a request raises. Labels are
-//! raised only by the broker, from API facts, and never lowered.
+//! repository the same way, git repositories probed anonymously, and the
+//! labels a request raises. Labels are raised only by the broker, from
+//! facts it observes, and never lowered.
 
 use super::{Conn, RespBody};
 use audit::{EventKind, Reason, RequestId};
@@ -134,6 +135,44 @@ impl Conn {
         Some((ty.to_string(), RepoId::new(&authority, 443, owner, name)?, vis))
     }
 
+    /// Git fetches: learn whether each fetched repository is public from
+    /// an anonymous `info/refs` probe on the same host, once per session. A
+    /// repository anyone can fetch is public; any other answer (401, 404,
+    /// a redirect, a failure) leaves it not known to be public, which
+    /// raises `sensitive_read`.
+    pub(super) async fn resolve_git_visibility(&self, actions: &[Action]) {
+        let repos: Vec<RepoId> = {
+            let cache = self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner());
+            actions
+                .iter()
+                .filter_map(|a| match a {
+                    Action::GitFetch { repo } if !cache.contains_key(&repo.to_string()) => Some(repo.clone()),
+                    _ => None,
+                })
+                .collect()
+        };
+        for r in repos {
+            let v = tokio::time::timeout(Duration::from_secs(10), self.git_probe(&r)).await.unwrap_or_default();
+            self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner()).insert(r.to_string(), v);
+        }
+    }
+
+    async fn git_probe(&self, r: &RepoId) -> Visibility {
+        let path = format!("/{}/{}.git/info/refs?service=git-upload-pack", r.owner(), r.name());
+        let Ok(mut req) = Request::get(path.as_str()).body(Full::new(Bytes::new())) else { return Visibility::Unknown };
+        req.headers_mut().insert(http::header::USER_AGENT, HeaderValue::from_static("git/2 (broker visibility probe)"));
+        let Some(resp) = self.upstream_send(req, None).await else { return Visibility::Unknown };
+        let advertised = resp
+            .headers()
+            .get(http::header::CONTENT_TYPE)
+            .is_some_and(|v| v.as_bytes() == b"application/x-git-upload-pack-advertisement");
+        match resp.status().as_u16() {
+            200 if advertised => Visibility::Public,
+            401 | 403 | 404 => Visibility::Private,
+            _ => Visibility::Unknown,
+        }
+    }
+
     /// One broker-originated API request on this host with the credential;
     /// the JSON body of a 200 response.
     async fn api_json(
@@ -142,9 +181,26 @@ impl Conn {
         cred: Option<(&Issued, &AttachSpec)>,
     ) -> Option<serde_json::Value> {
         let h = req.headers_mut();
-        h.insert(http::header::HOST, HeaderValue::from_str(&self.authority()).ok()?);
         h.insert(http::header::USER_AGENT, HeaderValue::from_static("broker"));
         h.insert(http::header::ACCEPT, HeaderValue::from_static("application/vnd.github+json"));
+        let resp = self.upstream_send(req, cred).await?;
+        if resp.status() != http::StatusCode::OK {
+            return None;
+        }
+        let body = Limited::new(resp.into_body(), MAX_META).collect().await.ok()?;
+        serde_json::from_slice(&body.to_bytes()).ok()
+    }
+
+    /// Send one broker-originated request to this host's admitted
+    /// addresses over verified TLS, with the credential if given (none for
+    /// anonymous probes).
+    async fn upstream_send(
+        &self,
+        mut req: Request<Full<Bytes>>,
+        cred: Option<(&Issued, &AttachSpec)>,
+    ) -> Option<Response<hyper::body::Incoming>> {
+        let h = req.headers_mut();
+        h.insert(http::header::HOST, HeaderValue::from_str(&self.authority()).ok()?);
         h.insert(http::header::ACCEPT_ENCODING, HeaderValue::from_static("identity"));
         if let Some((i, spec)) = cred {
             creds::attach(i, spec, h).ok()?;
@@ -155,12 +211,7 @@ impl Conn {
         tokio::spawn(async move {
             let _ = conn.await;
         });
-        let resp = s.send_request(req).await.ok()?;
-        if resp.status() != http::StatusCode::OK {
-            return None;
-        }
-        let body = Limited::new(resp.into_body(), MAX_META).collect().await.ok()?;
-        serde_json::from_slice(&body.to_bytes()).ok()
+        s.send_request(req).await.ok()
     }
 
     /// Fill each GitHub action's visibility from the session cache.
@@ -219,6 +270,10 @@ impl Conn {
         // On GitHub and S3 hosts the verb or operation says what a request
         // does (a GraphQL query is a POST that writes nothing).
         let adapted = actions.iter().any(|a| matches!(a, Action::GitHub { .. } | Action::S3 { .. }));
+        let visibility = |r: &RepoId| {
+            let cache = self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner());
+            cache.get(&r.to_string()).copied().unwrap_or_default()
+        };
         for a in actions {
             match a {
                 Action::GitHub { verb, visibility, bodies, .. } => {
@@ -228,6 +283,11 @@ impl Conn {
                     raise.push((Label::ExternalEffect, a.verb()))
                 }
                 Action::GitPush { .. } => raise.push((Label::ExternalEffect, a.verb())),
+                // Fetching a repository not known to be public is a
+                // sensitive read (ADR-036).
+                Action::GitFetch { repo } if visibility(repo) != Visibility::Public => {
+                    raise.push((Label::SensitiveRead, a.verb()))
+                }
                 Action::S3 { op, .. } => {
                     raise.extend(policy::s3::labels_for(op).into_iter().map(|l| (l, a.verb())));
                 }
