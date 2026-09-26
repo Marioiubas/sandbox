@@ -7,7 +7,7 @@ tags: [sandbox/architecture, component, topic/git, topic/policy, topic/ifc, cont
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-25
+updated: 2026-09-26
 summary: "Maps GitHub REST method+path or the GraphQL operation to verbs (pr.create, pr.merge, issue.comment, contents.write) so 'open a PR but never merge' is one rule, and reports repository visibility to set the sensitive_read label."
 related: ["[[GitHub App Installation Tokens]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[GitHub MCP Toxic Flow]]", "[[Threat Model Non-Goals]]", "[[Policy Learning Loop]]", "[[Core Trait Contracts]]", "[[Trifecta Session Labels]]", "[[GitLost GitHub Agentic Workflows Leak]]", "[[Git Smart-HTTP Adapter]]", "[[TLS Termination and Per-Session CA]]", "[[Policy Engine and Entity Builder]]", "[[Credential Injector and Issuers]]", "[[Hostname Canonicaliser]]", "[[SymCC CI Gates]]", "[[Credential Broker as Label Authority]]", "[[Lethal Trifecta]]", "[[Agents Rule of Two]]", "[[M1 Secrets Outside]]", "[[M3 CI Identity and MCP]]", "[[Risk Register]]", "[[MCP Guard]]"]
 sources: ["https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://thehackernews.com/2026/07/public-github-issue-could-trick-github.html", "https://williamzujkowski.github.io/posts/2026-07-02-agentic-ai-sandbox-secret-proxying-gap/", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/", "https://ai.meta.com/blog/practical-ai-agent-security/"]
@@ -147,7 +147,7 @@ A GraphQL parser crate and GitHub's OpenAPI description (neither selected in the
 
 - Schema extension for verb actions (see above) must be settled in [[Broker Cedar Schema]].
 - Which GitHub content counts as `untrusted_input` beyond public issues and PRs (discussions, commit messages, READMEs of dependencies).
-- Does GraphQL `Repository.issue(number:)` follow an issue transferred to another repository? If it does, a confined read of the old number returns the new repository's content ([[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]]).
+- ~~Does GraphQL `Repository.issue(number:)` follow an issue transferred to another repository?~~ Resolved 2026-09-26: no (`NOT_FOUND`); REST redirects instead. Checked on every `real-mcp` CI run ([[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]]).
 
 ## Sources
 

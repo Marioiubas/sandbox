@@ -230,6 +230,9 @@ jobs:
       - name: The real GitHub MCP server through the broker (M3 D3)
         if: env.HAS_TOKEN == 'true'
         run: TOKEN_FILE="$RUNNER_TEMP/broker/config/gh-mcp-token" sh tests/e2e/mcp_github_real/run.sh "$RUNNER_TEMP/work"
+      - name: GitHub GraphQL does not follow transferred issues (ADR-035)
+        if: env.HAS_TOKEN == 'true'
+        run: TOKEN_FILE="$RUNNER_TEMP/broker/config/gh-mcp-token" sh tests/e2e/mcp_github_real/transfer_check.sh
 
   latency:
     # M4 E3: measured and reported (step summary), not gated; thresholds in

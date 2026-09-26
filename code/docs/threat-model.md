@@ -77,10 +77,6 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
   every later write is treated as possibly driven by it; a session that never
   reads anything marked untrusted gets no such protection. Arbitrary web
   pages are not yet counted as untrusted input.
-- **GitHub GraphQL reads are labelled by the repository they name.** If
-  GitHub's GraphQL follows an issue transferred to another repository when
-  asked for its old number (unverified), such a read is labelled by the old
-  repository. Reads that reach beyond one repository count as sensitive.
 - **A login lives in the daemon.** `broker login` keeps the identity and
   refresh token in the daemon's memory; after a restart, sign in again.
 - **Pinned MCP servers are trusted code within their grants.** Pinning

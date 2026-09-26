@@ -286,3 +286,8 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found (real-server run, CI 36188997307):** with both labels live, a GraphQL read was refused by the Rule of Two because the forbid keyed on `http.write` and GraphQL queries are POSTs.
 - **Fixed:** HTTP actions carry `adapted`; `rule-of-two` skips adapted ones and the new `rule-of-two-verbs` covers every GitHub and S3 write verb ([[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]], item 11). Policy tests (SymCC gates with the solver required) and the GitHub, GraphQL, S3 and MCP conformance tests pass.
 
+### 2026-09-26: GraphQL and transferred issues (open question resolved)
+
+- **Checked (with the user's approval):** created `Marioiubas/sandboxpublictest#2`, transferred it to `Marioiubas/sandboxprivatetest#1`, then asked for the old number. GraphQL `issue(number: 2)` and `issueOrPullRequest(number: 2)` return `null` / `NOT_FOUND`, even for the owner's token; REST answers `301` to the new location. Confined GraphQL reads therefore cannot return a transferred issue under the old repository's label; the residual in [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] and the threat model is removed.
+- **Regression guard:** `code/tests/e2e/mcp_github_real/transfer_check.sh` runs in the `real-mcp` job on every push (fails if GitHub starts resolving the old number, or the fixture changes). The probe issue is closed and kept as the fixture.
+
