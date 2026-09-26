@@ -97,6 +97,13 @@ fn idna() {
     assert_eq!(ok("XN--BCHER-KVA.example"), "xn--bcher-kva.example");
     assert_eq!(rej("bücher.xn--bcher-kva.example".as_bytes()), Reject::MixedIdna);
     assert_eq!(rej(b"xn--zz.example"), Reject::IdnaRoundTrip);
+    // Found by the nightly fuzz run (2026-09-25): a soft hyphen in front of
+    // an A-label is dropped by the mapping, so the non-ASCII path produced
+    // a name the ASCII path rejects (canonicalisation was not a fixed point).
+    assert_eq!(rej("\u{ad}xn--xn--xn-n-nmm".as_bytes()), Reject::IdnaRoundTrip);
+    assert_eq!(rej(b"xn--xn--xn-n-nmm"), Reject::IdnaRoundTrip);
+    // A soft hyphen elsewhere is ignorable and maps away consistently.
+    assert_eq!(canon_host("ex\u{ad}ample.com".as_bytes()).unwrap().as_str(), "example.com");
     assert_eq!(rej("example\u{3002}com".as_bytes()), Reject::BadLabel);
     assert_eq!(rej(b"\xff\xfe.example"), Reject::BadLabel);
     // Idempotence on the converted form.

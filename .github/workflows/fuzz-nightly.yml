@@ -2,9 +2,11 @@ name: fuzz-nightly
 
 # M4 E1: at least 24 h of fuzzing per target, accumulated by nightly runs.
 # Each target keeps its corpus between runs (Actions cache), so every
-# night continues where the last one stopped. A crash fails the job and
-# its input is uploaded as an artifact for triage (then added to the
-# corpus with the fix).
+# night continues where the last one stopped, and a running total of
+# seconds fuzzed (`code/tests/fuzz/fuzzed/<target>`, cached with the
+# corpus) is printed in each run's summary as the E1 evidence. A crash
+# fails the job and its input is uploaded as an artifact for triage (then
+# fixed, with a regression test).
 
 on:
   schedule:
@@ -40,26 +42,40 @@ jobs:
         run: |
           rustup toolchain install nightly --profile minimal
           cargo +nightly install cargo-fuzz --locked
-      - name: Restore this target's corpus
+      - name: Restore this target's corpus and fuzzed-time total
         uses: actions/cache/restore@v4
         with:
-          path: code/tests/fuzz/corpus/${{ matrix.target }}
+          path: |
+            code/tests/fuzz/corpus/${{ matrix.target }}
+            code/tests/fuzz/fuzzed/${{ matrix.target }}
           key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
           restore-keys: fuzz-corpus-${{ matrix.target }}-
       - name: Fuzz
         env:
           SECONDS_PER_TARGET: ${{ github.event.inputs.seconds || '7200' }}
         run: |
-          mkdir -p "tests/fuzz/corpus/${{ matrix.target }}"
+          t="${{ matrix.target }}"
+          mkdir -p "tests/fuzz/corpus/$t" tests/fuzz/fuzzed
+          before=$(cat "tests/fuzz/fuzzed/$t" 2>/dev/null || echo 0)
+          # Build first so the total counts fuzzing time only.
+          cargo +nightly fuzz build --fuzz-dir tests/fuzz "$t"
           start=$(date +%s)
-          cargo +nightly fuzz run --fuzz-dir tests/fuzz "${{ matrix.target }}" -- \
-            -max_total_time="$SECONDS_PER_TARGET" -rss_limit_mb=2048 -print_final_stats=1
-          echo "${{ matrix.target }}: $(( $(date +%s) - start )) s fuzzed, corpus $(ls "tests/fuzz/corpus/${{ matrix.target }}" | wc -l) inputs" >> "$GITHUB_STEP_SUMMARY"
-      - name: Save the corpus
+          status=0
+          cargo +nightly fuzz run --fuzz-dir tests/fuzz "$t" -- \
+            -max_total_time="$SECONDS_PER_TARGET" -rss_limit_mb=2048 -print_final_stats=1 || status=$?
+          ran=$(( $(date +%s) - start ))
+          # Only a clean run counts toward the total.
+          if [ "$status" -eq 0 ]; then echo $(( before + ran )) > "tests/fuzz/fuzzed/$t"; fi
+          total=$(cat "tests/fuzz/fuzzed/$t" 2>/dev/null || echo 0)
+          echo "$t: ${ran} s this run (exit $status), $(( total / 3600 )) h $(( total % 3600 / 60 )) min in total, corpus $(ls "tests/fuzz/corpus/$t" | wc -l) inputs" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Save the corpus and fuzzed-time total
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: code/tests/fuzz/corpus/${{ matrix.target }}
+          path: |
+            code/tests/fuzz/corpus/${{ matrix.target }}
+            code/tests/fuzz/fuzzed/${{ matrix.target }}
           key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
       - name: Upload crashing inputs
         if: failure()

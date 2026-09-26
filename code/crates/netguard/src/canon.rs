@@ -225,7 +225,13 @@ fn unicode_name(raw: &[u8]) -> Result<String, Reject> {
     if ascii.len() > MAX_HOST {
         return Err(Reject::TooLong);
     }
-    Ok(ascii)
+    // The mapped name must be one the ASCII path accepts unchanged: mapping
+    // drops ignorable characters, so `\u{ad}xn--…` becomes an `xn--` label
+    // the check above never saw, and it must round-trip like any other.
+    match ascii_name(ascii.as_bytes()) {
+        Ok(a) if a == ascii => Ok(ascii),
+        _ => Err(Reject::IdnaRoundTrip),
+    }
 }
 
 fn to_ascii(bytes: &[u8]) -> Result<String, ()> {

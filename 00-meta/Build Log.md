@@ -296,3 +296,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Closed a Rule-of-Two gap** recorded in ADR-029: `git.fetch` raised no label, so public issue → `git clone` of a private repository → public PR passed the forbid. A fetch of a repository not known to be public now raises `sensitive_read`; visibility comes from one anonymous `info/refs?service=git-upload-pack` probe per repository per session on the same host ([[ADR-036 Git Fetch Visibility by Anonymous Probe]]).
 - **Tests:** `m3_git_labels::*` (public repository: no label, anonymous probe then brokered fetch; private repository: one label and one probe for two fetches); the fake forge now serves configured repositories anonymously.
 
+### 2026-09-26: first nightly fuzz crash (canon), fixed
+
+- **Found:** the first nightly run (2026-09-25, 2 h per target) failed in `canon`: `\u{ad}xn--xn--xn-n-nmm` canonicalised to `xn--xn--xn-n-nmm`, which the canonicaliser itself rejects (`idna_round_trip`), so canonicalisation was not a fixed point ([[I6 Single Canonicaliser]]). The failure went unnoticed for a day because nothing recorded the nightly result.
+- **Fixed:** the non-ASCII path's mapped name must be one the ASCII path accepts unchanged; regression test in `canon::tests::idna`; the crashing input replays clean and 10 minutes of `canon` fuzzing (13.9 M runs) found nothing further.
+- **E1 evidence:** the nightly job now keeps a cached running total of clean fuzzing seconds per target and prints it in each run's summary.
+
