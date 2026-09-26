@@ -62,6 +62,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] | GitHub GraphQL is parsed strictly and mapped to the REST verbs (mutation node IDs resolved by the broker; reads confined to one repository or counted as host-wide); host-wide `github.read` raises `sensitive_read` unless known public. |
 | [[ADR-036 Git Fetch Visibility by Anonymous Probe]] | A git fetch of a repository not known to be public raises `sensitive_read`; visibility comes from one anonymous `info/refs` probe per repository per session on the same host. |
 | [[ADR-037 Step-Up Approvals as Built]] | A request denied only for want of approval leaves a pending approval naming the exact actions; `broker approvals` shows its authority diff and label provenance, `broker approve` grants it once or for the session from the host; all logged. |
+| [[ADR-039 Model API Is Not a Rule-of-Two Sink]] | The agent's model provider API (`model_api = true` on a profile, user or org grant) is not a write destination for the Rule of Two, so the agent keeps its model once both labels are live; repository policy cannot set it. |
 
 ## Where the value is
 
@@ -129,6 +130,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] — GitHub GraphQL is parsed strictly and mapped to the REST verbs (mutation node IDs resolved by the broker; reads confined to one repository or counted as host-wide); host-wide `github.read` raises `sensitive_read` unless known public.
 - [[ADR-036 Git Fetch Visibility by Anonymous Probe]] — A git fetch of a repository not known to be public raises `sensitive_read`; visibility comes from one anonymous `info/refs` probe per repository per session on the same host.
 - [[ADR-037 Step-Up Approvals as Built]] — A request denied only for want of approval leaves a pending approval naming the exact actions; `broker approvals` shows its authority diff and label provenance, `broker approve` grants it once or for the session from the host; all logged.
+- [[ADR-039 Model API Is Not a Rule-of-Two Sink]] — The agent's model provider API (`model_api = true` on a profile, user or org grant) is not a write destination for the Rule of Two, so the agent keeps its model once both labels are live; repository policy cannot set it.
 
 ## How this section connects
 

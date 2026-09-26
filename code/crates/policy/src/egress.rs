@@ -28,6 +28,8 @@ pub struct Grant {
     pub l7: Option<Arc<L7Rules>>,
     /// Never terminate TLS for this host (certificate-pinning clients).
     pub passthrough: bool,
+    /// The agent's model provider API (ADR-039).
+    pub model_api: bool,
 }
 
 /// How an admitted connection is handled.
@@ -147,7 +149,19 @@ fn build_grants<'a>(
             {
                 return Err(CompileError::DuplicateCredential(c.id.clone()));
             }
-            grants.push(Grant { id, pattern, ports, allow_classes, pinned, l7, passthrough: e.passthrough });
+            if e.model_api && e.protocol.as_deref().is_some_and(|p| p != "http") {
+                return Err(CompileError::L7(format!("{id}: model_api applies to plain HTTP grants only")));
+            }
+            grants.push(Grant {
+                id,
+                pattern,
+                ports,
+                allow_classes,
+                pinned,
+                l7,
+                passthrough: e.passthrough,
+                model_api: e.model_api,
+            });
         }
     }
     Ok(grants)
@@ -212,6 +226,8 @@ impl EgressPolicy {
                 Some("passthrough")
             } else if !e.addrs.is_empty() {
                 Some("addrs")
+            } else if e.model_api {
+                Some("model_api")
             } else {
                 None
             };

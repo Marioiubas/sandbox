@@ -24,11 +24,15 @@ impl EgressPolicy {
         match a.clone() {
             Action::Http { method, path } => {
                 let host = adm.host.as_str().to_string();
+                // Every grant that admitted the host marks it as the agent's
+                // model API (ADR-039).
+                let model_api = !adm.grants.is_empty()
+                    && adm.grants.iter().all(|&i| self.grants.get(i).is_some_and(|g| g.model_api));
                 let ctx = move |m: Mode| {
                     json!({
                         "session": session_ctx(m), "port": port, "method": method,
                         "path": ent::path_record(&path), "path_str": path, "sni": host, "host_header": host,
-                        "body_bytes": 0, "dest_class": dest_class, "adapted": adapted,
+                        "body_bytes": 0, "dest_class": dest_class, "adapted": adapted, "model_api": model_api,
                     })
                 };
                 let name = cedar::compile::http_action(a.method().unwrap_or(""));

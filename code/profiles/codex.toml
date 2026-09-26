@@ -6,6 +6,9 @@ binaries = ["codex"]
 [[egress]]
 id = "openai-api"
 host = "api.openai.com"
+# The agent's own model API: not a write destination for the Rule of Two
+# (what the agent sends goes only to the user's own account; ADR-039).
+model_api = true
 # API-key mode, brokered (I1): the sandbox sees a sentinel in OPENAI_API_KEY.
 # ChatGPT-login mode keeps tokens in ~/.codex/auth.json, which the sandbox
 # cannot read; it is not brokered yet (ADR-020) and fails closed.

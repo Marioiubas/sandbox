@@ -308,3 +308,8 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Built:** [[ADR-037 Step-Up Approvals as Built]]: exact-action approval keys in the session policy; pending approvals only where approval would allow the request; `broker approvals` / `broker approve` on the host with the authority diff and label provenance from the audit log; once or for the session; `approval.requested`, `approval.granted` and `approvals_used` on record.
 - **Tests:** policy, registry and CLI unit tests; `m3_approvals` end to end (the agent's own approval attempt from inside the sandbox fails; the approved retry passes once; the next is held again).
 
+### 2026-09-26: the agent keeps its model API under the Rule of Two
+
+- **Found (label review):** with both labels live, `POST api.anthropic.com` (a terminated, brokered grant) was an `http.write` held by the Rule of Two: the agent lost its model mid-session, now common after ADR-036.
+- **Fixed:** `model_api = true` on profile/user/org grants (never repository policy; plain HTTP only) exempts that host from the Rule of Two ([[ADR-039 Model API Is Not a Rule-of-Two Sink]]); the shipped profiles mark their model APIs. Test: `the_model_api_is_not_a_write_destination_for_the_rule_of_two`.
+

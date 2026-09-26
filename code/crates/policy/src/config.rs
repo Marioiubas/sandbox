@@ -58,6 +58,11 @@ pub struct EgressEntry {
     /// therefore never attach a credential. Incompatible with L7 keys.
     #[serde(default)]
     pub passthrough: bool,
+    /// The agent's own model provider API (profile, user or org policy
+    /// only): requests to it are not writes for the Rule of Two, since what
+    /// the agent sends there goes only to the user's own account (ADR-039).
+    #[serde(default)]
+    pub model_api: bool,
 }
 
 impl EgressEntry {

@@ -18,6 +18,7 @@ when { context.session.now >= principal.expires_at };
 forbid (principal, action in [Broker::Action::"http.write", Broker::Action::"git.push"], resource)
 when {
   !(context has adapted && context.adapted) &&
+  !(context has model_api && context.model_api) &&
   context.session.trifecta.untrusted_input && context.session.trifecta.sensitive_read
 }
 unless { context.session.approved };

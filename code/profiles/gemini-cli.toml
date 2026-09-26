@@ -6,6 +6,9 @@ binaries = ["gemini"]
 [[egress]]
 id = "gemini-api"
 host = "generativelanguage.googleapis.com"
+# The agent's own model API: not a write destination for the Rule of Two
+# (what the agent sends goes only to the user's own account; ADR-039).
+model_api = true
 # API-key mode, brokered (I1): the sandbox sees a sentinel in GEMINI_API_KEY.
 # Google-login mode (~/.gemini/oauth_creds.json) is not brokered yet
 # (ADR-020) and fails closed.

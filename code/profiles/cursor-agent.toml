@@ -6,6 +6,9 @@ binaries = ["cursor-agent"]
 [[egress]]
 id = "cursor-api"
 host = "api2.cursor.sh"
+# The agent's own model API: not a write destination for the Rule of Two
+# (what the agent sends goes only to the user's own account; ADR-039).
+model_api = true
 
 [[egress]]
 id = "cursor-api-alt"

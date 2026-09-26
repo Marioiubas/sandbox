@@ -16,6 +16,9 @@ binaries = ["claude"]
 [[egress]]
 id = "anthropic-api"
 host = "api.anthropic.com"
+# The agent's own model API: not a write destination for the Rule of Two
+# (what the agent sends goes only to the user's own account; ADR-039).
+model_api = true
 credential = { kind = "static", id = "claude-oauth", ref = "keychain:Claude Code-credentials#claudeAiOauth.accessToken|file:~/.claude/.credentials.json#claudeAiOauth.accessToken", header = "authorization", scheme = "bearer", env = "CLAUDE_CODE_OAUTH_TOKEN" }
 
 [[egress]]

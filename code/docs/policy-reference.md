@@ -232,6 +232,10 @@ must be JSON (`Content-Type: application/json`) without a query string;
 documents the broker cannot read strictly are denied
 (`github_graphql_invalid`).
 
+The agent's own model API (marked `model_api = true` in the shipped agent
+profiles; only profile, user or org policy may set it) is not treated as a
+write destination, so the agent keeps working once both labels are set.
+
 **Approvals.** A write held back by the Rule of Two (or a merge, which
 always needs approval) is not lost: the denial names an approval ID, and on
 your machine (not inside the sandbox) you can review and grant it:

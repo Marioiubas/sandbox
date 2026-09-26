@@ -17,6 +17,9 @@ binaries = []
 [[egress]]
 id = "anthropic-api"
 host = "api.anthropic.com"
+# The agent's own model API: not a write destination for the Rule of Two
+# (what the agent sends goes only to the user's own account; ADR-039).
+model_api = true
 credential = { kind = "static", id = "anthropic-api-key", ref = "keychain:broker-anthropic-api-key|env:ANTHROPIC_API_KEY", header = "x-api-key", env = "ANTHROPIC_API_KEY" }
 
 [[egress]]

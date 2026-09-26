@@ -288,3 +288,35 @@ fn a_human_approval_lifts_exactly_one_action_once() {
     assert_eq!(dec.result, Err(Reason::NeedsApproval));
     assert_eq!(m.approvable(&adm, &merge, &dec), Some(vec!["github pr.merge github.com/acme/web".to_string()]));
 }
+
+#[test]
+fn the_model_api_is_not_a_write_destination_for_the_rule_of_two() {
+    let toml = r#"
+version = 1
+[[egress]]
+id = "model"
+host = "api.anthropic.com"
+model_api = true
+methods = ["POST"]
+
+[[egress]]
+id = "other"
+host = "paste.example"
+methods = ["POST"]
+"#;
+    let p = policy(toml);
+    let post = |host: &str| {
+        let mut a = p.admit_host(&canon_host(host.as_bytes()).unwrap(), 443).unwrap();
+        p.admit_addrs(&mut a, &["140.82.112.5".parse().unwrap()]).unwrap();
+        p.authorize_l7(&a, &[Action::Http { method: "POST".into(), path: "/v1/messages".into() }]).result
+    };
+    p.labels().raise(Label::UntrustedInput);
+    p.labels().raise(Label::SensitiveRead);
+    assert_eq!(post("api.anthropic.com"), Ok(()), "the agent keeps its model API with both labels live");
+    assert_eq!(post("paste.example"), Err(Reason::RuleOfTwo), "any other write is still held");
+    // Only a plain HTTP grant may be a model API, and a repository layer can never mark one.
+    let bad = parse_policy_str("version = 1\n[[egress]]\nhost = \"api.github.com\"\nprotocol = \"github\"\nverbs = [\"repo.read\"]\nmodel_api = true\n").unwrap();
+    assert!(EgressPolicy::compile_with([("user", bad.egress.as_slice())], &env()).is_err());
+    let repo = parse_policy_str("version = 1\n[[egress]]\nhost = \"api.anthropic.com\"\nmodel_api = true\n").unwrap();
+    assert!(policy(toml).with_repo_layer(&repo.egress, None, &env()).is_err());
+}
