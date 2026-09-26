@@ -63,6 +63,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-036 Git Fetch Visibility by Anonymous Probe]] | A git fetch of a repository not known to be public raises `sensitive_read`; visibility comes from one anonymous `info/refs` probe per repository per session on the same host. |
 | [[ADR-037 Step-Up Approvals as Built]] | A request denied only for want of approval leaves a pending approval naming the exact actions; `broker approvals` shows its authority diff and label provenance, `broker approve` grants it once or for the session from the host; all logged. |
 | [[ADR-039 Model API Is Not a Rule-of-Two Sink]] | The agent's model provider API (`model_api = true` on a profile, user or org grant) is not a write destination for the Rule of Two, so the agent keeps its model once both labels are live; repository policy cannot set it. |
+| [[ADR-040 Label Sources Beyond the Adapters]] | Maintainer-only GitHub routes are private even on public repositories; more attacker-writable routes; credentialed reads without an adapter and intranet hosts (or `sensitive = true` grants) are sensitive reads; push advertisements and exact-path git probes; pull-request refs fetched over git are untrusted input. |
 
 ## Where the value is
 
@@ -131,6 +132,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-036 Git Fetch Visibility by Anonymous Probe]] — A git fetch of a repository not known to be public raises `sensitive_read`; visibility comes from one anonymous `info/refs` probe per repository per session on the same host.
 - [[ADR-037 Step-Up Approvals as Built]] — A request denied only for want of approval leaves a pending approval naming the exact actions; `broker approvals` shows its authority diff and label provenance, `broker approve` grants it once or for the session from the host; all logged.
 - [[ADR-039 Model API Is Not a Rule-of-Two Sink]] — The agent's model provider API (`model_api = true` on a profile, user or org grant) is not a write destination for the Rule of Two, so the agent keeps its model once both labels are live; repository policy cannot set it.
+- [[ADR-040 Label Sources Beyond the Adapters]] — Maintainer-only GitHub routes are private even on public repositories; more attacker-writable routes; credentialed reads without an adapter and intranet hosts (or `sensitive = true` grants) are sensitive reads; push advertisements and exact-path git probes; pull-request refs fetched over git are untrusted input.
 
 ## How this section connects
 

@@ -51,6 +51,9 @@ pub enum Action {
     },
     GitFetch {
         repo: RepoId,
+        /// The fetch may read a pull request's head (`refs/pull/*`): text
+        /// anyone can write on a public repository (ADR-040).
+        pull_refs: bool,
     },
     /// `info/refs?service=git-receive-pack`: the ref advertisement before a push.
     GitPushAdvertise {
@@ -94,7 +97,9 @@ impl Action {
     pub fn to_json(&self) -> serde_json::Value {
         match self {
             Action::Http { method, path } => serde_json::json!({ "kind": "http", "method": method, "path": path }),
-            Action::GitFetch { repo } => serde_json::json!({ "kind": "git.fetch", "repo": repo.to_string() }),
+            Action::GitFetch { repo, pull_refs } => {
+                serde_json::json!({ "kind": "git.fetch", "repo": repo.to_string(), "pull_refs": pull_refs })
+            }
             Action::GitPushAdvertise { repo } => {
                 serde_json::json!({ "kind": "git.advertise", "repo": repo.to_string() })
             }
@@ -126,7 +131,7 @@ impl Action {
         let repo = || s("repo").and_then(|r| RepoId::parse(&r));
         Some(match v.get("kind")?.as_str()? {
             "http" => Action::Http { method: s("method")?, path: s("path")? },
-            "git.fetch" => Action::GitFetch { repo: repo()? },
+            "git.fetch" => Action::GitFetch { repo: repo()?, pull_refs: false },
             "git.advertise" => Action::GitPushAdvertise { repo: repo()? },
             "github" => Action::GitHub {
                 verb: s("verb").filter(|v| crate::github::is_verb(v))?,
@@ -160,7 +165,7 @@ impl Action {
     pub fn verb(&self) -> String {
         match self {
             Action::Http { method, path } => format!("http {method} {path}"),
-            Action::GitFetch { repo } => format!("git.fetch {repo}"),
+            Action::GitFetch { repo, .. } => format!("git.fetch {repo}"),
             Action::GitPushAdvertise { repo } => format!("git.push-advertise {repo}"),
             Action::GitPush { repo, refname, force, update } => {
                 format!("git.push {repo} {refname} force={force} ({update})")
@@ -349,7 +354,7 @@ impl L7Rules {
             (Action::GitHub { verb, repo, .. }, Protocol::GitHub) => {
                 crate::github::rule_allows(&self.verbs, &self.repos, verb, repo.as_ref())
             }
-            (Action::GitFetch { repo }, Protocol::Git) => {
+            (Action::GitFetch { repo, .. }, Protocol::Git) => {
                 if self.fetch.iter().any(|p| p.matches(repo)) {
                     Ok(())
                 } else {

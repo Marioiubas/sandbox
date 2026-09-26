@@ -326,6 +326,20 @@ where
     }
 
     mark("hello_us");
+    // Intranet hosts and grants marked sensitive are sensitive reads,
+    // whether spliced or terminated (ADR-040).
+    if let Some(cause) = ctx.policy.admission_sensitive(&adm)
+        && ctx.policy.labels().raise(policy::github::Label::SensitiveRead)
+    {
+        let ev = ctx
+            .event(EventKind::SessionLabel, &rid)
+            .dest(dest.clone())
+            .detail("label", "sensitive_read")
+            .detail("cause", cause);
+        if let Err(e) = ctx.recorder.append(&ev) {
+            eprintln!("brokerd: audit append failed for label: {e:#}");
+        }
+    }
     let timing = serde_json::Value::Object(timing);
     // 9a. Hosts with L7 rules or credentials are terminated, never spliced.
     if ctx.policy.path_choice(&adm) == PathChoice::L7 {

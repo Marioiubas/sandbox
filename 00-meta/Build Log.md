@@ -319,3 +319,8 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Hardened:** requests carrying `X-HTTP-Method-Override`, `X-HTTP-Method` or `X-Method-Override` are refused on terminated hosts (`method_override`): frameworks such as Rack's `MethodOverride` run the named method instead, so an allowed `POST` could become a `DELETE` upstream (`l7::head::check`, test `head::tests::paths_and_upgrades`).
 - **Review found no gap** in the verb-level Rule of Two (ADR-035 item 11).
 
+### 2026-09-26: label gaps found by review, closed
+
+- **Found (review agent; 8 gaps, 4 high, each with a failing test):** the MCP server's labels never reached the agent's session (in progress separately); maintainer-only GitHub data under public repositories; attacker text outside issues and pulls; pull-request heads fetched over git; credentialed reads on generic hosts; intranet reads; push advertisements; a probe that asked about a normalised path. Plus the model-API outage (ADR-039).
+- **Closed:** [[ADR-040 Label Sources Beyond the Adapters]]; new grant key `sensitive`. Tests: `m3_label_gaps_github::*`, `m3_label_gaps_git::*`, unit tests in `l7::github`, `l7::git`, `policy::egress::sensitivity`. Full suite: 344 tests pass (8 invariant tests timed out once under load from parallel agent builds and passed on rerun).
+

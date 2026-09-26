@@ -60,7 +60,7 @@ fn git_push_scoping() {
         (push("github.com/acme/web", "refs/heads/agent/x", true), Reason::GitForcePush),
         (push("github.com/acme/web", "refs/tags/agent/x", false), Reason::GitRefNotAllowed),
         (Action::Http { method: "GET".into(), path: "/".into() }, Reason::L7NoRuleMatched),
-        (Action::GitFetch { repo: repo("github.com/acme/other") }, Reason::GitRepoNotAllowed),
+        (Action::GitFetch { repo: repo("github.com/acme/other"), pull_refs: false }, Reason::GitRepoNotAllowed),
     ];
     for (a, want) in cases {
         let d = p.authorize_l7(&adm, std::slice::from_ref(&a));
@@ -77,7 +77,11 @@ fn git_push_scoping() {
     );
     assert_eq!(d.result, Err(Reason::GitRefNotAllowed));
     assert!(d.binding.is_none());
-    assert!(p.authorize_l7(&adm, &[Action::GitFetch { repo: repo("github.com/acme/web") }]).result.is_ok());
+    assert!(
+        p.authorize_l7(&adm, &[Action::GitFetch { repo: repo("github.com/acme/web"), pull_refs: false }])
+            .result
+            .is_ok()
+    );
     assert!(p.authorize_l7(&adm, &[Action::GitPushAdvertise { repo: repo("github.com/acme/web") }]).result.is_ok());
     assert_eq!(p.authorize_l7(&adm, &[]).result, Err(Reason::L7NoRuleMatched), "nothing classified: deny");
 }

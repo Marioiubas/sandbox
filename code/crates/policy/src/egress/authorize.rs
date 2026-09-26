@@ -38,7 +38,7 @@ impl EgressPolicy {
                 let name = cedar::compile::http_action(a.method().unwrap_or(""));
                 (name, ent::host_uid(&adm.host), ents, Box::new(ctx))
             }
-            Action::GitFetch { repo } | Action::GitPushAdvertise { repo } | Action::GitPush { repo, .. } => {
+            Action::GitFetch { repo, .. } | Action::GitPushAdvertise { repo } | Action::GitPush { repo, .. } => {
                 let (name, refname, force) = match a {
                     Action::GitFetch { .. } => ("git.fetch", String::new(), false),
                     Action::GitPushAdvertise { .. } => ("git.advertise", String::new(), false),

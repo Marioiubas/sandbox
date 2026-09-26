@@ -30,6 +30,8 @@ pub struct Grant {
     pub passthrough: bool,
     /// The agent's model provider API (ADR-039).
     pub model_api: bool,
+    /// Declared sensitivity of what the grant reads (ADR-040).
+    pub sensitive: Option<bool>,
 }
 
 /// How an admitted connection is handled.
@@ -161,6 +163,7 @@ fn build_grants<'a>(
                 l7,
                 passthrough: e.passthrough,
                 model_api: e.model_api,
+                sensitive: e.sensitive,
             });
         }
     }
@@ -228,6 +231,8 @@ impl EgressPolicy {
                 Some("addrs")
             } else if e.model_api {
                 Some("model_api")
+            } else if e.sensitive.is_some() {
+                Some("sensitive")
             } else {
                 None
             };
@@ -442,5 +447,6 @@ impl EgressPolicy {
 
 mod authorize;
 mod mcp;
+mod sensitivity;
 #[cfg(test)]
 mod tests;

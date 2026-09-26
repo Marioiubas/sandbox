@@ -48,8 +48,40 @@ pub fn route(host: &CanonicalHost, port: u16, method: &str, path: &str, query: O
 }
 
 impl Route {
+    /// Receive-pack bodies carry the pushed refs and pack; upload-pack
+    /// bodies say which refs a fetch asks for (`refs/pull/*`).
     pub fn needs_body(&self) -> bool {
-        matches!(self, Route::Rpc { service: Service::ReceivePack, .. })
+        matches!(self, Route::Rpc { .. })
+    }
+}
+
+/// Whether an upload-pack request may read a pull request's head. Protocol
+/// v2 names refs: `ref-prefix` (ls-refs) and `want-ref` (fetch) under
+/// `refs/pull/`. A v0 request wants bare object IDs the broker cannot
+/// place, so it counts as possibly reading one (fail closed). Unreadable
+/// bodies count too.
+pub fn upload_pack_reads_pull_refs(body: &[u8]) -> bool {
+    let mut rest = body;
+    let mut first = true;
+    loop {
+        match pktline::read(rest) {
+            Ok((pktline::Pkt::Data(d), n)) => {
+                let line = d.strip_suffix(b"\n").unwrap_or(d);
+                if first && !line.starts_with(b"command=") {
+                    return true;
+                }
+                first = false;
+                if line.starts_with(b"ref-prefix refs/pull/") || line.starts_with(b"want-ref refs/pull/") {
+                    return true;
+                }
+                rest = &rest[n..];
+            }
+            Ok((_, n)) if n > 0 && n <= rest.len() => {
+                first = false;
+                rest = &rest[n..];
+            }
+            _ => return first || !rest.is_empty(),
+        }
     }
 }
 
@@ -66,8 +98,12 @@ pub struct PushInfo {
 /// required for receive-pack.
 pub fn actions(route: &Route, body: Option<&[u8]>) -> Result<(Vec<Action>, Option<PushInfo>), Reason> {
     match route {
-        Route::InfoRefs { repo, service: Service::UploadPack } | Route::Rpc { repo, service: Service::UploadPack } => {
-            Ok((vec![Action::GitFetch { repo: repo.clone() }], None))
+        Route::InfoRefs { repo, service: Service::UploadPack } => {
+            Ok((vec![Action::GitFetch { repo: repo.clone(), pull_refs: false }], None))
+        }
+        Route::Rpc { repo, service: Service::UploadPack } => {
+            let pull_refs = body.is_none_or(upload_pack_reads_pull_refs);
+            Ok((vec![Action::GitFetch { repo: repo.clone(), pull_refs }], None))
         }
         Route::InfoRefs { repo, service: Service::ReceivePack } => {
             Ok((vec![Action::GitPushAdvertise { repo: repo.clone() }], None))
@@ -175,5 +211,51 @@ mod tests {
         assert!(info.unwrap().pack_note.is_some());
         assert_eq!(actions(&r, Some(b"0000")).unwrap_err(), Reason::GitParseError);
         assert_eq!(actions(&r, None).unwrap_err(), Reason::GitParseError);
+    }
+
+    fn pkts(lines: &[&str]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for l in lines {
+            match *l {
+                "0000" => pktline::flush(&mut out),
+                "0001" => out.extend_from_slice(b"0001"),
+                l => pktline::write(&mut out, format!("{l}\n").as_bytes()),
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn pull_request_refs_are_recognised_in_upload_pack_requests() {
+        // Protocol v2 (git's HTTP default): refs are named.
+        let heads =
+            pkts(&["command=ls-refs", "0001", "peel", "ref-prefix refs/heads/", "ref-prefix refs/tags/", "0000"]);
+        assert!(!upload_pack_reads_pull_refs(&heads));
+        let pr = pkts(&["command=ls-refs", "0001", "ref-prefix refs/pull/1/head", "0000"]);
+        assert!(upload_pack_reads_pull_refs(&pr), "gh pr checkout lists refs/pull/N/head");
+        let want_ref = pkts(&["command=fetch", "0001", "want-ref refs/pull/7/merge", "done", "0000"]);
+        assert!(upload_pack_reads_pull_refs(&want_ref));
+        let fetch = pkts(&["command=fetch", "0001", "want 4f2c1a9e4f2c1a9e4f2c1a9e4f2c1a9e4f2c1a9e", "done", "0000"]);
+        assert!(!upload_pack_reads_pull_refs(&fetch));
+        // Protocol v0 wants bare object IDs: not placeable, so possibly a PR head.
+        let v0 = pkts(&["want 4f2c1a9e4f2c1a9e4f2c1a9e4f2c1a9e4f2c1a9e multi_ack side-band-64k", "0000", "done"]);
+        assert!(upload_pack_reads_pull_refs(&v0));
+        // Unreadable or empty: fail closed.
+        assert!(upload_pack_reads_pull_refs(b""));
+        assert!(upload_pack_reads_pull_refs(b"zzzz"));
+        let mut trailing = heads.clone();
+        trailing.extend_from_slice(b"00");
+        assert!(upload_pack_reads_pull_refs(&trailing));
+        let r = Route::Rpc { repo: RepoId::parse("github.com/acme/web").unwrap(), service: Service::UploadPack };
+        assert!(matches!(actions(&r, Some(&pr)).unwrap().0[..], [Action::GitFetch { pull_refs: true, .. }]));
+        assert!(matches!(actions(&r, Some(&heads)).unwrap().0[..], [Action::GitFetch { pull_refs: false, .. }]));
+    }
+
+    proptest::proptest! {
+        /// Any body: no panic.
+        #[test]
+        fn upload_pack_reader_is_total(b in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..200)) {
+            let _ = upload_pack_reads_pull_refs(&b);
+        }
     }
 }

@@ -331,6 +331,9 @@ impl Conn {
         let actions_json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
         let shadow = self.shadow_note(&actions, true);
         let high_risk = dec.binding.as_ref().is_some_and(|b| b.credential().high_risk);
+        // A brokered credential on a host no adapter judges reads data that
+        // is not public, unless the grant says so (ADR-040).
+        let credentialed = dec.binding.is_some() && self.ctx.policy.credentialed_reads_sensitive(&self.adm);
 
         let authorized_us = us(t0);
         // Write-ahead audit of the allow (I9): no row, no request.
@@ -371,8 +374,8 @@ impl Conn {
         self.ctx.policy.approvals().consume(&approved);
         let logged_us = us(t0);
         self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
-        self.resolve_git_visibility(&actions).await;
-        self.raise_labels(&rid, &actions, high_risk);
+        let git_visibility = self.resolve_git_visibility(&actions, path.path()).await;
+        self.raise_labels(&rid, &actions, high_risk, credentialed, git_visibility);
 
         // 5b. Strip client credentials and hop-by-hop headers; attach ours.
         let query = creds::strip(&mut parts.headers, path.query());

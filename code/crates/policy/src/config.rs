@@ -63,6 +63,12 @@ pub struct EgressEntry {
     /// the agent sends there goes only to the user's own account (ADR-039).
     #[serde(default)]
     pub model_api: bool,
+    /// Whether what this grant reads is sensitive data (raises
+    /// `sensitive_read`): `true` for any host whose data is not public,
+    /// `false` for a host whose data is public though it is reached on an
+    /// intranet address or with a credential. Absent: intranet addresses and
+    /// credentialed reads on hosts without an adapter are sensitive (ADR-040).
+    pub sensitive: Option<bool>,
 }
 
 impl EgressEntry {

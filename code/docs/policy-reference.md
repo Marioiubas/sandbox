@@ -232,6 +232,17 @@ must be JSON (`Content-Type: application/json`) without a query string;
 documents the broker cannot read strictly are denied
 (`github_graphql_invalid`).
 
+Reads the broker cannot see into count as sensitive too: anything read
+with a brokered credential on a host without an adapter, and anything on an
+intranet address. Say what a grant's data is when the default is wrong:
+
+```toml
+[[egress]]
+host = "wiki.corp.example"
+allow_addr_classes = ["private"]
+sensitive = true        # or false for public data on an intranet mirror
+```
+
 The agent's own model API (marked `model_api = true` in the shipped agent
 profiles; only profile, user or org policy may set it) is not treated as a
 write destination, so the agent keeps working once both labels are set.

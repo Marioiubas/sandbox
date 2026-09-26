@@ -4555,5 +4555,29 @@
       "ADR-039"
     ],
     "sources": []
+  },
+  {
+    "file": "95-decisions/ADR-040 Label Sources Beyond the Adapters.md",
+    "title": "ADR-040 Label Sources Beyond the Adapters",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Closes seven label gaps proved by a review: maintainer-only GitHub routes, more attacker-writable routes, credentialed reads without an adapter, intranet hosts and the sensitive grant key, push advertisements, exact-path git probes, and pull-request refs over git.",
+    "links_to": [
+      "Trifecta Session Labels",
+      "ADR-029 GitHub API Adapter and Session Labels as Built",
+      "ADR-036 Git Fetch Visibility by Anonymous Probe",
+      "ADR-039 Model API Is Not a Rule-of-Two Sink",
+      "GitHub API Adapter",
+      "Git Smart-HTTP Adapter",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-26) from a label-gap review and the m3_label_gaps tests.",
+    "aliases": [
+      "ADR-040"
+    ],
+    "sources": [
+      "https://docs.github.com/en/rest",
+      "https://git-scm.com/docs/protocol-v2"
+    ]
   }
 ]

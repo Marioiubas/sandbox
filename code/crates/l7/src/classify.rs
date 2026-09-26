@@ -52,7 +52,7 @@ pub fn plan(
         if let Some(g) = crate::github::graphql_endpoint(host, method, path, query) {
             return Plan::GitHubGraphql(http, g);
         }
-        return Plan::GitHub(http, crate::github::route(host, method, path));
+        return Plan::GitHub(http, crate::github::route(host, method, path, query));
     }
     if protocols.contains(&Protocol::S3) {
         return Plan::S3(http, crate::s3::route(host, method, path, query));
@@ -74,7 +74,14 @@ pub fn actions(plan: &Plan, body: Option<&[u8]>) -> Result<(Vec<Action>, Option<
             let verb = Action::GitHub {
                 verb: r.verb.to_string(),
                 repo: r.repo.clone(),
-                visibility: if r.public { Visibility::Public } else { Visibility::Unknown },
+                // Restricted data is private whatever the repository is.
+                visibility: if r.restricted {
+                    Visibility::Private
+                } else if r.public {
+                    Visibility::Public
+                } else {
+                    Visibility::Unknown
+                },
                 bodies: r.bodies,
                 method,
                 path,

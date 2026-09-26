@@ -135,30 +135,32 @@ impl Conn {
         Some((ty.to_string(), RepoId::new(&authority, 443, owner, name)?, vis))
     }
 
-    /// Git fetches: learn whether each fetched repository is public from
-    /// an anonymous `info/refs` probe on the same host, once per session. A
-    /// repository anyone can fetch is public; any other answer (401, 404,
-    /// a redirect, a failure) leaves it not known to be public, which
-    /// raises `sensitive_read`.
-    pub(super) async fn resolve_git_visibility(&self, actions: &[Action]) {
-        let repos: Vec<RepoId> = {
-            let cache = self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner());
-            actions
-                .iter()
-                .filter_map(|a| match a {
-                    Action::GitFetch { repo } if !cache.contains_key(&repo.to_string()) => Some(repo.clone()),
-                    _ => None,
-                })
-                .collect()
-        };
-        for r in repos {
-            let v = tokio::time::timeout(Duration::from_secs(10), self.git_probe(&r)).await.unwrap_or_default();
-            self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner()).insert(r.to_string(), v);
+    /// Git reads (fetches and push advertisements): whether the repository
+    /// the client addressed is public, from an anonymous `info/refs` probe
+    /// of exactly that path on the same host, once per path per session (a
+    /// server may tell `Acme/x` from `acme/x`, so never a normalised name).
+    /// A repository anyone can fetch is public; any other answer (401, 404,
+    /// a redirect, a failure) leaves it not known to be public. `None` when
+    /// the request reads no repository over git.
+    pub(super) async fn resolve_git_visibility(&self, actions: &[Action], path: &str) -> Option<Visibility> {
+        if !actions.iter().any(|a| matches!(a, Action::GitFetch { .. } | Action::GitPushAdvertise { .. })) {
+            return None;
         }
+        let prefix = ["/info/refs", "/git-upload-pack", "/git-receive-pack"]
+            .iter()
+            .find_map(|s| path.strip_suffix(s))
+            .unwrap_or(path);
+        let key = format!("git-path {}{prefix}", self.authority());
+        if let Some(v) = self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner()).get(&key) {
+            return Some(*v);
+        }
+        let v = tokio::time::timeout(Duration::from_secs(10), self.git_probe(prefix)).await.unwrap_or_default();
+        self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner()).insert(key, v);
+        Some(v)
     }
 
-    async fn git_probe(&self, r: &RepoId) -> Visibility {
-        let path = format!("/{}/{}.git/info/refs?service=git-upload-pack", r.owner(), r.name());
+    async fn git_probe(&self, prefix: &str) -> Visibility {
+        let path = format!("{prefix}/info/refs?service=git-upload-pack");
         let Ok(mut req) = Request::get(path.as_str()).body(Full::new(Bytes::new())) else { return Visibility::Unknown };
         req.headers_mut().insert(http::header::USER_AGENT, HeaderValue::from_static("git/2 (broker visibility probe)"));
         let Some(resp) = self.upstream_send(req, None).await else { return Visibility::Unknown };
@@ -218,7 +220,11 @@ impl Conn {
     pub(super) fn fill_visibility(&self, actions: &mut [Action]) {
         let cache = self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner());
         for a in actions {
-            if let Action::GitHub { repo: Some(r), visibility, .. } = a {
+            // `Private` from the classifier marks restricted data (not public
+            // even on a public repository): it stays private.
+            if let Action::GitHub { repo: Some(r), visibility, .. } = a
+                && *visibility != Visibility::Private
+            {
                 *visibility = cache.get(&r.to_string()).copied().unwrap_or(Visibility::Unknown);
             }
         }
@@ -265,15 +271,18 @@ impl Conn {
 
     /// Raise the labels an allowed request implies, before it is forwarded,
     /// and record each label that this request raised.
-    pub(super) fn raise_labels(&self, rid: &RequestId, actions: &[Action], high_risk_credential: bool) {
+    pub(super) fn raise_labels(
+        &self,
+        rid: &RequestId,
+        actions: &[Action],
+        high_risk_credential: bool,
+        credentialed: bool,
+        git_visibility: Option<Visibility>,
+    ) {
         let mut raise: Vec<(Label, String)> = Vec::new();
         // On GitHub and S3 hosts the verb or operation says what a request
         // does (a GraphQL query is a POST that writes nothing).
         let adapted = actions.iter().any(|a| matches!(a, Action::GitHub { .. } | Action::S3 { .. }));
-        let visibility = |r: &RepoId| {
-            let cache = self.l7.visibility.lock().unwrap_or_else(|p| p.into_inner());
-            cache.get(&r.to_string()).copied().unwrap_or_default()
-        };
         for a in actions {
             match a {
                 Action::GitHub { verb, visibility, bodies, .. } => {
@@ -283,10 +292,18 @@ impl Conn {
                     raise.push((Label::ExternalEffect, a.verb()))
                 }
                 Action::GitPush { .. } => raise.push((Label::ExternalEffect, a.verb())),
-                // Fetching a repository not known to be public is a
-                // sensitive read (ADR-036).
-                Action::GitFetch { repo } if visibility(repo) != Visibility::Public => {
-                    raise.push((Label::SensitiveRead, a.verb()))
+                // Reading a repository not known to be public over git (a
+                // fetch, or the refs a push is shown) is a sensitive read
+                // (ADR-036); a pull request's head from one that is not
+                // private is untrusted input (ADR-040).
+                Action::GitFetch { .. } | Action::GitPushAdvertise { .. } => {
+                    let v = git_visibility.unwrap_or_default();
+                    if v != Visibility::Public {
+                        raise.push((Label::SensitiveRead, a.verb()));
+                    }
+                    if matches!(a, Action::GitFetch { pull_refs: true, .. }) && v != Visibility::Private {
+                        raise.push((Label::UntrustedInput, format!("{} (pull request refs)", a.verb())));
+                    }
                 }
                 Action::S3 { op, .. } => {
                     raise.extend(policy::s3::labels_for(op).into_iter().map(|l| (l, a.verb())));
@@ -296,6 +313,16 @@ impl Conn {
         }
         if high_risk_credential {
             raise.push((Label::SensitiveRead, "a high-risk credential".into()));
+        }
+        // Adapters that judge what a request reads (GitHub, S3, git) decide
+        // its labels themselves; a credential alone decides for the rest.
+        let judged = adapted
+            || actions.iter().any(|a| {
+                matches!(a, Action::GitFetch { .. } | Action::GitPushAdvertise { .. } | Action::GitPush { .. })
+            });
+        if credentialed && !judged {
+            let cause = actions.first().map(|a| a.verb()).unwrap_or_default();
+            raise.push((Label::SensitiveRead, format!("a credentialed read on {}: {cause}", self.host)));
         }
         let labels = self.ctx.policy.labels();
         for (l, cause) in raise {

@@ -349,7 +349,7 @@ fn arb_action() -> impl Strategy<Value = (bool, Action)> {
             (
                 false,
                 match kind {
-                    0 => Action::GitFetch { repo },
+                    0 => Action::GitFetch { repo, pull_refs: false },
                     1 => Action::GitPushAdvertise { repo },
                     _ => Action::GitPush { repo, refname: refname.into(), force, update: "t" },
                 },

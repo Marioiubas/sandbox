@@ -29,15 +29,75 @@ use policy::RepoId;
 pub const PUBLIC_READS: &[&str] =
     &["rate_limit", "meta", "zen", "octocat", "emojis", "versions", "licenses", "gitignore", "codes_of_conduct"];
 
+/// Repository sub-routes whose data is public on a public repository
+/// (first path segment after `/repos/{o}/{r}`; `""` is the repository
+/// itself). Everything else (secret-scanning and code-scanning alerts,
+/// draft advisories, Dependabot, hooks, keys, invitations, collaborators,
+/// traffic, environments, Actions secrets and variables, …) returns
+/// maintainer-only data even on a public repository.
+pub const PUBLIC_ON_PUBLIC: &[&str] = &[
+    "",
+    "contents",
+    "git",
+    "commits",
+    "branches",
+    "tags",
+    "releases",
+    "readme",
+    "languages",
+    "license",
+    "topics",
+    "contributors",
+    "stargazers",
+    "subscribers",
+    "forks",
+    "issues",
+    "pulls",
+    "labels",
+    "milestones",
+    "comments",
+    "events",
+    "compare",
+    "check-runs",
+    "check-suites",
+    "statuses",
+    "deployments",
+    "tarball",
+    "zipball",
+    "commits-activity",
+];
+
+/// Actions sub-routes public on a public repository (`actions/<this>`).
+const PUBLIC_ACTIONS: &[&str] = &["runs", "workflows", "jobs", "artifacts"];
+
+/// Repository sub-routes carrying text anyone can write on a public
+/// repository: issues, pull requests, comments, reviews, events.
+const BODY_ROUTES: &[&str] = &["issues", "pulls", "comments", "events"];
+
 /// A mapped request.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Route {
     pub verb: &'static str,
     pub repo: Option<RepoId>,
-    /// The response carries issue, PR or comment bodies, or search results.
+    /// The response carries attacker-writable text: issue, PR or comment
+    /// bodies, events, search results, or files at a pull request's ref.
     pub bodies: bool,
     /// A host-wide read known to return only public data.
     pub public: bool,
+    /// A repository read of data that is not public even when the
+    /// repository is (`PUBLIC_ON_PUBLIC` does not list the route).
+    pub restricted: bool,
+}
+
+/// A `ref` query naming a pull request's ref or a commit by hash reads
+/// files a pull request's author wrote, not the maintainers' branches.
+fn ref_is_untrusted(query: Option<&str>) -> bool {
+    query.into_iter().flat_map(|q| q.split('&')).filter_map(|kv| kv.strip_prefix("ref=")).any(|v| {
+        let v = v.to_ascii_lowercase();
+        v.starts_with("refs/pull/")
+            || v.starts_with("refs%2fpull%2f")
+            || (v.len() >= 7 && v.len() <= 64 && v.bytes().all(|b| b.is_ascii_hexdigit()))
+    })
 }
 
 /// The repository host for a GitHub API host, and the API path segments
@@ -99,18 +159,27 @@ fn number(s: &str) -> bool {
 }
 
 /// Map a request on a GitHub API host (`api.github.com`, or a GitHub
-/// Enterprise host under `/api/v3`) to its verb. `path` is canonical.
-pub fn route(host: &CanonicalHost, method: &str, path: &str) -> Result<Route, Reason> {
+/// Enterprise host under `/api/v3`) to its verb. `path` is canonical;
+/// `query` is the raw query string (read for a `ref` only).
+pub fn route(host: &CanonicalHost, method: &str, path: &str, query: Option<&str>) -> Result<Route, Reason> {
     let all: Vec<&str> = path.split('/').skip(1).filter(|s| !s.is_empty()).collect();
     let (authority, segs) = split(host, &all).ok_or(Reason::GithubRouteUnknown)?;
     let read = matches!(method, "GET" | "HEAD");
     let repo = |o: &str, r: &str| RepoId::new(&authority, 443, o, r).ok_or(Reason::GithubRouteUnknown);
-    let r = |verb, repo, bodies| Ok(Route { verb, repo, bodies, public: false });
+    let r = |verb, repo, bodies| Ok(Route { verb, repo, bodies, public: false, restricted: false });
     match segs {
         ["repos", o, n, rest @ ..] => {
             let repo = Some(repo(o, n)?);
             match (method, rest) {
-                _ if read => r("repo.read", repo, matches!(rest.first(), Some(&"issues") | Some(&"pulls"))),
+                _ if read => {
+                    let first = rest.first().copied().unwrap_or("");
+                    let public = match rest {
+                        ["actions", sub, ..] => PUBLIC_ACTIONS.contains(sub),
+                        _ => PUBLIC_ON_PUBLIC.contains(&first),
+                    };
+                    let bodies = BODY_ROUTES.contains(&first) || ref_is_untrusted(query);
+                    Ok(Route { verb: "repo.read", repo, bodies, public: false, restricted: !public })
+                }
                 ("POST", ["pulls"]) => r("pr.create", repo, false),
                 ("PUT", ["pulls", n, "merge"]) if number(n) => r("pr.merge", repo, false),
                 ("POST", ["issues", n, "comments"]) if number(n) => r("issue.comment", repo, false),
@@ -121,9 +190,15 @@ pub fn route(host: &CanonicalHost, method: &str, path: &str) -> Result<Route, Re
         ["graphql"] => Err(Reason::GithubGraphqlUnsupported),
         ["gists"] if method == "POST" => r("gist.create", None, false),
         [first, ..] if read && PUBLIC_READS.contains(first) => {
-            Ok(Route { verb: "github.read", repo: None, bodies: false, public: true })
+            Ok(Route { verb: "github.read", repo: None, bodies: false, public: true, restricted: false })
         }
-        _ if read => r("github.read", None, segs.first() == Some(&"search")),
+        // Host-wide reads that return what anyone can write: search results,
+        // gists, notifications, and repositories addressed by ID (where
+        // GitHub redirects transferred issues).
+        [first, ..] if read && matches!(*first, "search" | "gists" | "notifications" | "repositories") => {
+            r("github.read", None, true)
+        }
+        _ if read => r("github.read", None, false),
         _ => Err(Reason::GithubRouteUnknown),
     }
 }
@@ -137,7 +212,7 @@ mod tests {
     }
 
     fn ok(method: &str, path: &str) -> (String, Option<String>, bool) {
-        let r = route(&h("api.github.com"), method, path).unwrap();
+        let r = route(&h("api.github.com"), method, path, None).unwrap();
         (r.verb.to_string(), r.repo.map(|x| x.to_string()), r.bodies)
     }
 
@@ -155,13 +230,55 @@ mod tests {
         assert_eq!(ok("POST", "/gists"), ("gist.create".into(), None, false));
         assert_eq!(ok("GET", "/user"), ("github.read".into(), None, false));
         assert_eq!(ok("GET", "/search/issues"), ("github.read".into(), None, true));
-        let g = h("api.github.com");
-        assert!(route(&g, "GET", "/rate_limit").unwrap().public);
-        assert!(route(&g, "GET", "/licenses/mit").unwrap().public);
-        for p in ["/user", "/user/repos", "/search/code", "/orgs/acme/repos", "/notifications", "/gists"] {
-            assert!(!route(&g, "GET", p).unwrap().public, "{p} may return private data");
+        // Maintainer-only data under a public repository is restricted; the
+        // repository's public parts are not.
+        let restricted = |p: &str| route(&h("api.github.com"), "GET", p, None).unwrap().restricted;
+        for p in [
+            "/repos/acme/web/secret-scanning/alerts",
+            "/repos/acme/web/security-advisories",
+            "/repos/acme/web/actions/variables",
+            "/repos/acme/web/actions/secrets",
+            "/repos/acme/web/dependabot/alerts",
+            "/repos/acme/web/code-scanning/alerts",
+            "/repos/acme/web/hooks",
+            "/repos/acme/web/invitations",
+            "/repos/acme/web/traffic/views",
+            "/repos/acme/web/environments",
+            "/repos/acme/web/collaborators",
+        ] {
+            assert!(restricted(p), "{p}");
         }
-        let ghe = route(&h("ghe.corp.example"), "POST", "/api/v3/repos/acme/web/pulls").unwrap();
+        for p in [
+            "/repos/acme/web",
+            "/repos/acme/web/contents/a",
+            "/repos/acme/web/issues/1",
+            "/repos/acme/web/actions/runs",
+        ] {
+            assert!(!restricted(p), "{p}");
+        }
+        // Text anyone can write, including files at a pull request's ref.
+        let bodies = |p: &str, q: Option<&str>| route(&h("api.github.com"), "GET", p, q).unwrap().bodies;
+        for p in [
+            "/repos/acme/web/comments",
+            "/repos/acme/web/events",
+            "/repositories/1/issues/1",
+            "/gists/abc",
+            "/notifications",
+        ] {
+            assert!(bodies(p, None), "{p}");
+        }
+        assert!(bodies("/repos/acme/web/contents/README.md", Some("ref=refs/pull/1/head")));
+        assert!(bodies("/repos/acme/web/contents/README.md", Some("x=1&ref=4f2c1a9e")));
+        assert!(!bodies("/repos/acme/web/contents/README.md", Some("ref=main")));
+        assert!(!bodies("/repos/acme/web/contents/README.md", None));
+        assert!(!bodies("/user", None));
+        let g = h("api.github.com");
+        assert!(route(&g, "GET", "/rate_limit", None).unwrap().public);
+        assert!(route(&g, "GET", "/licenses/mit", None).unwrap().public);
+        for p in ["/user", "/user/repos", "/search/code", "/orgs/acme/repos", "/notifications", "/gists"] {
+            assert!(!route(&g, "GET", p, None).unwrap().public, "{p} may return private data");
+        }
+        let ghe = route(&h("ghe.corp.example"), "POST", "/api/v3/repos/acme/web/pulls", None).unwrap();
         assert_eq!(ghe.repo.unwrap().to_string(), "ghe.corp.example/acme/web");
     }
 
@@ -177,7 +294,7 @@ mod tests {
             segs in proptest::collection::vec("[a-z0-9._-]{0,8}", 0..7),
         ) {
             let path = format!("/{}", segs.join("/"));
-            if let Ok(r) = route(&h("api.github.com"), method, &path) {
+            if let Ok(r) = route(&h("api.github.com"), method, &path, None) {
                 proptest::prop_assert!(policy::github::is_verb(r.verb));
                 if policy::github::is_read_verb(r.verb) {
                     proptest::prop_assert!(matches!(method, "GET" | "HEAD"));
@@ -200,9 +317,9 @@ mod tests {
             ("POST", "/user/repos"),
             ("PUT", "/repos/acme/web/contents"),
         ] {
-            assert_eq!(route(&g, m, p), Err(Reason::GithubRouteUnknown), "{m} {p}");
+            assert_eq!(route(&g, m, p, None), Err(Reason::GithubRouteUnknown), "{m} {p}");
         }
-        assert_eq!(route(&g, "POST", "/graphql"), Err(Reason::GithubGraphqlUnsupported));
+        assert_eq!(route(&g, "POST", "/graphql", None), Err(Reason::GithubGraphqlUnsupported));
         let github = || Some(Ok(h("github.com")));
         assert_eq!(graphql_endpoint(&g, "POST", "/graphql", None), github());
         assert_eq!(graphql_endpoint(&g, "POST", "/graphql", Some("query=x")), Some(Err(Reason::GithubGraphqlInvalid)));
@@ -212,6 +329,6 @@ mod tests {
         let ghe = h("ghe.corp.example");
         assert_eq!(graphql_endpoint(&ghe, "POST", "/api/graphql", None), Some(Ok(ghe.clone())));
         assert_eq!(graphql_endpoint(&ghe, "POST", "/graphql", None), None);
-        assert_eq!(route(&h("ghe.corp.example"), "GET", "/repos/acme/web"), Err(Reason::GithubRouteUnknown));
+        assert_eq!(route(&h("ghe.corp.example"), "GET", "/repos/acme/web", None), Err(Reason::GithubRouteUnknown));
     }
 }

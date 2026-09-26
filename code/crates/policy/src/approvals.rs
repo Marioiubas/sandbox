@@ -72,7 +72,7 @@ pub fn approval_key(host: &CanonicalHost, port: u16, a: &Action) -> String {
     let authority = if port == 443 { host.as_str().to_string() } else { format!("{host}:{port}") };
     match a {
         Action::Http { method, path } => format!("http {method} {authority}{path}"),
-        Action::GitFetch { repo } => format!("git.fetch {repo}"),
+        Action::GitFetch { repo, .. } => format!("git.fetch {repo}"),
         Action::GitPushAdvertise { repo } => format!("git.advertise {repo}"),
         Action::GitPush { repo, refname, force, .. } => format!("git.push {repo} {refname} force={force}"),
         Action::GitHub { verb, repo: Some(r), .. } => format!("github {verb} {r}"),

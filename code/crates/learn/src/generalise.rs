@@ -144,7 +144,7 @@ pub fn mine(c: &Corpus, o: &Options) -> Mined {
                             .entry((ob.host.clone(), ob.port, method.clone(), template(path)))
                             .or_default()
                             .add(ob, format!("{method} https://{}{path}", ob.host)),
-                        Action::GitFetch { repo } => {
+                        Action::GitFetch { repo, .. } => {
                             fetch.entry((ob.host.clone(), ob.port, repo.to_string())).or_default().add(ob, a.verb())
                         }
                         Action::GitPushAdvertise { .. } => {} // implied by the push itself
