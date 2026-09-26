@@ -11,7 +11,13 @@ type ActionRequest<'a> = (String, Value, Vec<Value>, Box<dyn Fn(Mode) -> Value +
 impl EgressPolicy {
     /// `adapted`: the request's actions include a GitHub or S3 verb, which
     /// decides whether it writes (the Rule of Two keys on the verb).
-    fn action_request(&self, adm: &Admission, a: &Action, adapted: bool) -> ActionRequest<'_> {
+    /// `approved`: a human approved exactly this action (ADR-037).
+    fn action_request(&self, adm: &Admission, a: &Action, adapted: bool, approved: bool) -> ActionRequest<'_> {
+        let session_ctx = move |m: Mode| {
+            let mut s = self.session_ctx(m);
+            s["approved"] = json!(approved);
+            s
+        };
         let mut ents = self.host_entities(&adm.host);
         let port = adm.port;
         let dest_class = adm.addr_classes.first().cloned().unwrap_or_else(|| "public".into());
@@ -20,7 +26,7 @@ impl EgressPolicy {
                 let host = adm.host.as_str().to_string();
                 let ctx = move |m: Mode| {
                     json!({
-                        "session": self.session_ctx(m), "port": port, "method": method,
+                        "session": session_ctx(m), "port": port, "method": method,
                         "path": ent::path_record(&path), "path_str": path, "sni": host, "host_header": host,
                         "body_bytes": 0, "dest_class": dest_class, "adapted": adapted,
                     })
@@ -36,11 +42,12 @@ impl EgressPolicy {
                     _ => unreachable!(),
                 };
                 ents.push(ent::repo_entity(&repo, &adm.host));
-                let ctx = move |m: Mode| json!({ "session": self.session_ctx(m), "port": port, "ref": refname, "force": force });
+                let ctx =
+                    move |m: Mode| json!({ "session": session_ctx(m), "port": port, "ref": refname, "force": force });
                 (name.to_string(), ent::repo_uid(&repo), ents, Box::new(ctx))
             }
             Action::GitHub { verb, repo, visibility, method, path, .. } => {
-                let ctx = move |m: Mode| json!({ "session": self.session_ctx(m), "port": port, "method": method, "path_str": path });
+                let ctx = move |m: Mode| json!({ "session": session_ctx(m), "port": port, "method": method, "path_str": path });
                 // A repository verb without a repository cannot be granted.
                 let res = match (&repo, crate::github::is_repo_verb(&verb)) {
                     (Some(r), true) => {
@@ -54,7 +61,8 @@ impl EgressPolicy {
                 (verb, res, ents, Box::new(ctx))
             }
             Action::S3 { op, bucket, key } => {
-                let ctx = move |m: Mode| json!({ "session": self.session_ctx(m), "port": port, "bucket": bucket, "key": key });
+                let ctx =
+                    move |m: Mode| json!({ "session": session_ctx(m), "port": port, "bucket": bucket, "key": key });
                 (op, ent::host_uid(&adm.host), ents, Box::new(ctx))
             }
         }
@@ -64,6 +72,42 @@ impl EgressPolicy {
     /// per action, all must allow; then `credential.use` for the credential
     /// of the grant that allowed every action (if any).
     pub fn authorize_l7(&self, adm: &Admission, actions: &[Action]) -> L7Decision {
+        self.authorize_l7_approving(adm, actions, &[])
+    }
+
+    /// If `dec` denied these actions only for want of a human approval, the
+    /// approval keys that would allow the request (checked by deciding again
+    /// as if they were approved); `None` when approval would not help.
+    pub fn approvable(&self, adm: &Admission, actions: &[Action], dec: &L7Decision) -> Option<Vec<String>> {
+        use crate::approvals::{approval_key, is_approval_reason};
+        if !dec.result.is_err_and(is_approval_reason) {
+            return None;
+        }
+        let keys: Vec<String> = dec
+            .actions
+            .iter()
+            .zip(actions)
+            .filter(|((_, r), _)| r.is_err_and(is_approval_reason))
+            .map(|(_, a)| approval_key(&adm.host, adm.port, a))
+            .collect();
+        if keys.is_empty() {
+            return None;
+        }
+        self.authorize_l7_approving(adm, actions, &keys).result.is_ok().then_some(keys)
+    }
+
+    /// The approval keys of `actions` that this session holds.
+    pub fn approvals_used(&self, adm: &Admission, actions: &[Action]) -> Vec<String> {
+        actions
+            .iter()
+            .map(|a| crate::approvals::approval_key(&adm.host, adm.port, a))
+            .filter(|k| self.approvals().is_approved(k))
+            .collect()
+    }
+
+    /// As [`authorize_l7`](Self::authorize_l7), also treating `extra` keys
+    /// as approved (the "would approval help" check).
+    fn authorize_l7_approving(&self, adm: &Admission, actions: &[Action], extra: &[String]) -> L7Decision {
         let explained = l7::explain(self.admitted(adm).map(|g| (g.id.as_str(), g.l7.as_deref())), actions);
         if actions.is_empty() {
             return L7Decision { would_deny: None, ..explained };
@@ -75,7 +119,9 @@ impl EgressPolicy {
         let mut determining = Vec::new();
         let adapted = actions.iter().any(|a| matches!(a, Action::GitHub { .. } | Action::S3 { .. }));
         for (k, a) in actions.iter().enumerate() {
-            let (name, res, ents, ctx) = self.action_request(adm, a, adapted);
+            let key = crate::approvals::approval_key(&adm.host, adm.port, a);
+            let approved = extra.contains(&key) || self.approvals().is_approved(&key);
+            let (name, res, ents, ctx) = self.action_request(adm, a, adapted, approved);
             let (v, shadow) = self.eval(&name, &res, ents, ctx);
             let explain = || explained.actions.get(k).and_then(|(_, r)| r.err()).unwrap_or(Reason::PolicyDenied);
             let r = if v.allowed { Ok(()) } else { Err(self.deny_reason(&v, explain)) };

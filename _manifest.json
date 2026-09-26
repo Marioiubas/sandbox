@@ -4511,5 +4511,28 @@
     "sources": [
       "https://git-scm.com/docs/http-protocol"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-037 Step-Up Approvals as Built.md",
+    "title": "ADR-037 Step-Up Approvals as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Requests denied only for want of human approval leave a pending approval naming the exact actions; the user reviews its authority diff and label provenance with broker approvals and grants it once or for the session with broker approve on the host; approvals are per session and logged.",
+    "links_to": [
+      "Fatigue-Resistant Approval Interfaces",
+      "Broker CLI and Daemon",
+      "Trifecta Session Labels",
+      "ADR-010 Session-Level Trifecta Labels in the MVP",
+      "ADR-033 Public-Sink Rule as Built",
+      "ADR-036 Git Fetch Visibility by Anonymous Probe",
+      "I8 No Flag Disables Isolation",
+      "I9 Hash-Chained Audit Outside the Sandbox",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-26) from the Broker CLI and Daemon and Fatigue-Resistant Approval Interfaces proposals and the m3_approvals test.",
+    "aliases": [
+      "ADR-037"
+    ],
+    "sources": []
   }
 ]

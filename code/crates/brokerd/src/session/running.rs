@@ -78,6 +78,7 @@ impl Running {
         if let Ok(mut s) = daemon.sessions.lock() {
             s.remove(self.id.as_str());
         }
+        daemon.approvals.unregister(self.id.as_str());
         let mut ev = AuditEvent::new(EventKind::SessionStop)
             .session(&self.id)
             .detail("exit_code", exited.code.map(i64::from))

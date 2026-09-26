@@ -302,3 +302,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Fixed:** the non-ASCII path's mapped name must be one the ASCII path accepts unchanged; regression test in `canon::tests::idna`; the crashing input replays clean and 10 minutes of `canon` fuzzing (13.9 M runs) found nothing further.
 - **E1 evidence:** the nightly job now keeps a cached running total of clean fuzzing seconds per target and prints it in each run's summary.
 
+### 2026-09-26: step-up approvals
+
+- **Found:** `context.session.approved` was never set, so every approval-gated decision (`pr.merge`, the Rule of Two, the public-sink rule) was a permanent deny; with ADR-036 that became a common dead end.
+- **Built:** [[ADR-037 Step-Up Approvals as Built]]: exact-action approval keys in the session policy; pending approvals only where approval would allow the request; `broker approvals` / `broker approve` on the host with the authority diff and label provenance from the audit log; once or for the session; `approval.requested`, `approval.granted` and `approvals_used` on record.
+- **Tests:** policy, registry and CLI unit tests; `m3_approvals` end to end (the agent's own approval attempt from inside the sandbox fails; the approved retry passes once; the next is held again).
+

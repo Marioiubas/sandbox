@@ -173,6 +173,11 @@ impl Server {
                 }
             }
             "login.status" => proto::ok(id, crate::login::status(d)),
+            "approval.list" => proto::ok(id, crate::approvals::list_json(d)),
+            "approval.grant" => match crate::approvals::grant_json(d, &req.params) {
+                Ok(v) => proto::ok(id, v),
+                Err(e) => proto::err(id, codes::NOT_FOUND, e, None),
+            },
             "login.logout" => proto::ok(id, json!({ "signed_out": crate::login::logout(d) })),
             other => proto::err(id, codes::METHOD_NOT_FOUND, format!("unknown method {other}"), None),
         }

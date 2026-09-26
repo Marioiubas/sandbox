@@ -32,6 +32,13 @@ pub enum EventKind {
     /// A session trifecta label was raised, and by which request.
     #[serde(rename = "session.label")]
     SessionLabel,
+    /// A request was denied for want of a human approval; the approval it
+    /// needs is pending (ADR-037).
+    #[serde(rename = "approval.requested")]
+    ApprovalRequested,
+    /// A human approved a pending request's actions for the session.
+    #[serde(rename = "approval.granted")]
+    ApprovalGranted,
 }
 
 impl EventKind {
@@ -47,6 +54,8 @@ impl EventKind {
             EventKind::RequestOutcome => "request.outcome",
             EventKind::FsDenied => "fs.denied",
             EventKind::PolicyReload => "policy.reload",
+            EventKind::ApprovalRequested => "approval.requested",
+            EventKind::ApprovalGranted => "approval.granted",
         }
     }
 }

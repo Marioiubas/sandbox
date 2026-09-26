@@ -98,6 +98,7 @@ fn fx(
         l7: None,
         shadow: None,
         mcp: None,
+        approvals: Default::default(),
     });
     Fx { ctx, rec, resolver }
 }

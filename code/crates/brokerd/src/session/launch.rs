@@ -181,6 +181,7 @@ impl Daemon {
                     dirs: self.dirs.clone(),
                 })
             }),
+            approvals: self.approvals.clone(),
         });
         // Write-ahead (I9): the session is on record before the agent can run;
         // if the log cannot take it, the agent never starts (I2).
@@ -225,6 +226,7 @@ impl Daemon {
             });
         }
 
+        let policy = ctx.policy.clone();
         let accept = tokio::spawn(accept_loop(listener, ctx));
         let backend = self.backend.clone();
         let launched = tokio::task::spawn_blocking(move || backend.launch(spec)).await;
@@ -261,6 +263,7 @@ impl Daemon {
             accept.abort();
             return Err(StartFailure { message: "audit log unavailable".into(), layers: handle.verified });
         }
+        self.approvals.register(id.as_str(), policy);
         if let Ok(mut s) = self.sessions.lock() {
             s.insert(id.to_string(), handle.pid);
         }

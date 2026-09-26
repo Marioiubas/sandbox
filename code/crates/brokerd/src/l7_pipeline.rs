@@ -43,6 +43,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
 
+mod approval;
 mod github;
 mod respond;
 mod s3;
@@ -281,6 +282,7 @@ impl Conn {
                 .collect();
             let mut extra = vec![("actions", actions_json.into())];
             extra.extend(shadow.map(|s| ("shadow", s)));
+            extra.extend(self.pending_approval(&rid, &actions, &dec));
             return self.deny_with(&rid, reason, dec.policy_ids, &per, extra, push.as_ref());
         }
 
@@ -312,14 +314,9 @@ impl Conn {
             let cred = |d: &policy::L7Decision| d.binding.as_ref().map(|b| b.credential().id.clone());
             if let Err(reason) = again.result {
                 let json: Vec<serde_json::Value> = actions.iter().map(|a| a.to_json()).collect();
-                return self.deny_with(
-                    &rid,
-                    reason,
-                    again.policy_ids,
-                    &verbs,
-                    vec![("actions", json.into())],
-                    push.as_ref(),
-                );
+                let mut extra = vec![("actions", json.into())];
+                extra.extend(self.pending_approval(&rid, &actions, &again));
+                return self.deny_with(&rid, reason, again.policy_ids, &verbs, extra, push.as_ref());
             }
             if cred(&again) != cred(&dec) {
                 return self.deny(&rid, Reason::AmbiguousCredential, again.policy_ids, &verbs, None, push.as_ref());
@@ -362,9 +359,16 @@ impl Conn {
         if let Some(p) = push.as_ref().and_then(|p| p.pack_note.clone()) {
             ev = ev.detail("pack", p);
         }
+        // Human approvals this request relies on (ADR-037); single-use ones
+        // are used up once the allow is on record.
+        let approved = self.ctx.policy.approvals_used(&self.adm, &actions);
+        if !approved.is_empty() {
+            ev = ev.detail("approvals_used", approved.clone());
+        }
         if self.ctx.recorder.append(&ev).is_err() {
             return self.deny(&rid, Reason::AuditUnavailable, dec.policy_ids, &verbs, None, push.as_ref());
         }
+        self.ctx.policy.approvals().consume(&approved);
         let logged_us = us(t0);
         self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
         self.resolve_git_visibility(&actions).await;

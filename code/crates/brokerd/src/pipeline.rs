@@ -74,6 +74,8 @@ pub struct PipelineCtx {
     /// Agent sessions with pinned MCP servers (MCP Guard); `None` for an
     /// MCP server's own session and for sessions without servers.
     pub mcp: Option<Arc<crate::mcp::McpCtx>>,
+    /// Where a request denied for want of approval leaves a pending one.
+    pub approvals: Arc<crate::approvals::Registry>,
 }
 
 /// What happened to one connection (returned for tests).

@@ -1,3 +1,4 @@
+pub mod approve;
 pub mod audit;
 pub mod ctl;
 pub mod daemon;

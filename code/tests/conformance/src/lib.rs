@@ -145,6 +145,12 @@ impl Harness {
         self.base_cmd(None, &argv, &[]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap()
     }
 
+    /// Start a shell script inside a session without waiting for it.
+    pub fn spawn_sh(&self, script: &str) -> std::process::Child {
+        let argv = ["/bin/sh".to_string(), "-c".to_string(), script.to_string()];
+        self.base_cmd(None, &argv, &[]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap()
+    }
+
     pub fn events(&self) -> Vec<AuditEvent> {
         let db = self.home.path().join("state/audit.db");
         match SqliteRecorder::open_read_only(&db) {

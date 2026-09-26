@@ -4,6 +4,7 @@
 //! data-plane listeners, the policy, the resolver and the audit writer. It
 //! never listens on TCP for control, and no sandbox can reach `ctl.sock`.
 
+pub mod approvals;
 pub mod audit_query;
 pub mod dirs;
 pub mod fetch;

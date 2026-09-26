@@ -232,6 +232,20 @@ must be JSON (`Content-Type: application/json`) without a query string;
 documents the broker cannot read strictly are denied
 (`github_graphql_invalid`).
 
+**Approvals.** A write held back by the Rule of Two (or a merge, which
+always needs approval) is not lost: the denial names an approval ID, and on
+your machine (not inside the sandbox) you can review and grant it:
+
+```sh
+broker approvals                  # what each pending approval would allow, and why it was held
+broker approve apr-xxxxxxxxxx     # once; add --for-session to keep it for this session
+```
+
+The review shows exactly which action would be allowed (for example
+`+ git.push github.com/acme/web refs/heads/agent/fix force=false`) and
+which requests set the labels, from the broker's own records. The agent
+then retries. An agent cannot approve its own requests.
+
 For a stricter rule, your own or your org's policy can deny writes to
 public destinations as soon as a session has read untrusted input, even if
 it has read nothing sensitive:

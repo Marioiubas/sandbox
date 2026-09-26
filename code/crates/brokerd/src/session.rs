@@ -43,6 +43,8 @@ pub struct Daemon {
     pub jwks: crate::identity::JwksCache,
     /// `broker login` state (identity and refresh token, memory only).
     pub logins: crate::login::Logins,
+    /// Pending and granted step-up approvals of running sessions (ADR-037).
+    pub approvals: Arc<crate::approvals::Registry>,
 }
 
 impl Daemon {
@@ -63,6 +65,7 @@ impl Daemon {
             hash_cache: Mutex::new(HashMap::new()),
             jwks: Default::default(),
             logins: Default::default(),
+            approvals: Default::default(),
         }
     }
 

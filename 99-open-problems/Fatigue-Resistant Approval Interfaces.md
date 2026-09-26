@@ -7,7 +7,7 @@ tags: [sandbox/open, problem, topic/approval, control/hitl, boundary/tb1, advers
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-26
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -85,3 +85,4 @@ The research problem: design approval prompts that show ground truth (the author
 - Report: problem 8; approval-fatigue paragraph (93%; OWASP T10; prompt rarely, show authority diffs); TB1 row; risk row "Approval fatigue".
 - Research note 04b Q2 (84% reduction; METR ~40%; s1ngularity flags; OWASP T10) and gaps.
 - Research note 02 Q6 problem 8.
+- 2026-09-26 (M3): the MVP prompt is built as proposed here ([[ADR-037 Step-Up Approvals as Built]]): generated from structured data only (the approval keys as an authority diff, the denied request, and the `session.label` events that raised the labels), confirmation on a terminal, once by default. No study or telemetry yet.

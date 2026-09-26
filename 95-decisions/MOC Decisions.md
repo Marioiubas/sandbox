@@ -61,6 +61,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 | [[ADR-034 Device Login as Built]] | `broker login` runs the OIDC device flow through brokerd; the verified ID token's subject and groups name every new session and audit row; identity and refresh token stay in daemon memory. |
 | [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] | GitHub GraphQL is parsed strictly and mapped to the REST verbs (mutation node IDs resolved by the broker; reads confined to one repository or counted as host-wide); host-wide `github.read` raises `sensitive_read` unless known public. |
 | [[ADR-036 Git Fetch Visibility by Anonymous Probe]] | A git fetch of a repository not known to be public raises `sensitive_read`; visibility comes from one anonymous `info/refs` probe per repository per session on the same host. |
+| [[ADR-037 Step-Up Approvals as Built]] | A request denied only for want of approval leaves a pending approval naming the exact actions; `broker approvals` shows its authority diff and label provenance, `broker approve` grants it once or for the session from the host; all logged. |
 
 ## Where the value is
 
@@ -127,6 +128,7 @@ Architecture decision records for the fourteen decisions in the report's decisio
 - [[ADR-034 Device Login as Built]] — `broker login` runs the OIDC device flow through brokerd; the verified ID token's subject and groups name every new session and audit row; identity and refresh token stay in daemon memory.
 - [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]] — GitHub GraphQL is parsed strictly and mapped to the REST verbs (mutation node IDs resolved by the broker; reads confined to one repository or counted as host-wide); host-wide `github.read` raises `sensitive_read` unless known public.
 - [[ADR-036 Git Fetch Visibility by Anonymous Probe]] — A git fetch of a repository not known to be public raises `sensitive_read`; visibility comes from one anonymous `info/refs` probe per repository per session on the same host.
+- [[ADR-037 Step-Up Approvals as Built]] — A request denied only for want of approval leaves a pending approval naming the exact actions; `broker approvals` shows its authority diff and label provenance, `broker approve` grants it once or for the session from the host; all logged.
 
 ## How this section connects
 

@@ -238,3 +238,53 @@ fn the_org_option_denies_public_sinks_after_untrusted_input() {
     // A verb that is not granted still reports the more specific reason.
     assert_eq!(decide(&on, gh("pr.merge", public, Visibility::Public, "PUT")), Err(Reason::GithubVerbNotAllowed));
 }
+
+#[test]
+fn a_human_approval_lifts_exactly_one_action_once() {
+    use crate::approvals::Scope;
+    let p = policy(API);
+    let adm = {
+        let mut a = p.admit_host(&canon_host(b"api.github.com").unwrap(), 443).unwrap();
+        p.admit_addrs(&mut a, &["140.82.112.5".parse().unwrap()]).unwrap();
+        a
+    };
+    let pr = |repo: &str| {
+        vec![
+            Action::Http { method: "POST".into(), path: "/x".into() },
+            gh("pr.create", Some(repo), Visibility::Public, "POST"),
+        ]
+    };
+    let public = "github.com/acme-public/site";
+    p.labels().raise(Label::UntrustedInput);
+    p.labels().raise(Label::SensitiveRead);
+    let dec = p.authorize_l7(&adm, &pr(public));
+    assert_eq!(dec.result, Err(Reason::RuleOfTwo));
+    let keys = p.approvable(&adm, &pr(public), &dec).expect("approval would help");
+    assert_eq!(keys, vec!["github pr.create github.com/acme-public/site".to_string()]);
+    // A repository the grant does not cover is not approvable.
+    let evil = pr("github.com/evil/loot");
+    let dec = p.authorize_l7(&adm, &evil);
+    assert_eq!(p.approvable(&adm, &evil, &dec), None);
+    // Approved once: this action passes, another does not, and it is used up.
+    p.approvals().grant(keys[0].clone(), Scope::Once);
+    assert_eq!(p.authorize_l7(&adm, &pr(public)).result, Ok(()));
+    let other = pr("github.com/acme-public/other");
+    assert_eq!(p.authorize_l7(&adm, &other).result, Err(Reason::RuleOfTwo));
+    let used = p.approvals_used(&adm, &pr(public));
+    assert_eq!(used, keys);
+    p.approvals().consume(&used);
+    assert_eq!(p.authorize_l7(&adm, &pr(public)).result, Err(Reason::RuleOfTwo));
+    // For the session: it stays.
+    p.approvals().grant(keys[0].clone(), Scope::Session);
+    p.approvals().consume(&keys);
+    assert_eq!(p.authorize_l7(&adm, &pr(public)).result, Ok(()));
+    // The merge approval (needs_approval) works the same way.
+    let m = policy(&API.replace("\"github.read\"]", "\"github.read\", \"pr.merge\"]"));
+    let merge = vec![
+        Action::Http { method: "PUT".into(), path: "/x".into() },
+        gh("pr.merge", Some("github.com/acme/web"), Visibility::Private, "PUT"),
+    ];
+    let dec = m.authorize_l7(&adm, &merge);
+    assert_eq!(dec.result, Err(Reason::NeedsApproval));
+    assert_eq!(m.approvable(&adm, &merge, &dec), Some(vec!["github pr.merge github.com/acme/web".to_string()]));
+}

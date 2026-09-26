@@ -51,6 +51,8 @@ pub struct EgressPolicy {
     /// The session's trifecta labels, raised by the broker (shared with a
     /// shadow candidate so both see the same session).
     labels: Arc<crate::github::Labels>,
+    /// Actions a human approved for this session (ADR-037).
+    approvals: Arc<crate::approvals::Approvals>,
 }
 
 impl Default for EgressPolicy {
@@ -190,6 +192,7 @@ impl EgressPolicy {
             options,
             session: env.session.clone(),
             labels: Arc::default(),
+            approvals: Arc::default(),
         })
     }
 
@@ -253,6 +256,11 @@ impl EgressPolicy {
     pub fn with_labels(mut self, labels: Arc<crate::github::Labels>) -> Self {
         self.labels = labels;
         self
+    }
+
+    /// The actions a human approved for this session.
+    pub fn approvals(&self) -> &crate::approvals::Approvals {
+        &self.approvals
     }
 
     pub fn mode(&self) -> Mode {

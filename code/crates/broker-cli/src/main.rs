@@ -91,6 +91,25 @@ pub enum Command {
     },
     /// Forget the current login.
     Logout,
+    /// List requests waiting for your approval: what each would allow (the
+    /// authority diff) and which requests raised the labels behind it.
+    Approvals {
+        /// Machine-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Approve a pending request after reviewing its authority diff; the
+    /// agent then retries it. Runs on the host only.
+    Approve {
+        /// The approval ID the denial named (`apr-…`).
+        id: String,
+        /// Keep the approval for the rest of the session, not just once.
+        #[arg(long)]
+        for_session: bool,
+        /// Do not ask for confirmation (the diff is still printed).
+        #[arg(long)]
+        yes: bool,
+    },
     /// Manage the per-user daemon.
     Daemon {
         #[command(subcommand)]
@@ -277,6 +296,8 @@ fn main() {
         Command::Mcp { action: McpCmd::List } => cmd::mcp::list(),
         Command::Login { status } => cmd::login::login(status),
         Command::Logout => cmd::login::logout(),
+        Command::Approvals { json } => cmd::approve::list(json),
+        Command::Approve { id, for_session, yes } => cmd::approve::approve(&id, for_session, yes),
         Command::Daemon { action: DaemonCmd::Status } => cmd::daemon::status(),
         Command::Daemon { action: DaemonCmd::Stop } => cmd::daemon::stop(),
     };

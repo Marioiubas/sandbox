@@ -15,3 +15,4 @@ code/tests/fuzz/corpus/
 code/tests/fuzz/artifacts/
 code/tests/fuzz/coverage/
 code/tests/fuzz/fuzzed/
+.claude/worktrees/

@@ -89,6 +89,7 @@ impl Conn {
         push: Option<&PushInfo>,
     ) -> Response<RespBody> {
         self.ctx.stats.denied.fetch_add(1, Ordering::Relaxed);
+        let approval = extra.iter().find(|(k, _)| *k == "approval").and_then(|(_, v)| v.as_str().map(str::to_string));
         let mut ev = self
             .base_event(EventKind::RequestDecision, rid, verbs)
             .deny(reason, policy_ids)
@@ -102,7 +103,14 @@ impl Conn {
         if let Err(e) = self.ctx.recorder.append(&ev) {
             eprintln!("brokerd: audit append failed for deny {rid}: {e:#}");
         }
-        let hint = format!("broker: denied ({}): {}; run `broker why {rid}`", reason.as_str(), reason.explain());
+        let mut hint = format!("broker: denied ({}): {}; run `broker why {rid}`", reason.as_str(), reason.explain());
+        if let Some(a) = approval {
+            // The control socket is unreachable from the sandbox: only the
+            // user, outside it, can approve.
+            hint.push_str(&format!(
+                "; it needs the user's approval: ask them to run `broker approve {a}` outside the sandbox, then retry"
+            ));
+        }
         if let Some(p) = push.filter(|p| l7::git::receive_pack::wants_report(&p.capabilities)) {
             let rejected: Vec<(String, String)> = p
                 .refs
