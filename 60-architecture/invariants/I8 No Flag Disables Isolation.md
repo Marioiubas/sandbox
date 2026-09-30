@@ -4,14 +4,15 @@ aliases: ["No Bypass Flags"]
 type: concept
 section: architecture
 tags: [sandbox/architecture, concept, invariant/i8, topic/isolation, topic/approval, control/iso, control/hitl, adversary/a5, boundary/tb1, milestone/m0]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "No flag (--yolo, auto-approve, dangerously-skip-permissions) can disable isolation, egress or brokering; flags only relax in-sandbox prompts."
 related: ["[[Nx s1ngularity Supply-Chain Attack]]", "[[Copilot Auto-Approve Settings Write]]", "[[Adversary Classes]]", "[[Fatigue-Resistant Approval Interfaces]]", "[[Broker CLI and Daemon]]", "[[Sandbox Launcher]]", "[[OpenClaw Exposure and Token Theft]]", "[[I2 Fail-Closed Launch]]", "[[I5 Config Outside Writable Mounts]]", "[[Threat Model Overview]]", "[[M0 Contained Run]]"]
 sources: ["https://www.wiz.io/blog/s1ngularity-supply-chain-attack", "https://metr.org/blog/2026-05-19-frontier-risk-report/", "https://embracethered.com/blog/posts/2025/github-copilot-remote-code-execution-via-prompt-injection/", "https://anthropic.com/engineering/claude-code-auto-mode", "https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/", "https://adversa.ai/blog/openclaw-security-101-vulnerabilities-hardening-2026/"]
 milestone: M0
+code: ["code/crates/broker-cli/src/main.rs", "code/tests/conformance/tests/invariants.rs"]
 ---
 
 # I8 No Flag Disables Isolation
@@ -96,3 +97,4 @@ The report: "never let a prompt-disabling flag weaken isolation, egress or broke
 
 - 2026-09-24: tests `no_flag_disables_isolation` (every clap flag enumerated; `run` accepts only `--profile`), `i8_no_profile_flag_or_env_disables_isolation` (6 profiles × 5 agent bypass flags, plus cleared or hostile client proxy variables: direct egress and DNS still denied, every session has all required layers), `i8_unknown_profile_is_refused_not_ignored`, `i8_invalid_user_policy_refuses_launch`. Fault injection can only cause refusals.
 - 2026-09-24 (M2): `broker learn` (record mode) is tested like any flag: `i8_learn_mode_keeps_sandbox_proxy_and_ceiling` (secrets unreadable, no direct route, metadata and ceiling hosts denied); the CLI test pins `learn` to the single `--profile` option.
+- 2026-09-30: status `built`: the minimum tests pass on macOS 15/26 and Ubuntu 22.04/24.04 in every CI run since 35999705456 (vault audit).

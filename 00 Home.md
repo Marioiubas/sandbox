@@ -7,7 +7,7 @@ tags: [sandbox/meta, moc]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "Top index: one-paragraph orientation, the Start-here path and links to every section MOC and meta note."
 related: ["[[CLAUDE]]", "[[MOC Problem]]", "[[MOC Threat Model]]", "[[MOC Research]]", "[[MOC Primitives]]", "[[MOC Identity]]", "[[MOC Architecture]]", "[[MOC Policy]]", "[[MOC Landscape]]", "[[MOC Build]]", "[[MOC Decisions]]", "[[MOC Open Problems]]", "[[Vault Conventions]]", "[[Glossary]]", "[[Bibliography]]", "[[Dashboard]]", "[[Open Questions and Unverified Claims]]", "[[Build Log]]"]
 sources: []
@@ -42,7 +42,7 @@ Autonomous coding agents run with the developer's ambient authority (SSH keys, `
 | 70 Policy | [[MOC Policy]] | Cedar, schema, example policies, trifecta labels, SymCC gates, policy learning |
 | 80 Landscape | [[MOC Landscape]] | competitor teardowns and the gap to own |
 | 90 Build | [[MOC Build]] | tech stack, repo layout, MVP plan, milestones M0-M4, evaluation L1-L6, red team, risks |
-| 95 Decisions | [[MOC Decisions]] | ADR-001 to ADR-015 |
+| 95 Decisions | [[MOC Decisions]] | ADR-001 to ADR-040 |
 | 99 Open problems | [[MOC Open Problems]] | eight research problems and the measurement gaps |
 
 ## Meta

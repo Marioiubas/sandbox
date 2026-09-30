@@ -7,9 +7,9 @@ tags: [sandbox/decisions, decision, topic/policy, topic/learning, topic/audit, m
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "Where M2 as built differs from its task list: grants compile to policy text (not entities) so the formal gates can prove them; a differential property test replaces compile/decompile round-trips; per-file-operation would-be decisions, per-request process ancestry, OpenAPI operation mapping (G1), rate limits (P4), newly-registered-domain and object-storage ceilings, `[profile.*]` tables, `broker init` and LLM diff explanations are deferred."
-related: ["[[M2 Policy Audit and Learn]]", "[[Policy Engine and Entity Builder]]", "[[broker.toml Human Policy Layer]]", "[[Policy Miner Safeguards]]", "[[Policy Learning Loop]]", "[[Audit Recorder and Event Schema]]", "[[ADR-022 Cedar Schema and Engine as Built]]", "[[ADR-024 Formal Gates as Built]]", "[[MOC Decisions]]"]
+related: ["[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[M2 Policy Audit and Learn]]", "[[Policy Engine and Entity Builder]]", "[[broker.toml Human Policy Layer]]", "[[Policy Miner Safeguards]]", "[[Policy Learning Loop]]", "[[Audit Recorder and Event Schema]]", "[[ADR-022 Cedar Schema and Engine as Built]]", "[[ADR-024 Formal Gates as Built]]", "[[MOC Decisions]]"]
 sources: []
 superseded_by: 
 ---
@@ -61,3 +61,4 @@ None weakened.
 ## Build log
 
 - 2026-09-24: created while reconciling the M2 task list.
+- supersedes:: [[ADR-008 Grant Representation as Entities and Txn-Token JWT]] (in part: grants as entities)

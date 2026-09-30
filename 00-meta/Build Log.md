@@ -7,7 +7,7 @@ tags: [sandbox/meta, meta, topic/build]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "Chronological, append-only log Claude Code writes while building: date, milestone, what changed, notes updated, ADRs created, test status."
 related: ["[[CLAUDE]]", "[[MVP Plan]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[M4 Harden and Ship]]", "[[Dashboard]]"]
 sources: []
@@ -40,10 +40,10 @@ Copy this block for each session:
 | Milestone | Status | Date built | Evidence (test run, commit) |
 |---|---|---|---|
 | [[M0 Contained Run]] | in progress: implemented; A1 verified on macOS 26 with Claude Code only | | CI run 35999705456 (commit 9a63853): 109 tests green on macOS 15/26 and Ubuntu 22.04/24.04 runners |
-| [[M1 Secrets Outside]] | in progress: implemented; B1-B8 green in CI against local fakes on macOS 15/26 and Ubuntu 22.04/24.04; e2e with Claude Code's brokered login passes on macOS 26; real GitHub App run pending |  | CI run 36012256447 (commit 4c2a1ef): 190 tests and 11 fuzz targets green |
-| [[M2 Policy Audit and Learn]] | not started |  |  |
-| [[M3 CI Identity and MCP]] | not started |  |  |
-| [[M4 Harden and Ship]] | not started |  |  |
+| [[M1 Secrets Outside]] | built | 2026-09-25 | B2/B3 against a real GitHub App (CI job `real-github`, every push); B1-B8 green in CI on macOS 15/26 and Ubuntu 22.04/24.04 |
+| [[M2 Policy Audit and Learn]] | in progress: implemented; C1 (learn mode over 3 repos × 3 real agents) outstanding |  | M2 build log |
+| [[M3 CI Identity and MCP]] | in progress: implemented; D2 against Okta/Entra dev tenants, D6 against a real AWS account, and the Internal Grant JWT outstanding; D3 passes against the real GitHub MCP server (CI job `real-mcp`) |  | M3 build log |
+| [[M4 Harden and Ship]] | in progress: E3 met; E1 accumulating nightly (18 targets); E2, E4-E9 outstanding |  | M4 build log |
 
 ## Proposed vocabulary additions
 
@@ -330,4 +330,10 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Hardened:** request bodies with `Content-Encoding: gzip` are decoded as exactly one gzip member; a second member or trailing bytes are refused (`malformed_request`), because a decoder that stops at the first member reads less than a server that inflates them all (a push's second member could carry unchecked ref updates). Gzip errors no longer report `git_parse_error`. Test: `l7_pipeline::respond::decode_tests`.
 - **Category 11** (covert channels) is now measured every night on Linux (`fuzz-nightly.yml`, job `covert`), reported in the run summary.
 - **Nightly fuzzing:** four scheduled runs (2026-09-27 to 09-30) passed on all 18 targets; the running totals are in each run's summary.
+
+### 2026-09-30: vault consistency audit (review agent), fixes applied
+
+- **M0 is not built, and the record says so:** acceptance A1 (`broker run -- claude` and `-- codex` finish a "fix failing test" task on macOS 15/26 and Ubuntu 22.04/24.04) has run in 1 of 8 cells (Claude Code, macOS 26). M1 was marked built on top of it. The remaining cells need a Claude Code login or API key and an OpenAI key on the CI runners (the maintainer's), or an ADR narrowing A1; M0 stays `proposal` until then.
+- **Fixed:** the milestone table above (M1 built; M2-M4 in progress); MOC Decisions (an M3 section, ADR count and `related`, TOML names that rendered as broken links); Home's ADR range; ADR-008 superseded in part by ADR-028 (grants as policy text, not entities); ADR-009 and ADR-010 `built`; ADR-033's stale "approval is not built"; missing links from ADR-010 and ADR-029 to ADR-035–040; invariants I2, I6, I8, I9 `built` with `code:` lists (I5 waits for the file-probe fix, whose tests can pass on "file not found"); I9's tamper tests named; the M3 note's placeholder, order and ADR-037/039/040 entries; M4's nightly fuzz evidence; three Open Questions ticked with their answers and the macOS Go/`trustd` item moved to the build-blocking list; 25 manifest summaries synced with their notes.
+- **Not yet fixed:** 55 notes with seed `AUTO` frontmatter placeholders; tags outside the vocabulary (`control/l7`, `topic/network`, `topic/trifecta`); `code:` lists on several built component notes; ADR template sections (Build log, Relationships) missing on ADR-032–040.
 

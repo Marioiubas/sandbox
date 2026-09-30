@@ -4,12 +4,12 @@ aliases: ["ADR-010"]
 type: decision
 section: decisions
 tags: [sandbox/decisions, decision, topic/ifc, topic/policy, control/task-tok, control/hitl, invariant/i3, milestone/m3]
-status: proposal
+status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-25
+updated: 2026-09-30
 summary: "Ship session-level trifecta labels sourced from systems of record in the MVP; defer CaMeL-style interpreters and FIDES planners."
-related: ["[[Trifecta Session Labels]]", "[[CaMeL]]", "[[FIDES]]", "[[AgentDyn]]", "[[Information Flow Control]]", "[[Provenance-Aware Cedar]]", "[[Credential Broker as Label Authority]]", "[[Lethal Trifecta]]", "[[Agents Rule of Two]]", "[[GitHub MCP Toxic Flow]]", "[[GitLost GitHub Agentic Workflows Leak]]", "[[Cedar]]", "[[I3 Probabilistic Components Only Narrow]]", "[[Threat Model Non-Goals]]", "[[M3 CI Identity and MCP]]", "[[L3 Real-Work Utility]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[GitHub API Adapter]]", "[[Policy Engine and Entity Builder]]", "[[MOC Decisions]]"]
+related: ["[[Trifecta Session Labels]]", "[[CaMeL]]", "[[FIDES]]", "[[AgentDyn]]", "[[Information Flow Control]]", "[[Provenance-Aware Cedar]]", "[[Credential Broker as Label Authority]]", "[[Lethal Trifecta]]", "[[Agents Rule of Two]]", "[[GitHub MCP Toxic Flow]]", "[[GitLost GitHub Agentic Workflows Leak]]", "[[Cedar]]", "[[I3 Probabilistic Components Only Narrow]]", "[[Threat Model Non-Goals]]", "[[M3 CI Identity and MCP]]", "[[L3 Real-Work Utility]]", "[[Broker Cedar Schema]]", "[[Example Cedar Policies]]", "[[GitHub API Adapter]]", "[[Policy Engine and Entity Builder]]", "[[ADR-037 Step-Up Approvals as Built]]", "[[ADR-039 Model API Is Not a Rule-of-Two Sink]]", "[[ADR-040 Label Sources Beyond the Adapters]]", "[[MOC Decisions]]"]
 sources: ["https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/", "https://ai.meta.com/blog/practical-ai-agent-security/", "https://simonwillison.net/2025/Nov/2/new-prompt-injection-papers/", "https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://thehackernews.com/2026/07/public-github-issue-could-trick-github.html", "https://arxiv.org/html/2503.18813", "https://arxiv.org/html/2505.23643", "https://arxiv.org/html/2602.03117v1", "https://arxiv.org/html/2601.09923v1", "https://arxiv.org/html/2609.14003", "https://arxiv.org/abs/2608.30041", "https://arxiv.org/abs/2502.08966", "https://arxiv.org/html/2510.09023"]
 superseded_by:
 ---
@@ -20,7 +20,7 @@ superseded_by:
 
 ## Status
 
-Proposed (2026-09-24). Delivered by [[M3 CI Identity and MCP]] ("trifecta context"), whose acceptance criterion is that a replay of the GitHub MCP toxic flow is stopped at the public write.
+Built for the MVP scope (M3): session-level labels and the Rule-of-Two forbid ([[ADR-029 GitHub API Adapter and Session Labels as Built]]); D5 passes (`m3_github::d5_toxic_flow_is_stopped_at_the_public_write`). Later changes to the rule and its label sources: [[ADR-033 Public-Sink Rule as Built]], [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]], [[ADR-036 Git Fetch Visibility by Anonymous Probe]], [[ADR-037 Step-Up Approvals as Built]] (the approvals this ADR assumes), [[ADR-039 Model API Is Not a Rule-of-Two Sink]], [[ADR-040 Label Sources Beyond the Adapters]].
 
 ## Context
 

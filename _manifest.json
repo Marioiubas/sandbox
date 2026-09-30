@@ -3873,7 +3873,7 @@
     "title": "MOC Decisions",
     "type": "moc",
     "section": "decisions",
-    "summary": "The fifteen architecture decision records with the alternatives each rejected, and how to add a new one.",
+    "summary": "The architecture decision records (ADR-001 to ADR-040) with the alternatives each rejected, and how to add a new one.",
     "links_to": [
       "ADR-001 Value Lives in the Broker",
       "ADR-002 OS Process Sandbox by Default with VM Hard Tier",
@@ -4084,7 +4084,7 @@
     "title": "ADR-016 macOS M0 Compatibility Exceptions",
     "type": "decision",
     "section": "decisions",
-    "summary": "On macOS in M0, keep the per-user temp dir writable (Apple toolchain shims reset TMPDIR to it) and let only profiles that declare it (claude-code) read the login keychain until M1; announced, audited and time-boxed.",
+    "summary": "On macOS in M0, keep the per-user temp dir writable (Apple toolchain shims reset TMPDIR to it) and let only profiles that declare it (claude-code) read the login keychain so agents keep their own credentials until M1; both are announced, audited and time-boxed.",
     "links_to": [
       "Seatbelt",
       "Sandbox Launcher",
@@ -4105,7 +4105,7 @@
     "title": "ADR-017 Landlock Filesystem Layer Required",
     "type": "decision",
     "section": "decisions",
-    "summary": "The Landlock filesystem layer (ABI 1+) is a required Linux layer and its absence refuses launch; only TCP rules degrade below ABI 4; no flag or repo policy can change this.",
+    "summary": "On Linux the Landlock filesystem layer (ABI 1+) is a required layer and its absence refuses launch; only Landlock TCP rules degrade below ABI 4, where the empty network namespace remains the network boundary; no flag or repo policy can change this.",
     "links_to": [
       "Landlock",
       "I2 Fail-Closed Launch",
@@ -4123,7 +4123,7 @@
     "title": "ADR-018 seccomp Filter Shape for M0",
     "type": "decision",
     "section": "decisions",
-    "summary": "Deny new AF_UNIX, packet and raw sockets, ptrace, bpf, keyctl, mount and namespace calls, plus io_uring, clone3 (ENOSYS), x32 syscalls and TIOCSTI; allow socketpair(AF_UNIX) and AF_NETLINK.",
+    "summary": "Deny new AF_UNIX, packet and raw sockets, ptrace, bpf, keyctl, mount and namespace calls as proposed, and additionally io_uring, clone3 (ENOSYS), x32 syscalls and TIOCSTI; allow socketpair(AF_UNIX) and AF_NETLINK, which cannot reach anything outside an empty network namespace.",
     "links_to": [
       "seccomp-bpf",
       "Sandbox Launcher",
@@ -4140,7 +4140,7 @@
     "title": "ADR-019 Mandatory Deny-Write List Additions",
     "type": "decision",
     "section": "decisions",
-    "summary": "Extend the mandatory deny-write list with the .git entry itself (rename-and-replant escape), .mcp.json, .envrc, .gemini, .broker and PATH dirs in writable roots; read-only placeholders for missing names on Linux.",
+    "summary": "Extend the mandatory deny-write list with the .git entry itself (a rename-and-replant escape found while building M0), .mcp.json, .envrc, .gemini, .broker and PATH directories inside writable roots, and give missing protected names read-only placeholders on Linux.",
     "links_to": [
       "I5 Config Outside Writable Mounts",
       "Filesystem Control and Rollback",
@@ -4158,7 +4158,7 @@
     "title": "ADR-020 Brokered Agent Credentials End the Keychain Exception",
     "type": "decision",
     "section": "decisions",
-    "summary": "Coding agents' own credentials are held by brokerd and attached at egress behind sentinels (Claude Code OAuth token, API keys); agent token files are deny-read for every session; the macOS keychain switch of ADR-016 is removed.",
+    "summary": "Coding agents' own credentials are held by brokerd and attached at egress: the claude-code profile brokers the Claude Code OAuth token (keychain or ~/.claude/.credentials.json) behind a sentinel in CLAUDE_CODE_OAUTH_TOKEN; agent token files are deny-read for every session; the macos_keychain profile switch of ADR-016 is removed.",
     "links_to": [
       "ADR-016 macOS M0 Compatibility Exceptions",
       "I1 No Secrets in the Sandbox",
@@ -4177,7 +4177,7 @@
     "title": "ADR-021 L7 Path Choices for M1",
     "type": "decision",
     "section": "decisions",
-    "summary": "M1's L7 path: per-session CA only, HTTP/1.1 via hyper (h2 deferred), no broker-followed redirects, cookies rejected on terminated hosts, rule-driven credential attachment, buffered push inspection, fail-closed force detection, explicit head limit.",
+    "summary": "M1's L7 path: per-session CA only (no per-user keychain CA), HTTP/1.1 via hyper with ALPN http/1.1 (h2 deferred), no broker-followed redirects, cookies rejected and Set-Cookie stripped on terminated hosts, credentials attached by rule, receive-pack bodies buffered up to 256 MiB, 'not provably fast-forward' counts as force, explicit 64 KiB head limit, parser refusals logged.",
     "links_to": [
       "TLS Termination and Per-Session CA",
       "Git Smart-HTTP Adapter",
@@ -4196,7 +4196,7 @@
     "title": "ADR-022 Cedar Schema and Engine as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "The compiled Broker schema and engine: Host in Domain/HostCategory, Repo in Host, segmented Path record, net.resolve/net.connect admission, Cedar like for ref globs, bounded record mode, conjunctive repo layer; M1 tables only explain denies.",
+    "summary": "The compiled Broker schema and engine: Host in Domain/HostCategory, Repo in Host, a segmented Path record instead of PathPrefix entities, net.resolve/net.connect for L4 admission, Cedar like semantics for ref globs, a record mode bounded by the org ceiling, conjunctive repo layer, and the M1 tables kept only as the deny-reason explainer and differential oracle.",
     "links_to": [
       "Broker Cedar Schema",
       "Policy Engine and Entity Builder",
@@ -4215,7 +4215,7 @@
     "title": "ADR-023 OCSF and OTLP Export as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "Decisions export as OCSF 1.9.0 events (Network Activity 4001, HTTP Activity 4002, API Activity 6003) from the verified chain by broker audit export, as NDJSON, HEC-style batches or OTLP/HTTP JSON logs built without the OTel SDK; chain hash in every event.",
+    "summary": "Decisions export as OCSF 1.9.0 events (Network Activity 4001 for L4, HTTP Activity 4002 for terminated requests, API Activity 6003 for git) from the verified chain by `broker audit export`, as NDJSON, Splunk HEC-style batches or an OTLP/HTTP JSON logs request built without the opentelemetry SDK.",
     "links_to": [
       "Audit Recorder and Event Schema",
       "M2 Policy Audit and Learn",
@@ -4234,7 +4234,7 @@
     "title": "ADR-024 Formal Gates as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "The SymCC gates as built on cedar-policy-symcc 0.7.0 and cvc5 1.3.1: credential confinement in the policy text, deny-live as fire/approval/force-opt-in proofs, record mode without forced pushes, I4 proved on a single-set encoding of the runtime conjunction, tenant disjointness deferred.",
+    "summary": "The SymCC gates as built on cedar-policy-symcc 0.7.0 and cvc5 1.3.1: credential confinement moved into the policy text (entity data is arbitrary to the analyzer), deny-live redefined as forbids-can-fire plus approval and force-opt-in proofs, record mode no longer allows forced pushes, the I4 gate proves a single-set encoding of the runtime conjunction, tenant disjointness deferred.",
     "links_to": [
       "SymCC CI Gates",
       "M2 Policy Audit and Learn",
@@ -4257,7 +4257,7 @@
     "title": "ADR-025 Native Config Exporters as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "broker policy export writes Claude Code managed-settings.json and Codex requirements.toml from the enforced policy of one profile per the vendors' documented schemas; domain allows only on admitted ports, the ceiling as denies, fail-closed flags, deny-read paths; no proxy chaining or MCP allowlist.",
+    "summary": "broker policy export writes Claude Code managed-settings.json and Codex requirements.toml from the compiled policy of one profile, per the vendors' documented schemas as of 2026-09-24; it exports domain allows only on ports the Cedar policy admits, the org ceiling as denies, fail-closed flags and deny-read paths, and does not export proxy chaining or an MCP allowlist.",
     "links_to": [
       "Native Config Exporters",
       "M2 Policy Audit and Learn",
@@ -4276,7 +4276,7 @@
     "title": "ADR-026 Shadow Mode as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "broker policy shadow <file> activates a candidate broker.toml that every enforce session evaluates beside the enforced policy (mode shadow) and logs per decision; it never decides or attaches a credential; --report lists what it would tighten or widen; record sessions are never shadowed.",
+    "summary": "Shadow mode as built: `broker policy shadow <file>` activates a candidate broker.toml that every enforce session evaluates beside the enforced policy (mode `shadow`) and logs per decision; it never decides or attaches a credential; `--report` lists what it would tighten or widen; record sessions are never shadowed.",
     "links_to": [
       "Policy Learning Loop",
       "ADR-011 Verified Policy Learning Loop",
@@ -4296,7 +4296,7 @@
     "title": "ADR-027 Plain Host Grants Carry No L7 Authority",
     "type": "decision",
     "section": "decisions",
-    "summary": "A plain [[egress]] entry compiles to L4 admission only; it no longer emits an #any permit, so on a host another rule terminates it allows no request. Fixes a same-host over-grant that silently disabled method and path rules.",
+    "summary": "A plain `[[egress]]` entry (no protocol, methods, paths, allow or credential) compiles to L4 admission only; it no longer emits an `#any` permit, so on a host another rule terminates it allows no request. Fixes a same-host over-grant that silently disabled method and path rules.",
     "links_to": [
       "broker.toml Human Policy Layer",
       "ADR-006 Deny Unmatched L7 Requests",
@@ -4316,7 +4316,7 @@
     "title": "ADR-028 M2 Plan Items Built Differently or Deferred",
     "type": "decision",
     "section": "decisions",
-    "summary": "Where M2 as built differs from its task list: grants compile to policy text so the formal gates can prove them; a differential property test replaces round-trips; per-file-operation decisions, process ancestry, G1, P4, extra ceiling categories, profile tables, broker init and LLM explanations are deferred.",
+    "summary": "Where M2 as built differs from its task list: grants compile to policy text (not entities) so the formal gates can prove them; a differential property test replaces compile/decompile round-trips; per-file-operation would-be decisions, per-request process ancestry, OpenAPI operation mapping (G1), rate limits (P4), newly-registered-domain and object-storage ceilings, `[profile.*]` tables, `broker init` and LLM diff explanations are deferred.",
     "links_to": [
       "M2 Policy Audit and Learn",
       "Policy Engine and Entity Builder",
@@ -4338,7 +4338,7 @@
     "title": "ADR-029 GitHub API Adapter and Session Labels as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "GitHub REST requests map to verbs from a verified route table (GraphQL denied); protocol github grants verbs on repos; the broker looks up repository visibility with the bound credential and re-decides; raise-only session labels from API facts, logged per decision and as session.label events; credential risk from config.",
+    "summary": "GitHub REST requests map to verbs from a verified route table (GraphQL denied until parsed); `protocol = \"github\"` grants `verbs` on `repos` (default: the task repository); the broker looks up repository visibility itself with the bound credential and re-decides; session labels are raise-only, raised from API facts before forwarding, logged per decision and as `session.label` events; credential risk comes from config.",
     "links_to": [
       "GitHub API Adapter",
       "Trifecta Session Labels",
@@ -4359,7 +4359,7 @@
     "title": "ADR-030 MCP Guard as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "Pinned stdio MCP servers named in user/org policy, reached by the in-sandbox stub broker mcp connect through the session proxy, started as their own sandboxed session with sentinel credentials, pinned by a canonical digest of their tools list, approved on the host, every tools/call authorized; remote servers, mcp wrap and argument validation not built.",
+    "summary": "Stdio MCP servers are pinned by name in user/org policy, reached by the in-sandbox stub `broker mcp connect <name>` through the session proxy's reserved name, started by the daemon as their own sandboxed session with their own egress grants and sentinel credentials, pinned by a canonical digest of their whole tools list, approved on the host, and relayed with every tools/call authorized; remote servers, `mcp wrap`, argument-schema validation and non-tool capabilities are not built.",
     "links_to": [
       "MCP Guard",
       "ADR-012 MCP Servers as Pinned Sandboxed Principals",
@@ -4380,7 +4380,7 @@
     "title": "ADR-031 CI Identity as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "A CI runner's OIDC token, passed out of band and verified by brokerd against [[identity.oidc]] issuers (RS256, exact issuer and audience, expiry), names the session's principal and every audit row; never reaches the agent or an upstream; unverifiable tokens refuse the launch. Grant JWT/DPoP and IdP device login not built.",
+    "summary": "A CI runner's OIDC token (requested by the GitHub Action) is passed to `broker run` out of band, verified by brokerd against `[[identity.oidc]]` issuers with keys from OIDC discovery, `jwks_url` or `jwks_file` (RS256 only, exact issuer and audience, expiry), and names the session's principal and every audit row; the token never reaches the agent or any upstream; a token that does not verify refuses the launch. Grant JWT/DPoP and IdP device login are not built.",
     "links_to": [
       "M3 CI Identity and MCP",
       "Internal Grant JWT",
@@ -4401,7 +4401,7 @@
     "title": "ADR-032 AWS STS and S3 Adapter as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "S3 grants map each request to s3.get, s3.list, s3.put or s3.delete on a bucket and key prefix or deny it; an aws_sts credential mints an AssumeRole session narrowed by a session policy compiled from the same prefixes, and the broker strips the agent's SigV4 signature and re-signs with the session.",
+    "summary": "S3 grants (`protocol = \"s3\"`, bucket plus read/write/delete key prefixes) map every request to s3.get, s3.list, s3.put or s3.delete or deny it; an `aws_sts` credential mints an AssumeRole session narrowed by an inline session policy compiled from the same prefixes (≤2,048 characters, checked at compile time), and the broker strips the agent's SigV4 signature (made with a sentinel access key ID) and re-signs with the session. Only S3 is brokered; signed-chunk uploads, versioned access, session tags and web-identity base credentials are not built.",
     "links_to": [
       "AWS STS Session Policies",
       "Credential Injector and Issuers",
@@ -4420,7 +4420,7 @@
     "title": "ADR-033 Public-Sink Rule as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "An opt-in [trifecta] switch in user or org policy denies writes to repositories not known to be private, every git push, gists and package publishes once a session has read untrusted input, unless approved; proved a narrowing by the gates.",
+    "summary": "`[trifecta] deny_public_sinks_after_untrusted_input = true` (user or org policy, off by default) adds Cedar forbids: once untrusted_input is live, write verbs on repositories not known to be private, every git push, gist.create and pkg.publish are denied unless approved (reason public_sink_after_untrusted_input). Unknown visibility counts as public; the forbids survive every engine rebuild and are proved a narrowing by the gates.",
     "links_to": [
       "ADR-010 Session-Level Trifecta Labels in the MVP",
       "Trifecta Session Labels",
@@ -4443,7 +4443,7 @@
     "title": "ADR-034 Device Login as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "broker login runs the OIDC device flow (RFC 8628) through brokerd; the verified ID token's subject and groups name every new session and audit row and become Cedar groups; identity and refresh token stay in daemon memory only.",
+    "summary": "`broker login` runs the OIDC device flow (RFC 8628) through brokerd against the `[identity.login]` issuer (discovery endpoints on the issuer's host, public or pinned addresses, verified TLS); the ID token is verified (RS256, exact issuer, audience = client ID, expiry), its subject and groups name every new session and audit row, and groups become Cedar `Group` parents of the `User`. Identity and refresh token live in daemon memory only (the daemon stays up while a login is held); refresh rotates tokens; `required` refuses sessions without a login. Keychain persistence is not built.",
     "links_to": [
       "M3 CI Identity and MCP",
       "ADR-031 CI Identity as Built",
@@ -4466,7 +4466,7 @@
     "title": "ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "GitHub GraphQL is parsed strictly and mapped to the REST verbs: mutation node IDs resolved by the broker with the bound credential, reads confined to one repository by a schema allowlist or counted as host-wide; host-wide github.read raises sensitive_read unless known public.",
+    "summary": "GitHub GraphQL (`POST /graphql`, JSON only, no query string) is parsed strictly and mapped to the REST verbs: five known mutations name their repository by node ID, which the broker resolves itself with the grant's credential; `repository(owner:, name:)` is `repo.read`; `viewer`/`user`/`rateLimit`/introspection are public `github.read`; any selection outside an allowlisted schema subset, and every other root field, is an unconfined `github.read`. Host-wide `github.read` now raises `sensitive_read` unless the route is known to return only public data, closing a Rule-of-Two bypass through search.",
     "links_to": [
       "GitHub API Adapter",
       "ADR-029 GitHub API Adapter and Session Labels as Built",
@@ -4495,7 +4495,7 @@
     "title": "ADR-036 Git Fetch Visibility by Anonymous Probe",
     "type": "decision",
     "section": "decisions",
-    "summary": "A git fetch of a repository not known to be public raises sensitive_read; the broker learns visibility with one anonymous info/refs probe per repository per session on the same git host. Closes ADR-029's git clone gap.",
+    "summary": "A git fetch of a repository not known to be public raises `sensitive_read`. The broker learns visibility with one anonymous `info/refs?service=git-upload-pack` probe on the same git host per repository per session: a 200 upload-pack advertisement means public; 401/403/404, a redirect or a failure leave it not known to be public. Closes ADR-029's gap where cloning a private repository bypassed the Rule of Two.",
     "links_to": [
       "ADR-029 GitHub API Adapter and Session Labels as Built",
       "Git Smart-HTTP Adapter",
@@ -4517,7 +4517,7 @@
     "title": "ADR-037 Step-Up Approvals as Built",
     "type": "decision",
     "section": "decisions",
-    "summary": "Requests denied only for want of human approval leave a pending approval naming the exact actions; the user reviews its authority diff and label provenance with broker approvals and grants it once or for the session with broker approve on the host; approvals are per session and logged.",
+    "summary": "A request denied only for want of a human approval (`needs_approval`, `rule_of_two`, `public_sink_after_untrusted_input`) leaves a pending approval naming the exact actions (the authority diff); `broker approvals` shows it with the provenance of the session's labels from the audit log, and `broker approve <id>` grants it once (or `--for-session`) through the control socket, which no sandbox can reach. Approved actions see `context.session.approved` only for themselves; single-use approvals are consumed by the allowed request; everything is logged (`approval.requested`, `approval.granted`, `approvals_used`).",
     "links_to": [
       "Fatigue-Resistant Approval Interfaces",
       "Broker CLI and Daemon",
@@ -4540,7 +4540,7 @@
     "title": "ADR-039 Model API Is Not a Rule-of-Two Sink",
     "type": "decision",
     "section": "decisions",
-    "summary": "Grants marked model_api (the agent's own model provider API; profile, user or org policy only) are not write destinations for the Rule of Two, so the agent keeps its model once both labels are live.",
+    "summary": "A profile, user or org grant may mark its host `model_api = true` (the agent's own model provider API); HTTP requests to it carry `context.model_api` and the Rule-of-Two forbid skips them, so an agent does not lose its model once a session holds both labels. Repository policy cannot set it (I4), only plain HTTP grants can, and the shipped agent profiles mark their model APIs.",
     "links_to": [
       "Trifecta Session Labels",
       "ADR-010 Session-Level Trifecta Labels in the MVP",
@@ -4561,7 +4561,7 @@
     "title": "ADR-040 Label Sources Beyond the Adapters",
     "type": "decision",
     "section": "decisions",
-    "summary": "Closes seven label gaps proved by a review: maintainer-only GitHub routes, more attacker-writable routes, credentialed reads without an adapter, intranet hosts and the sensitive grant key, push advertisements, exact-path git probes, and pull-request refs over git.",
+    "summary": "Closes seven label gaps a security review proved: maintainer-only GitHub routes are private even on public repositories; commit comments, events, files at pull-request refs, gists, notifications and repositories-by-ID are attacker-writable text; a brokered credential on a host without an adapter reads sensitive data; intranet addresses (private, link-local) and grants marked `sensitive = true` raise `sensitive_read` at admission; push advertisements are git reads; the git visibility probe asks about the exact path fetched; fetching `refs/pull/*` (and any v0 fetch) of a non-private repository is untrusted input.",
     "links_to": [
       "Trifecta Session Labels",
       "ADR-029 GitHub API Adapter and Session Labels as Built",

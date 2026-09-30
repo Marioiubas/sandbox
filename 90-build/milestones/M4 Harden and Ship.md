@@ -7,7 +7,7 @@ tags: [sandbox/build, milestone, milestone/m4, topic/evaluation, topic/supply-ch
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-26
+updated: 2026-09-30
 summary: AUTO
 related: AUTO
 sources: AUTO
@@ -172,3 +172,4 @@ All six layers of the [[Evaluation Harness]]: L1 (hard gate), L2 and L3 (first r
 - 2026-09-25: the Nagle-on-upstream delay is fixed (`brokerd::upstream::QuickAck`, quick-ACK re-armed after every upstream write on Linux), confirmed by a loopback capture and the harness: warm terminated added p50 3.1 ms; new terminated 6.7 ms (8 clients) / 3.2 ms (1 client); new spliced 3.6 / 1.9 ms; first request to a Nagle-on upstream answered in 1.4 ms inside the broker (was 42 ms).
 - 2026-09-25: E3 status: every latency threshold met on Linux and macOS (release, fair baseline); no latency follow-ups open. Still needed for E3: added wall-clock per task from the L3 runs.
 - 2026-09-26: E1: the first nightly run (2026-09-25, 2 h per target, 18 targets) found one crash, in `canon`: host canonicalisation was not a fixed point for a soft hyphen in front of an A-label ([[Hostname Canonicaliser]] build log); fixed with a regression test. The nightly job now keeps a running total of clean fuzzing seconds per target (cached with the corpus, printed in each run's summary) as the E1 evidence; only clean runs count.
+- 2026-09-30: E1: the scheduled nightly fuzz runs of 2026-09-27, 09-28, 09-29 and 09-30 passed on all 18 targets (2 h per target each; running totals in each run's summary). Category 11 (covert channels) is now measured nightly on Linux (job `covert` in `fuzz-nightly.yml`). Found and fixed on 2026-09-30: gzip request bodies with a second member were read only in part (now refused).

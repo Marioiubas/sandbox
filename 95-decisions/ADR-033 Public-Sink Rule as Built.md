@@ -7,7 +7,7 @@ tags: [sandbox/decisions, decision, topic/trifecta, invariant/i3, milestone/m3]
 status: built
 confidence: medium
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-30
 summary: "`[trifecta] deny_public_sinks_after_untrusted_input = true` (user or org policy, off by default) adds Cedar forbids: once untrusted_input is live, write verbs on repositories not known to be private, every git push, gist.create and pkg.publish are denied unless approved (reason public_sink_after_untrusted_input). Unknown visibility counts as public; the forbids survive every engine rebuild and are proved a narrowing by the gates."
 related: ["[[ADR-010 Session-Level Trifecta Labels in the MVP]]", "[[Trifecta Session Labels]]", "[[Agents Rule of Two]]", "[[Example Cedar Policies]]", "[[ADR-029 GitHub API Adapter and Session Labels as Built]]", "[[M3 CI Identity and MCP]]", "[[SymCC CI Gates]]", "[[MOC Decisions]]"]
 sources: ["https://simonwillison.net/2025/Nov/2/new-prompt-injection-papers/"]
@@ -40,13 +40,13 @@ built (2026-09-25, M3).
 | On by default | ADR-010 keeps [A]+[C] allowed by default; flipping it is a product decision that needs design-partner data ([[Agents Rule of Two]]). |
 | Count only repositories known to be public | Unknown visibility would slip through; fail closed. |
 | Classify arbitrary hosts' `http.write` as public sinks | The broker cannot tell which hosts publish; paste sites and tunnels are already forbidden by the ceiling. |
-| No approval escape | Would diverge from the Rule of Two's shape; approval is not built, so the effect is the same today. |
+| No approval escape | Would diverge from the Rule of Two's shape; step-up approval is built ([[ADR-037 Step-Up Approvals as Built]]) and lifts this forbid for the approved action only. |
 
 ## Consequences
 
-- With the option on, a session that reads a public issue cannot push, open PRs outside known-private repositories, create gists or publish packages; users start a new session (one task per session, [[Trifecta Session Labels]]) or wait for step-up approval.
+- With the option on, a session that reads a public issue cannot push, open PRs outside known-private repositories, create gists or publish packages; users start a new session (one task per session, [[Trifecta Session Labels]]) or approve the held write on the host (`broker approve`, [[ADR-037 Step-Up Approvals as Built]]).
 - Tests: `cedar::github_tests::the_org_option_denies_public_sinks_after_untrusted_input` (including through the MCP rebuild), `gates::tests::the_public_sink_option_is_a_proved_narrowing`, `m3_github::with_the_org_option_the_public_pr_after_a_public_issue_is_denied`.
-- **Not built:** per-repository visibility for git pushes, web pages as untrusted input, step-up approval.
+- **Not built:** per-repository visibility for git pushes, web pages as untrusted input. Step-up approval was built later ([[ADR-037 Step-Up Approvals as Built]]).
 
 ## Invariants affected
 

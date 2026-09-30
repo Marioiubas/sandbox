@@ -4,10 +4,10 @@ aliases: ["ADR-009"]
 type: decision
 section: decisions
 tags: [sandbox/decisions, decision, topic/dns, topic/egress, control/egress, boundary/tb3, invariant/i6, invariant/i1, milestone/m0]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "Resolve all names in the broker; the sandbox has no UDP/53 or ICMP; reject filtered UDP/53 passthrough."
 related: ["[[Broker DNS Resolver]]", "[[Claude Code DNS Exfiltration CVE-2025-55284]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]", "[[Hostname Canonicaliser]]", "[[ADR-003 Topology-Enforced Egress]]", "[[July 2026 Artifactory Egress Incident]]", "[[Netguard Ingress]]", "[[I6 Single Canonicaliser]]", "[[I1 No Secrets in the Sandbox]]", "[[Conformance Probe Matrix]]", "[[L1 Conformance Suite]]", "[[Landlock]]", "[[Vercel Sandbox]]", "[[OpenAI Codex CLI]]", "[[M0 Contained Run]]", "[[Open Questions and Unverified Claims]]", "[[Risk Register]]", "[[MOC Decisions]]"]
 sources: ["https://embracethered.com/blog/posts/2025/claude-code-exfiltration-via-dns-requests/", "https://advisories.gitlab.com/pkg/npm/@anthropic-ai/claude-code/CVE-2025-55284/", "https://oddguan.com/blog/second-time-same-sandbox-anthropic-claude-code-network-allowlist-bypass-data-exfiltration/", "https://www.penligent.ai/hackinglabs/claude-code-sandbox-bypass/", "https://axeploit.com/blog/the-hugging-face-sandbox-escape-everyone-watched-the-proxy-nobody-watched-port-53", "https://vercel.com/docs/sandbox/concepts/firewall", "https://github.com/anthropic-experimental/sandbox-runtime", "https://github.com/openai/codex/issues/22387", "https://dev.to/skwuwu/controlling-ai-agent-outbound-traffic-at-the-kernel-level14ms-overhead-2p8o", "https://docs.kernel.org/userspace-api/landlock.html", "https://aurascape.ai/resources/auralabs-research/silent-leak-dns-tunneling-aws-agentcore-code-interpreter/"]
@@ -20,7 +20,7 @@ superseded_by:
 
 ## Status
 
-Proposed (2026-09-24). Delivered by [[M0 Contained Run]], whose acceptance criteria include DNS TXT probes and 100% denial of conformance category 3. Mark `built` when [[Broker DNS Resolver]] ships with those tests passing.
+Built (2026-09-24, M0): [[Broker DNS Resolver]] shipped with the category-3 probes (`cat03_name_resolution`, DNS TXT and DoH cases in `i6_bypass_corpus_end_to_end`) passing on macOS 15/26 and Ubuntu 22.04/24.04.
 
 ## Context
 

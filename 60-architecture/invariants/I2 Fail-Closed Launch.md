@@ -4,14 +4,15 @@ aliases: ["Fail Closed"]
 type: concept
 section: architecture
 tags: [sandbox/architecture, concept, invariant/i2, topic/isolation, control/iso, boundary/tb2, milestone/m0]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "Launch fails closed if any isolation layer or the proxy cannot start; no convenience mode mounts docker.sock or host paths."
 related: ["[[Sandbox Launcher]]", "[[Claude Code and sandbox-runtime]]", "[[M0 Contained Run]]", "[[Core Trait Contracts]]", "[[Container Runtimes and Escape History]]", "[[Gemini CLI Prefix Allowlist Bypass]]", "[[sandbox-runtime Empty Allowlist Bypass]]", "[[SandboxEscapeBench]]", "[[Landlock]]", "[[Broker CLI and Daemon]]", "[[Netguard Ingress]]", "[[I8 No Flag Disables Isolation]]", "[[Conformance Probe Matrix]]", "[[ADR-002 OS Process Sandbox by Default with VM Hard Tier]]"]
 sources: ["https://code.claude.com/docs/en/sandboxing", "https://github.com/anthropic-experimental/sandbox-runtime", "https://www.aisi.gov.uk/blog/can-ai-agents-escape-their-sandboxes-a-benchmark-for-safely-measuring-container-breakout-capabilities", "https://tracebit.com/blog/code-exec-deception-gemini-ai-cli-hijack", "https://github.com/advisories/GHSA-9gqj-5w7c-vx47", "https://docs.kernel.org/userspace-api/landlock.html"]
 milestone: M0
+code: ["code/crates/brokerd/src/session/launch.rs", "code/crates/launcher/src", "code/tests/conformance/tests/invariants.rs"]
 ---
 
 # I2 Fail-Closed Launch
@@ -107,3 +108,4 @@ Landlock is the inner layer on Linux; its ABI must be probed at runtime ([Landlo
 ## Build log
 
 - 2026-09-24: tests `i2_launch_refuses_when_any_layer_is_missing` (each required layer faulted in turn: Seatbelt, sandbox-exec, loopback egress, bwrap, userns+netns, seccomp, no_new_privs, landlock_fs, bridge, the shim's three verifications, proxy listener, audit), `i2_missing_shim_refuses_launch`, `i2_empty_policy_denies_everything`: `broker run` exits 125, the agent never runs, `launch_refused` is logged. The Landlock question is settled by [[ADR-017 Landlock Filesystem Layer Required]].
+- 2026-09-30: status `built`: the minimum tests pass on macOS 15/26 and Ubuntu 22.04/24.04 in every CI run since 35999705456 (vault audit).

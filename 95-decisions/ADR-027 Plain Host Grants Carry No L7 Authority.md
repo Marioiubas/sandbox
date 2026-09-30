@@ -8,7 +8,7 @@ status: built
 confidence: high
 created: 2026-09-24
 updated: 2026-09-24
-summary: "A plain [[egress]] entry (no protocol, methods, paths, allow or credential) compiles to L4 admission only; it no longer emits an `#any` permit, so on a host another rule terminates it allows no request. Fixes a same-host over-grant that silently disabled method and path rules."
+summary: "A plain `[[egress]]` entry (no protocol, methods, paths, allow or credential) compiles to L4 admission only; it no longer emits an `#any` permit, so on a host another rule terminates it allows no request. Fixes a same-host over-grant that silently disabled method and path rules."
 related: ["[[broker.toml Human Policy Layer]]", "[[ADR-006 Deny Unmatched L7 Requests]]", "[[ADR-022 Cedar Schema and Engine as Built]]", "[[ADR-024 Formal Gates as Built]]", "[[Example Cedar Policies]]", "[[M2 Policy Audit and Learn]]", "[[MOC Decisions]]"]
 sources: []
 superseded_by: 

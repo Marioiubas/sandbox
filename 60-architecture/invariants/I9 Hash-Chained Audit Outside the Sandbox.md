@@ -4,14 +4,15 @@ aliases: ["Audit Invariant"]
 type: concept
 section: architecture
 tags: [sandbox/architecture, concept, invariant/i9, topic/audit, control/audit, adversary/a3, milestone/m2]
-status: proposal
+status: built
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "Every decision is logged outside the sandbox, hash-chained, and attributed to user, agent, task and session; the model's self-reports are never evidence."
 related: ["[[Audit Recorder and Event Schema]]", "[[Replit Production Database Deletion]]", "[[Mythos Preview Evaluation Escape]]", "[[Core Trait Contracts]]", "[[M2 Policy Audit and Learn]]", "[[Control Plane and Policy Bundles]]", "[[Broker CLI and Daemon]]", "[[I1 No Secrets in the Sandbox]]", "[[Adversary Classes]]", "[[Policy Learning Loop]]", "[[GTG-1002 AI-Orchestrated Espionage]]"]
 sources: ["https://incidentdatabase.ai/cite/1152/", "https://fortune.com/2025/07/23/ai-coding-tool-replit-wiped-database-called-it-a-catastrophic-failure/", "https://www.lesswrong.com/posts/xtnSzhA3TvExN4ZhG/claude-mythos-preview-system-card", "https://metr.org/blog/2026-05-19-frontier-risk-report/", "https://www-cdn.anthropic.com/d7dd50dd1185f59be051b307150d877f2b82bd2c.pdf"]
 milestone: M2
+code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/store", "code/tests/conformance/tests/invariants.rs"]
 ---
 
 # I9 Hash-Chained Audit Outside the Sandbox
@@ -91,4 +92,5 @@ milestone: M2
 
 ## Build log
 
-- 2026-09-24: minimal M0 tests: chain tamper tests in `code/crates/audit/src/store.rs`, `audit_failure_denies_before_connecting`, `i9_every_decision_is_chained_and_explainable` (`broker why`, `broker audit verify`, the sandbox can neither read nor write the log). `session.start` is written ahead of the launch.
+- 2026-09-24: minimal M0 tests: chain tamper tests in `code/crates/audit/src/store.rs` (`tamper_one_byte_fails_at_that_row`, `delete_row_fails`, `swap_rows_fails`, `rehashed_edit_breaks_next_link`, `any_single_body_mutation_is_detected`), `audit_failure_denies_before_connecting`, `i9_every_decision_is_chained_and_explainable` (`broker why`, `broker audit verify`, the sandbox can neither read nor write the log). `session.start` is written ahead of the launch.
+- 2026-09-30: status `built`: the minimum tests pass on macOS 15/26 and Ubuntu 22.04/24.04 in every CI run since 35999705456 (vault audit).
