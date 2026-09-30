@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Put per-argument integrity and reader labels into Cedar context and prove properties such as 'no untrusted-integrity value can reach git.push to a public repo'; no paper combines IFC with a formally verified policy engine."
+related: ["[[Cedar]]", "[[Information Flow Control]]", "[[Trifecta Session Labels]]", "[[CaMeL]]", "[[FIDES]]", "[[AWS AgentCore]]", "[[Broker Cedar Schema]]", "[[ADR-010 Session-Level Trifecta Labels in the MVP]]"]
+sources: ["https://arxiv.org/html/2506.08837", "https://arxiv.org/html/2601.09923v1", "https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy.html", "https://arxiv.org/html/2503.18813", "https://arxiv.org/html/2602.03117v1", "https://arxiv.org/html/2505.23643", "https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://docs.rs/cedar-policy-symcc"]
 ---
 
 # Provenance-Aware Cedar

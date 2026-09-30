@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Rust single static binary (tokio, hyper 1.x, rustls, rcgen; hudsucker as reference), cedar-policy in-process and cedar-policy-symcc with cvc5 in CI, bwrap plus landlock plus seccompiler plus nix, generated SBPL, SQLite WAL, OpenTelemetry/OCSF, axum plus Postgres control plane, and signed, notarised, SBOM-carrying packaging."
+related: ["[[ADR-015 Rust for the Endpoint and Custom Proxy]]", "[[Cedar]]", "[[Repository Layout]]", "[[Landlock]]", "[[seccomp-bpf]]", "[[bubblewrap]]", "[[Seatbelt]]", "[[Audit Recorder and Event Schema]]", "[[Control Plane and Policy Bundles]]", "[[M4 Harden and Ship]]", "[[L1 Conformance Suite]]", "[[Open Questions and Unverified Claims]]"]
+sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://github.com/openai/codex/blob/main/codex-rs/linux-sandbox/README.md", "https://github.com/NVIDIA/openshell", "https://lib.rs/crates/hakoniwa", "https://github.com/omjadas/hudsucker", "https://docs.rs/cedar-policy-symcc", "https://crates.io/crates/landlock", "https://landlock.io/rust-landlock/landlock/enum.ABI.html", "https://oneuptime.com/blog/post/2026-01-07-rust-sandboxing-seccomp-landlock/view", "https://github.com/craigbalding/safeyolo/issues/620", "https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md", "https://learn.chatgpt.com/codex/sandboxing", "https://github.com/apple/containerization/issues/737", "https://arxiv.org/html/2403.04651"]
 ---
 
 # Tech Stack

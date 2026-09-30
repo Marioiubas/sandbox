@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-30
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Weeks 9-10: >=24 h fuzzing per target with no crashes, threat-model document, notarised Homebrew, deb and rpm, cosign and SBOM, first L2/L3 runs, 3-5 design partners; done when latency and utility thresholds are met or documented and an external pentest closes with no open high findings."
+related: ["[[L1 Conformance Suite]]", "[[Tech Stack]]", "[[Red-Team Plan]]", "[[L2 Injection Benchmarks]]", "[[L3 Real-Work Utility]]", "[[L4 Product Metrics]]", "[[Threat Model Overview]]", "[[Threat Model Non-Goals]]", "[[Risk Register]]", "[[SandboxEscapeBench]]"]
+sources: ["https://www.penligent.ai/hackinglabs/claude-code-sandbox-bypass/", "https://bytecodealliance.org/articles/wasmtime-security-advisories", "https://www.swebench.com/SWE-bench/reference/harness/", "https://arxiv.org/abs/2405.17737", "https://dev.to/skwuwu/controlling-ai-agent-outbound-traffic-at-the-kernel-level14ms-overhead-2p8o", "https://www.anthropic.com/engineering/how-we-contain-claude"]
 milestone: M4
 ---
 

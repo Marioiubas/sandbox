@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-25
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "The six-layer harness (L1 conformance, L2 injection benchmarks, L3 real-work utility, L4 product metrics, L5 formal gates, L6 boundary regression) with release thresholds anchored to public reference points, metric definitions and reporting rules (utility always paired with attack success; separate 'model complied, broker blocked' count)."
+related: ["[[L1 Conformance Suite]]", "[[L2 Injection Benchmarks]]", "[[L3 Real-Work Utility]]", "[[L4 Product Metrics]]", "[[SymCC CI Gates]]", "[[SandboxEscapeBench]]", "[[Red-Team Plan]]", "[[Measurement Gaps]]", "[[Claude Code and sandbox-runtime]]", "[[MVP Plan]]"]
+sources: ["https://anthropic.com/engineering/claude-code-auto-mode", "https://arxiv.org/abs/2503.18813", "https://arxiv.org/html/2504.11703v3", "https://anthropic.com/engineering/claude-code-sandboxing", "https://arxiv.org/html/2602.03117v1", "https://arxiv.org/abs/2405.17737", "https://arxiv.org/abs/2406.13352", "https://arxiv.org/html/2603.02277v1", "https://www.swebench.com/SWE-bench/reference/harness/", "https://www.tbench.ai/docs/run-terminal-bench-2-0", "https://arxiv.org/abs/2504.18575v2"]
 ---
 
 # Evaluation Harness

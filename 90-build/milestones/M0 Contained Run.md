@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Weeks 1-2: workspace skeleton, broker run, Seatbelt and bwrap+Landlock+seccomp backends, empty netns plus UDS bridge, CONNECT and SOCKS5 with host allowlist, canonicaliser, broker DNS, fail-closed launch; done when claude and codex fix a failing test on macOS 15/26 and Ubuntu 22.04/24.04 with probe categories 3, 4, 5, 9 and 10 fully denied."
+related: ["[[Sandbox Launcher]]", "[[Seatbelt]]", "[[bubblewrap]]", "[[Landlock]]", "[[seccomp-bpf]]", "[[Netguard Ingress]]", "[[Hostname Canonicaliser]]", "[[Broker DNS Resolver]]", "[[I2 Fail-Closed Launch]]", "[[Conformance Probe Matrix]]", "[[Broker CLI and Daemon]]", "[[M1 Secrets Outside]]"]
+sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://github.com/anthropic-experimental/sandbox-runtime", "https://learn.chatgpt.com/codex/sandboxing", "https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md", "https://code.claude.com/docs/en/sandboxing"]
 milestone: M0
 code: ["code/"]
 ---

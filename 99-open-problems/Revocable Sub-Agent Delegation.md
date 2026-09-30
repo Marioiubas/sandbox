@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Membrane-style revocable delegation to sub-agents and map-reduce workers; no agent paper evaluates revocation or sub-agent attenuation."
+related: ["[[Object Capabilities]]", "[[Macaroons and Biscuit]]", "[[Design Patterns for Securing LLM Agents]]", "[[Agent Identity Brokers]]", "[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[Internal Grant JWT]]"]
+sources: ["http://www.erights.org/talks/thesis/", "https://startwithidentity.com/blog/agent-identity-gets-a-protocol/", "https://cloudsecurityalliance.org/artifacts/agentic-ai-identity-and-access-management-a-new-approach", "https://arxiv.org/html/2506.08837", "https://www.ndss-symposium.org/ndss2014/ndss-2014-programme/macaroons-cookies-contextual-caveats-decentralized-authorization-cloud/", "https://doc.biscuitsec.org/getting-started/introduction.html", "https://www.rfc-editor.org/rfc/rfc8693", "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-transaction-tokens-08", "https://www.keycard.ai/blog/announcing-keycard-for-coding-agents/"]
 ---
 
 # Revocable Sub-Agent Delegation

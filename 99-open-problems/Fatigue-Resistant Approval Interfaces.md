@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-26
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Approval prompts that show authority diffs and provenance rather than prose, with measured error rates; users approve 93% of prompts and OWASP lists Overwhelming HITL as T10, yet no user study exists."
+related: ["[[Trust Boundaries]]", "[[I8 No Flag Disables Isolation]]", "[[Progent]]", "[[CaMeL]]", "[[MCP Authorization Spec]]", "[[L4 Product Metrics]]", "[[Gemini CLI Prefix Allowlist Bypass]]", "[[Copilot Auto-Approve Settings Write]]", "[[Claude Code and sandbox-runtime]]"]
+sources: ["https://anthropic.com/engineering/claude-code-auto-mode", "https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/", "https://metr.org/blog/2026-05-19-frontier-risk-report/", "https://arxiv.org/html/2503.18813", "https://arxiv.org/html/2504.11703v3", "https://simonwillison.net/2025/Apr/11/camel/", "https://www.wiz.io/blog/s1ngularity-supply-chain-attack", "https://anthropic.com/engineering/claude-code-sandboxing", "https://modelcontextprotocol.io/specification/latest/basic/authorization"]
 ---
 
 # Fatigue-Resistant Approval Interfaces

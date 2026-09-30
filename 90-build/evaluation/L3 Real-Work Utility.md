@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Paired A/B runs, same model and seed, k>=3, on SWE-bench Verified (500 or stratified 100 in CI) and Terminal-Bench 2.x via Harbor, live-internet tasks tagged apart, every deny bucketed as policy-caused, agent noise or legitimately blocked."
+related: ["[[Evaluation Harness]]", "[[L4 Product Metrics]]", "[[Measurement Gaps]]", "[[M4 Harden and Ship]]", "[[Registry and LLM API Adapters]]"]
+sources: ["https://www.swebench.com/SWE-bench/reference/harness/", "https://www.tbench.ai/news/announcement-2-0", "https://www.tbench.ai/docs/run-terminal-bench-2-0", "https://snorkel.ai/leaderboard/terminal-bench-2-1/", "https://vercel.com/kb/guide/run-terminal-bench-harbor-benchmarks-vercel-sandbox", "https://anthropic.com/engineering/claude-code-auto-mode"]
 ---
 
 # L3 Real-Work Utility

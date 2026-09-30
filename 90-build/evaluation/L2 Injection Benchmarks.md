@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "AgentDojo (97 tasks, 629 cases) and AgentDyn (560 cases) with the broker as the defense via a shim that turns mocked side effects into real HTTP through the proxy, >=2 frontier models and ASR@k for k=10-100; model-level suites (InjecAgent, ASB, WASP, OS-Harm, AgentHarm, CyberSecEval) as traffic generators."
+related: ["[[AgentDyn]]", "[[CaMeL]]", "[[Progent]]", "[[Evaluation Harness]]", "[[Red-Team Plan]]", "[[Adaptive Evaluation of Deterministic Monitors]]", "[[The Attacker Moves Second]]"]
+sources: ["https://arxiv.org/abs/2406.13352", "https://arxiv.org/html/2602.03117v1", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://aclanthology.org/2024.findings-acl.624/", "https://arxiv.org/abs/2410.02644", "https://arxiv.org/abs/2504.18575v2", "https://arxiv.org/abs/2506.14866", "https://arxiv.org/abs/2410.09024", "https://github.com/meta-llama/PurpleLlama/blob/main/CybersecurityBenchmarks/README.md", "https://arxiv.org/html/2504.11703v3", "https://arxiv.org/abs/2503.18813", "https://github.com/ethz-spylab/agentdojo", "https://github.com/leolee99/AgentDyn", "https://arxiv.org/abs/2606.26479"]
 ---
 
 # L2 Injection Benchmarks

@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-25
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "The twelve probe categories and pass criteria: allowed-destination abuse, credential exposure, name resolution, IP literals, alternate protocols, redirects, Host/SNI/CONNECT mismatch, parser differentials, proxy bypass, filesystem, covert channels (measured, not claimed zero) and boundary escape."
+related: ["[[L1 Conformance Suite]]", "[[I7 Reject Foreign Credentials]]", "[[Hostname Canonicaliser]]", "[[Broker DNS Resolver]]", "[[TLS Termination and Per-Session CA]]", "[[Filesystem Control and Rollback]]", "[[SandboxEscapeBench]]", "[[Topology-Forced Egress]]", "[[M0 Contained Run]]", "[[Claude Cowork Allowed-Domain Abuse]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]"]
+sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://vercel.com/docs/sandbox/concepts/firewall", "https://docs.e2b.dev/network/internet-access.md", "https://github.com/anthropic-experimental/sandbox-runtime", "https://arxiv.org/html/2603.02277v1"]
 ---
 
 # Conformance Probe Matrix

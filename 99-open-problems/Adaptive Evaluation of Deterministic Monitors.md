@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "White-box and optimization-based attacks on the entity builder and label sources, the gap the June 2026 out-of-band study explicitly leaves open."
+related: ["[[The Attacker Moves Second]]", "[[Red-Team Plan]]", "[[Policy Engine and Entity Builder]]", "[[L2 Injection Benchmarks]]", "[[Progent]]", "[[Branch-Steering Resistance]]"]
+sources: ["https://arxiv.org/html/2510.09023", "https://arxiv.org/abs/2606.26479", "https://arxiv.org/html/2504.11703v3", "https://www.anthropic.com/engineering/how-we-contain-claude"]
 ---
 
 # Adaptive Evaluation of Deterministic Monitors

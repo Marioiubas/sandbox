@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-25
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "All risks with evidence and mitigations: vendor bundling, OpenShell as default data plane, the broker's own bugs, credential honeypot, misuse within scope, Seatbelt removal, Linux platform variance, TLS breakage (pinning, QUIC, ECH), learned-policy over-grant, approval fatigue, upstream scoping limits, vendor hook instability, buyer budget."
+related: ["[[Gap Analysis]]", "[[NVIDIA OpenShell]]", "[[Hostname Canonicaliser]]", "[[Credential Injector and Issuers]]", "[[Threat Model Non-Goals]]", "[[Seatbelt]]", "[[bubblewrap]]", "[[TLS Termination and Per-Session CA]]", "[[Policy Miner Safeguards]]", "[[Fatigue-Resistant Approval Interfaces]]", "[[GCP Credential Access Boundaries]]", "[[ADR-013 Seatbelt for macOS MVP with VZ Hedge]]"]
+sources: ["https://code.claude.com/docs/en/sandboxing", "https://github.com/NVIDIA/openshell", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://www.penligent.ai/hackinglabs/claude-code-sandbox-bypass/", "https://williamzujkowski.github.io/posts/2026-07-02-agentic-ai-sandbox-secret-proxying-gap/", "https://github.com/apple/containerization/issues/737", "https://github.com/anthropic-experimental/sandbox-runtime", "https://landlock.io/rust-landlock/landlock/enum.ABI.html", "https://docs.e2b.dev/network/internet-access.md", "https://anthropic.com/engineering/claude-code-auto-mode", "https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://docs.cloud.google.com/iam/docs/downscoping-short-lived-credentials", "https://www.darkreading.com/cybersecurity-operations/ai-security-spending-jumps-fear-outpaces-proof-value"]
 ---
 
 # Risk Register

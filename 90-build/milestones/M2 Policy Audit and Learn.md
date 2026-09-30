@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Weeks 5-6: Cedar schema, TOML-to-Cedar compiler, enforce and audit modes, hash-chained SQLite, OTLP/OCSF export, broker learn and suggest, SymCC CI gates, exporters to Claude Code and Codex; done when learned policy passes 3 repos x 3 agents with 0 denies and a seeded injection is blocked and logged."
+related: ["[[Broker Cedar Schema]]", "[[broker.toml Human Policy Layer]]", "[[Audit Recorder and Event Schema]]", "[[Policy Learning Loop]]", "[[SymCC CI Gates]]", "[[Native Config Exporters]]", "[[Example Cedar Policies]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[M3 CI Identity and MCP]]"]
+sources: ["https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md", "https://www.cncf.io/blog/2026/06/26/security-profiles-operator-v1-stable-apis-security-hardened-and-shaping-upstream-kubernetes/", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://arxiv.org/abs/2503.18666"]
 milestone: M2
 ---
 

@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Three rings: automated (L1 on every commit, nightly fuzzers, adaptive LLM attackers per probe category reporting ASR@k), human (quarterly external pentest incl. white-box attacks on the Cedar entity builder) and public (bug bounty launched with the corpus)."
+related: ["[[L1 Conformance Suite]]", "[[L2 Injection Benchmarks]]", "[[Adaptive Evaluation of Deterministic Monitors]]", "[[Policy Engine and Entity Builder]]", "[[Vercel Sandbox]]", "[[Evaluation Harness]]", "[[Risk Register]]", "[[M4 Harden and Ship]]"]
+sources: ["https://arxiv.org/html/2510.09023", "https://arxiv.org/abs/2606.26479", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://vercel.com/blog/one-million-dollar-hacker-challenge-for-vercel-sandbox", "https://arxiv.org/abs/2504.18575v2"]
 ---
 
 # Red-Team Plan

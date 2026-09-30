@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Ten weeks for 2-3 engineers in five milestones, compressible to about seven by dropping MCP and AWS from M3, with the conformance corpus growing from week one; then phase 2 (control plane, VM/container backends, Kubernetes and gateway modes, SOC 2 Type I) and phase 3 (Windows, ID-JAG and Entra registration, Biscuit delegation, anomaly baselines, ACE-style plan analysis)."
+related: ["[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[M4 Harden and Ship]]", "[[Evaluation Harness]]", "[[Control Plane and Policy Bundles]]", "[[Macaroons and Biscuit]]", "[[Risk Register]]", "[[Tech Stack]]", "[[ACE and IsolateGPT]]"]
+sources: []
 ---
 
 # MVP Plan

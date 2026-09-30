@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Require every branch of an approved plan to satisfy policy independently and treat branch predicates computed from untrusted observations as low-integrity."
+related: ["[[CaMeL]]", "[[Provenance-Aware Cedar]]", "[[Dynamic Tasks Without Control-Flow Hijack]]", "[[Information Flow Control]]", "[[Adaptive Evaluation of Deterministic Monitors]]"]
+sources: ["https://arxiv.org/html/2601.09923v1", "https://arxiv.org/html/2506.08837", "https://arxiv.org/html/2503.18813"]
 ---
 
 # Branch-Steering Resistance

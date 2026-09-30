@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Deterministic, scripted, non-LLM probes in and out of policy for every probe category, HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici, >=24 h cargo-fuzz per target, and the public bypass corpus; any failure blocks release."
+related: ["[[Conformance Probe Matrix]]", "[[Hostname Canonicaliser]]", "[[I6 Single Canonicaliser]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]", "[[Git Smart-HTTP Adapter]]", "[[M0 Contained Run]]", "[[M4 Harden and Ship]]", "[[Evaluation Harness]]", "[[Red-Team Plan]]", "[[Tech Stack]]"]
+sources: ["https://oddguan.com/blog/second-time-same-sandbox-anthropic-claude-code-network-allowlist-bypass-data-exfiltration/", "https://arxiv.org/abs/2405.17737", "https://dl.acm.org/doi/10.1145/3678890.3678904"]
 ---
 
 # L1 Conformance Suite

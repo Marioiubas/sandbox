@@ -8,9 +8,9 @@ status: built
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-25
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Weeks 3-4: per-session CA and trust-bundle env, selective TLS termination, sentinel swap in headers and bodies, foreign-credential rejection, keychain store, GitHub App minting (TTL <=1 h), git smart-HTTP adapter, method and path rules; done when scans find only sentinels and pushes are scoped to agent/x on the session repo."
+related: ["[[TLS Termination and Per-Session CA]]", "[[Sentinel Swap Pattern]]", "[[I1 No Secrets in the Sandbox]]", "[[I7 Reject Foreign Credentials]]", "[[GitHub App Installation Tokens]]", "[[Git Smart-HTTP Adapter]]", "[[Credential Injector and Issuers]]", "[[Registry and LLM API Adapters]]", "[[Claude Cowork Allowed-Domain Abuse]]", "[[M2 Policy Audit and Learn]]"]
+sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://vercel.com/docs/sandbox/concepts/firewall", "https://github.com/", "https://nvd.nist.gov/vuln/detail/CVE-2026-21852", "https://docs.e2b.dev/network/internet-access.md"]
 milestone: M1
 code: ["code/crates/tls", "code/crates/creds", "code/crates/l7", "code/crates/brokerd/src/l7_pipeline.rs", "code/tests/conformance/tests/m1_secrets.rs", "code/tests/conformance/tests/m1_git.rs", "code/tests/conformance/tests/m1_redirect_fronting.rs"]
 ---

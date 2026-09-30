@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-25
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Friction and overhead: >=80% fewer prompts on replayed traces, warm-connection added latency p50 <=5 ms and p95 <=25 ms, new terminated connection p50 <=15 ms, <=5% added wall-clock, native sandbox start <=150 ms, learned policy >=95% coverage within 3 sessions, 0 learned rules broader than a registrable domain without approval."
+related: ["[[Evaluation Harness]]", "[[TLS Termination and Per-Session CA]]", "[[Policy Learning Loop]]", "[[Policy Miner Safeguards]]", "[[Fatigue-Resistant Approval Interfaces]]", "[[Measurement Gaps]]", "[[M4 Harden and Ship]]", "[[Sandbox Launcher]]"]
+sources: ["https://anthropic.com/engineering/claude-code-auto-mode", "https://anthropic.com/engineering/claude-code-sandboxing", "https://dev.to/skwuwu/controlling-ai-agent-outbound-traffic-at-the-kernel-level14ms-overhead-2p8o", "https://github.com/apple/containerization/issues/737", "https://github.com/anthropic-experimental/sandbox-runtime", "https://www.anthropic.com/engineering/how-we-contain-claude", "https://arxiv.org/html/2504.11703v3"]
 ---
 
 # L4 Product Metrics

@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Three measurement gaps: the first public benchmark scoring egress and credential containment with real traffic, proxy latency and false-deny baselines for agent workloads, and the base rate at which real MCP servers change tool descriptions."
+related: ["[[Evaluation Harness]]", "[[L1 Conformance Suite]]", "[[L3 Real-Work Utility]]", "[[L4 Product Metrics]]", "[[MCP Guard]]", "[[postmark-mcp Rug Pull]]", "[[SandboxEscapeBench]]"]
+sources: ["https://arxiv.org/html/2603.02277v1", "https://anthropic.com/engineering/claude-code-auto-mode", "https://dev.to/skwuwu/controlling-ai-agent-outbound-traffic-at-the-kernel-level14ms-overhead-2p8o", "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks", "https://thehackernews.com/2025/09/first-malicious-mcp-server-found.html", "https://arxiv.org/html/2602.03117v1", "https://arxiv.org/abs/2504.18575v2"]
 ---
 
 # Measurement Gaps

@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Derive confidentiality labels from the OAuth scope, tenant or repo visibility that produced each datum, closing FIDES's annotation gap from a source the model cannot influence (FlowSeal's principle)."
+related: ["[[Information Flow Control]]", "[[FIDES]]", "[[Trifecta Session Labels]]", "[[Credential Injector and Issuers]]", "[[GitHub API Adapter]]", "[[Provenance-Aware Cedar]]"]
+sources: ["https://arxiv.org/html/2505.23643", "https://arxiv.org/abs/2502.08966", "https://arxiv.org/html/2609.14003"]
 ---
 
 # Credential Broker as Label Authority

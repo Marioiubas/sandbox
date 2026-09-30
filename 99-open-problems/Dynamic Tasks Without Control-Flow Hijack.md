@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Allow safe re-planning where every re-plan is checked as a narrowing of the original grant, and measure it on AgentDyn where all current capability systems collapse."
+related: ["[[AgentDyn]]", "[[CaMeL]]", "[[DRIFT]]", "[[Progent]]", "[[Design Patterns for Securing LLM Agents]]", "[[SymCC CI Gates]]", "[[ACE and IsolateGPT]]"]
+sources: ["https://arxiv.org/html/2602.03117v1", "https://arxiv.org/html/2510.09023", "https://arxiv.org/abs/2503.18813", "https://arxiv.org/html/2504.11703v3", "https://arxiv.org/html/2506.12104v2", "https://arxiv.org/html/2506.08837", "https://arxiv.org/abs/2504.20984"]
 ---
 
 # Dynamic Tasks Without Control-Flow Hijack

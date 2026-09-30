@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-30
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Weeks 7-8: GitHub Action with runner OIDC, OIDC device login to Okta/Entra dev tenants, MCP guard with manifest pinning, AWS STS minting with session policy and SigV4, trifecta context; done when an untrusted-issue CI fixture exposes no long-lived secret and the GitHub MCP toxic flow replay is stopped at the public write."
+related: ["[[MCP Guard]]", "[[AWS STS Session Policies]]", "[[Okta Cross App Access]]", "[[Entra Agent ID]]", "[[Trifecta Session Labels]]", "[[GitHub MCP Toxic Flow]]", "[[Internal Grant JWT]]", "[[Architecture Overview]]", "[[Nx s1ngularity Supply-Chain Attack]]", "[[M4 Harden and Ship]]", "[[Amazon Q Extension Compromise]]"]
+sources: ["https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://aws.amazon.com/security/security-bulletins/AWS-2025-015/", "https://www.wiz.io/blog/s1ngularity-supply-chain-attack", "https://modelcontextprotocol.io/specification/latest/basic/authorization", "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks", "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html"]
 milestone: M3
 ---
 

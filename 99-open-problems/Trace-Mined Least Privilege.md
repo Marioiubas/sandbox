@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "Record-then-restrict for agents with measured over- and under-privilege rates, including the unstudied risk of learning from compromised runs."
+related: ["[[Policy Learning Loop]]", "[[Policy Miner Safeguards]]", "[[MiniScope]]", "[[AgentSpec]]", "[[L4 Product Metrics]]", "[[ADR-011 Verified Policy Learning Loop]]"]
+sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://www.cncf.io/blog/2026/06/26/security-profiles-operator-v1-stable-apis-security-hardened-and-shaping-upstream-kubernetes/", "https://aws.amazon.com/blogs/security/iam-access-analyzer-makes-it-easier-to-implement-least-privilege-permissions-by-generating-iam-policies-based-on-access-activity/", "https://arxiv.org/abs/2503.18666", "https://arxiv.org/abs/2512.11147", "https://docs.nvidia.com/openshell/latest/tutorials/first-network-policy.html"]
 ---
 
 # Trace-Mined Least Privilege

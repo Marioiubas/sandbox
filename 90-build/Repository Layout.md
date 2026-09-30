@@ -8,9 +8,9 @@ status: proposal
 confidence: medium
 created: 2026-09-24
 updated: 2026-09-24
-summary: AUTO
-related: AUTO
-sources: AUTO
+summary: "The Cargo workspace tree that code/ must follow: crates (broker-cli, brokerd, launcher, netguard, tls, l7, creds, policy, grant, audit, learn, mcpguard), profiles, policies, integrations, ee/, tests (e2e, conformance, bypass-corpus, fuzz), eval, packaging and docs."
+related: ["[[Tech Stack]]", "[[Broker CLI and Daemon]]", "[[Sandbox Launcher]]", "[[Netguard Ingress]]", "[[TLS Termination and Per-Session CA]]", "[[Credential Injector and Issuers]]", "[[Policy Engine and Entity Builder]]", "[[Audit Recorder and Event Schema]]", "[[MCP Guard]]", "[[Internal Grant JWT]]", "[[L1 Conformance Suite]]", "[[Evaluation Harness]]"]
+sources: []
 ---
 
 # Repository Layout
