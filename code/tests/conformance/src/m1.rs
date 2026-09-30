@@ -272,6 +272,15 @@ fn verify_jwt(jwt: &str, public_key: &[u8]) -> bool {
         && pk.verify(format!("{}.{}", parts[0], parts[1]).as_bytes(), &sig).is_ok()
 }
 
+/// `/Owner/Name.git/rest` → `/owner/name.git/rest`.
+fn repo_path_lowercase(path: &str) -> String {
+    let mut parts: Vec<String> = path.splitn(4, '/').map(str::to_string).collect();
+    for p in parts.iter_mut().skip(1).take(2) {
+        *p = p.to_ascii_lowercase();
+    }
+    parts.join("/")
+}
+
 fn cgi(root: &Path, s: &Seen) -> Reply {
     let mut c = Command::new("git");
     c.arg("http-backend")
@@ -285,7 +294,10 @@ fn cgi(root: &Path, s: &Seen) -> Reply {
         .env("REMOTE_USER", "x-access-token")
         .env("REMOTE_ADDR", "127.0.0.1")
         .env("REQUEST_METHOD", &s.method)
-        .env("PATH_INFO", &s.path)
+        // Like GitHub, owner and repository names are case-insensitive (and
+        // so on every filesystem, not only macOS's): `/Acme/Web.git/...`
+        // serves `acme/web.git`. Access checks above see the path as sent.
+        .env("PATH_INFO", repo_path_lowercase(&s.path))
         .env("QUERY_STRING", s.query.as_deref().unwrap_or(""))
         .env("CONTENT_TYPE", s.header("content-type").unwrap_or(""))
         .env("CONTENT_LENGTH", s.body.len().to_string())

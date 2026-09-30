@@ -118,7 +118,7 @@ fn a_push_advertisement_of_a_private_repository_is_a_sensitive_read() {
     assert!(labels.iter().any(|l| l.starts_with("sensitive_read")), "labels={labels:?}");
 }
 
-/// GAP (low): the anonymous probe asks about the lower-cased path
+/// Found by review (2026-09-26), fixed (ADR-040): the anonymous probe asked about the lower-cased path
 /// `/<owner>/<name>.git`, not the path fetched. On a server where those name
 /// different repositories (case-sensitive paths: git-http-backend or cgit on
 /// Linux, Gerrit; or `name` vs `name.git` directories), a private
