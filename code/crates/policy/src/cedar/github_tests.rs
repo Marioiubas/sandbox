@@ -120,6 +120,23 @@ fn verbs_decide_and_the_rule_of_two_fires() {
     assert_eq!(p.authorize_l7(&adm, &post).result, Err(Reason::RuleOfTwo));
 }
 
+/// A pinned MCP server's session carries its agent session's labels
+/// (ADR-038): what either raises, both are judged with.
+#[test]
+fn a_policy_sharing_labels_is_judged_with_them() {
+    let agent = policy(API);
+    let server = policy(API).with_labels(agent.labels().clone());
+    let other = policy(API);
+    let public = Some("github.com/acme-public/site");
+    agent.labels().raise(Label::UntrustedInput);
+    server.labels().raise(Label::SensitiveRead);
+    for p in [&agent, &server] {
+        assert_eq!(decide(p, gh("pr.create", public, Visibility::Public, "POST")), Err(Reason::RuleOfTwo));
+    }
+    // Another session's policy has labels of its own.
+    assert_eq!(decide(&other, gh("pr.create", public, Visibility::Public, "POST")), Ok(()));
+}
+
 fn arb_verb() -> impl Strategy<Value = &'static str> {
     prop_oneof![
         Just("repo.read"),

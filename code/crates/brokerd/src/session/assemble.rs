@@ -3,6 +3,7 @@
 //! and, in shadow mode, the candidate evaluated beside them.
 
 use super::{Daemon, StartFailure, TASK_LIFETIME_SECS};
+use crate::labels::LabelOwner;
 use crate::profiles;
 use crate::proto::StartParams;
 use crate::session_util::*;
@@ -20,6 +21,20 @@ pub(super) struct Assembled {
     pub warnings: Vec<String>,
     /// A verified identity token's identity (CI), if one was given.
     pub identity: Option<grant::oidc::Identity>,
+    /// The session whose labels `egress` carries (ADR-038).
+    pub labels_session: SessionId,
+}
+
+/// Whose session is assembled.
+#[derive(Clone, Copy)]
+pub(super) enum SessionKind<'a> {
+    /// An agent session: labels of its own, shadow candidates and its
+    /// pinned MCP servers' call permits.
+    Agent,
+    /// A pinned MCP server's session, started for an agent session: it
+    /// carries that session's labels, never fresh ones (ADR-038), and has
+    /// no shadow candidate and no servers of its own.
+    McpServer(&'a LabelOwner),
 }
 
 impl Daemon {
@@ -36,14 +51,24 @@ impl Daemon {
             None => profiles::detect(&params.argv[0])?,
         };
         let user_policy = load_user_policy(&self.dirs)?;
-        let mut a = self.assemble_layers(id, params, cwd, username, profile, user_policy, true, identity.as_ref())?;
+        let mut a = self.assemble_layers(
+            id,
+            params,
+            cwd,
+            username,
+            profile,
+            user_policy,
+            SessionKind::Agent,
+            identity.as_ref(),
+        )?;
         a.identity = identity;
         Ok(a)
     }
 
-    /// The layers for a given profile and user policy. `agent` sessions
-    /// get shadow candidates and their pinned MCP servers' call permits;
-    /// an MCP server's own session gets neither.
+    /// The layers for a given profile and user policy. Agent sessions get
+    /// shadow candidates and their pinned MCP servers' call permits; an MCP
+    /// server's own session gets neither, and carries its agent session's
+    /// labels.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn assemble_layers(
         &self,
@@ -53,9 +78,10 @@ impl Daemon {
         username: &str,
         profile: ProfileFile,
         user_policy: PolicyFile,
-        agent: bool,
+        kind: SessionKind<'_>,
         identity: Option<&grant::oidc::Identity>,
     ) -> Result<Assembled, StartFailure> {
+        let agent = matches!(kind, SessionKind::Agent);
         let scope = format!("profile:{}", profile.name);
         // `${repo_remote}` comes from the checkout's own config file, read
         // without running git; unresolved, rules that use it grant nothing.
@@ -115,6 +141,15 @@ impl Daemon {
                 .with_repo_layer(&entries, cedar.as_deref(), &compile_env)
                 .map_err(|e| format!("approved repository policy does not compile: {e}"))?;
         }
+        // One agent session, one set of labels, whichever of its sessions
+        // makes the request (ADR-038).
+        let labels_session = match kind {
+            SessionKind::Agent => id.clone(),
+            SessionKind::McpServer(owner) => {
+                egress = egress.with_labels(owner.labels.clone());
+                owner.session.clone()
+            }
+        };
         let shadow = candidate.filter(|_| mode == policy::cedar::Mode::Shadow).map(|(sha, file)| {
             let compiled = EgressPolicy::compile_with(
                 [(scope.as_str(), profile.egress.as_slice()), ("candidate", file.egress.as_slice())],
@@ -160,6 +195,6 @@ impl Daemon {
         {
             warnings.push("no origin remote found: rules using ${repo_remote} grant nothing in this session".into());
         }
-        Ok(Assembled { profile, user_policy, egress, shadow, grants, warnings, identity: None })
+        Ok(Assembled { profile, user_policy, egress, shadow, grants, warnings, identity: None, labels_session })
     }
 }

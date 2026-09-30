@@ -10,6 +10,7 @@ pub mod dirs;
 pub mod fetch;
 pub mod identity;
 pub mod l7_pipeline;
+pub mod labels;
 pub mod login;
 pub mod mcp;
 pub mod pipeline;

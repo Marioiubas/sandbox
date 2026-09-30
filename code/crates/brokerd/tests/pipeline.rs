@@ -82,8 +82,10 @@ fn fx(
         table.into_iter().map(|(n, a)| (n.to_string(), a.into_iter().map(|x| x.parse::<IpAddr>().unwrap()).collect())),
     ));
     let rec = Arc::new(MemRecorder::default());
+    let session = SessionId::new();
     let ctx = Arc::new(PipelineCtx {
-        session: SessionId::new(),
+        labels_session: session.clone(),
+        session,
         enduser: "local:test".into(),
         groups: vec![],
         agent: "probe".into(),

@@ -54,6 +54,10 @@ impl Stats {
 
 pub struct PipelineCtx {
     pub session: SessionId,
+    /// The session whose labels `policy` carries: this session, or for a
+    /// pinned MCP server's session the agent session it was started for
+    /// (ADR-038). `session.label` rows are written on it.
+    pub labels_session: SessionId,
     pub enduser: String,
     /// The end user's IdP groups (on every row).
     pub groups: Vec<String>,
@@ -327,18 +331,10 @@ where
 
     mark("hello_us");
     // Intranet hosts and grants marked sensitive are sensitive reads,
-    // whether spliced or terminated (ADR-040).
-    if let Some(cause) = ctx.policy.admission_sensitive(&adm)
-        && ctx.policy.labels().raise(policy::github::Label::SensitiveRead)
-    {
-        let ev = ctx
-            .event(EventKind::SessionLabel, &rid)
-            .dest(dest.clone())
-            .detail("label", "sensitive_read")
-            .detail("cause", cause);
-        if let Err(e) = ctx.recorder.append(&ev) {
-            eprintln!("brokerd: audit append failed for label: {e:#}");
-        }
+    // whether spliced or terminated (ADR-040); from a pinned MCP server's
+    // session, of the agent session it serves (ADR-038).
+    if let Some(cause) = ctx.policy.admission_sensitive(&adm) {
+        ctx.raise_label(&rid, &dest, policy::github::Label::SensitiveRead, cause);
     }
     let timing = serde_json::Value::Object(timing);
     // 9a. Hosts with L7 rules or credentials are terminated, never spliced.

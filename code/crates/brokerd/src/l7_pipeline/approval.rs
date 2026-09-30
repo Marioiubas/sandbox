@@ -19,7 +19,13 @@ impl Conn {
     ) -> Option<(&'static str, serde_json::Value)> {
         let reason = dec.result.as_ref().err().copied()?;
         let keys = self.ctx.policy.approvable(&self.adm, actions, dec)?;
-        let id = self.ctx.approvals.request(self.ctx.session.as_str(), rid.as_str(), reason, keys.clone())?;
+        let id = self.ctx.approvals.request(
+            self.ctx.session.as_str(),
+            self.ctx.labels_session.as_str(),
+            rid.as_str(),
+            reason,
+            keys.clone(),
+        )?;
         let ev = self
             .ctx
             .event(EventKind::ApprovalRequested, rid)

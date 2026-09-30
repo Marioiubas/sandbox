@@ -7,9 +7,9 @@ tags: [sandbox/decisions, decision, topic/mcp, invariant/i1, invariant/i5, invar
 status: built
 confidence: medium
 created: 2026-09-25
-updated: 2026-09-25
+updated: 2026-09-26
 summary: "Stdio MCP servers are pinned by name in user/org policy, reached by the in-sandbox stub `broker mcp connect <name>` through the session proxy's reserved name, started by the daemon as their own sandboxed session with their own egress grants and sentinel credentials, pinned by a canonical digest of their whole tools list, approved on the host, and relayed with every tools/call authorized; remote servers, `mcp wrap`, argument-schema validation and non-tool capabilities are not built."
-related: ["[[MCP Guard]]", "[[ADR-012 MCP Servers as Pinned Sandboxed Principals]]", "[[Trifecta Session Labels]]", "[[I1 No Secrets in the Sandbox]]", "[[I5 Config Outside Writable Mounts]]", "[[postmark-mcp Rug Pull]]", "[[M3 CI Identity and MCP]]", "[[MOC Decisions]]"]
+related: ["[[MCP Guard]]", "[[ADR-012 MCP Servers as Pinned Sandboxed Principals]]", "[[Trifecta Session Labels]]", "[[I1 No Secrets in the Sandbox]]", "[[I5 Config Outside Writable Mounts]]", "[[postmark-mcp Rug Pull]]", "[[M3 CI Identity and MCP]]", "[[ADR-038 MCP Server Sessions Share Agent Labels]]", "[[MOC Decisions]]"]
 sources: []
 superseded_by: 
 ---
@@ -20,7 +20,7 @@ superseded_by:
 
 ## Status
 
-built (2026-09-25, M3 step 2).
+built (2026-09-25, M3 step 2). Amended by [[ADR-038 MCP Server Sessions Share Agent Labels]]: the server's session carries the labels of the agent session it was started for, not labels of its own (item 3), so what its egress reads raises the agent's labels and its own writes are judged with them; `tools.write` / `tools.untrusted` add labels at the call (item 5).
 
 ## Context
 
@@ -49,6 +49,7 @@ built (2026-09-25, M3 step 2).
 - D3 and D4 pass against a fake server and API (`m3_mcp::d3_d4_pinned_server_is_approved_confined_and_revoked_on_change`), including I1 for the server principal: its environment holds a sentinel and only its egress carries the real token.
 - Not built: remote MCP servers (the broker as OAuth client), `insufficient_scope` step-up, argument validation against the pinned `inputSchema` (arguments are digested into `args_integrity`), resources, prompts and completion, and a per-server `McpServer` Cedar principal for the server's own egress (its session's Task is the principal).
 - A server is started per connection; there is no pooling.
+- **Gap:** the server's session had fresh labels, so a private read through a server never reached the agent's labels and an unlisted write tool was judged with the server's own labels. **Closed 2026-09-26** by [[ADR-038 MCP Server Sessions Share Agent Labels]].
 
 ## Invariants affected
 
@@ -62,3 +63,4 @@ Upholds I1 (sentinels for server credentials), I5 (definitions and approvals out
 ## Build log
 
 - 2026-09-25: created and built. Code: `code/crates/mcpguard/src/{frame,manifest}.rs`, `code/crates/brokerd/src/mcp/{mod,relay,pin}.rs`, `code/crates/brokerd/src/session/mcp_launch.rs`, `code/crates/policy/src/mcp.rs`, `code/crates/broker-cli/src/cmd/mcp.rs`, `code/policies/default.cedar` (`rule-of-two-mcp`), `code/tests/conformance/src/bin/fake-mcp-server.rs`. Tests: `mcpguard::frame::tests::*` (strict classifier, oversize, chunking property), `mcpguard::manifest::tests::*` (order-independent digest property, diff), `brokerd::mcp::pin::tests::approvals_are_bound_to_the_digest`, `policy::cedar::github_tests::mcp_calls_decide`, `m3_mcp::*`; fuzz target `mcp_frame` (1.4 M runs locally, in the CI smoke).
+- 2026-09-26: amended by [[ADR-038 MCP Server Sessions Share Agent Labels]]: server sessions share their agent session's labels (both directions); label rows go on the agent session with `raised_in_session`. Tests: `m3_label_gaps_mcp::*`; `m3_mcp::*` unchanged.

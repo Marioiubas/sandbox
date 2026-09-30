@@ -6,7 +6,7 @@
 //! facts it observes, and never lowered.
 
 use super::{Conn, RespBody};
-use audit::{EventKind, Reason, RequestId};
+use audit::{Reason, RequestId};
 use bytes::Bytes;
 use creds::Issued;
 use http::{HeaderValue, Request, Response};
@@ -324,19 +324,10 @@ impl Conn {
             let cause = actions.first().map(|a| a.verb()).unwrap_or_default();
             raise.push((Label::SensitiveRead, format!("a credentialed read on {}: {cause}", self.host)));
         }
-        let labels = self.ctx.policy.labels();
+        // In a pinned MCP server's session these are the agent session's
+        // labels (ADR-038); the row goes on that session.
         for (l, cause) in raise {
-            if labels.raise(l) {
-                let ev = self
-                    .ctx
-                    .event(EventKind::SessionLabel, rid)
-                    .dest(self.dest.clone())
-                    .detail("label", l.as_str())
-                    .detail("cause", cause);
-                if let Err(e) = self.ctx.recorder.append(&ev) {
-                    eprintln!("brokerd: audit append failed for label {}: {e:#}", l.as_str());
-                }
-            }
+            self.ctx.raise_label(rid, &self.dest, l, cause);
         }
     }
 

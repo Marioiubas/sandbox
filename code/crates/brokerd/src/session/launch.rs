@@ -24,6 +24,7 @@ impl Daemon {
         warnings: Vec<String>,
         shadow: Option<(String, Result<EgressPolicy, String>)>,
         identity: Option<grant::oidc::Identity>,
+        labels_session: SessionId,
     ) -> Result<Running, StartFailure> {
         // Filesystem policy.
         let mut extra_write = Vec::new();
@@ -160,6 +161,7 @@ impl Daemon {
         let egress_mode = egress.mode().as_str();
         let ctx = Arc::new(PipelineCtx {
             session: id.clone(),
+            labels_session: labels_session.clone(),
             enduser: enduser.clone(),
             groups: groups.clone(),
             agent: params.argv[0].clone(),
@@ -212,6 +214,10 @@ impl Daemon {
             .detail("trust_bundle", tls::trust_bundle::describe(&l7.bundle));
         if let Some((sha, r)) = &shadow {
             ev = ev.detail("shadow", serde_json::json!({ "candidate": sha, "error": r.as_ref().err() }));
+        }
+        if labels_session != *id {
+            // A pinned MCP server's session: whose labels it carries (ADR-038).
+            ev = ev.detail("labels_session", labels_session.as_str());
         }
         ev.enduser = Some(enduser.clone());
         ev.enduser_groups = groups.clone();

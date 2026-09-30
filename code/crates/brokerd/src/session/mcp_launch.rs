@@ -2,10 +2,14 @@
 //! command from user or org policy, the server's own egress grants (its
 //! credentials reach it as sentinels), a fresh working directory per
 //! session (never inside broker state, which no sandbox may write: I5).
-//! Never the agent's policy, a shadow candidate or another MCP server.
+//! Never the agent's policy, a shadow candidate or another MCP server; but
+//! always the agent session's labels (ADR-038): a server is started for one
+//! agent session, what it reads raises that session's labels, and its own
+//! requests are judged with them.
 
-use super::{Daemon, Running, StartFailure};
+use super::{Daemon, Running, SessionKind, StartFailure};
 use crate::dirs::passwd_user;
+use crate::labels::LabelOwner;
 use crate::proto::StartParams;
 use audit::SessionId;
 use policy::mcp::McpServerConfig;
@@ -26,6 +30,10 @@ pub struct McpProcess {
 }
 
 impl Daemon {
+    /// Start `name` for the agent session `owner` names: the server's
+    /// session carries that session's labels (ADR-038). There is no way to
+    /// start one with labels of its own.
+    ///
     /// Boxed: a server session is started from inside an agent session's
     /// pipeline, which a session launch itself starts (the future is
     /// otherwise recursive).
@@ -34,10 +42,11 @@ impl Daemon {
         name: &'a str,
         cfg: &'a McpServerConfig,
         user: &'a PolicyFile,
+        owner: LabelOwner,
     ) -> Pin<Box<dyn Future<Output = Result<McpProcess, StartFailure>> + Send + 'a>> {
         Box::pin(async move {
             let id = SessionId::new();
-            let r = self.start_mcp_inner(&id, name, cfg, user).await;
+            let r = self.start_mcp_inner(&id, name, cfg, user, &owner).await;
             if let Err(f) = &r {
                 let argv0 = cfg.command.first().map(String::as_str).unwrap_or("");
                 self.refuse(&id, argv0, &f.message, &f.layers);
@@ -52,6 +61,7 @@ impl Daemon {
         name: &str,
         cfg: &McpServerConfig,
         user: &PolicyFile,
+        owner: &LabelOwner,
     ) -> Result<McpProcess, StartFailure> {
         let u = passwd_user()?;
         let dir = std::env::temp_dir().join(format!("broker-mcp-{name}-{id}"));
@@ -80,7 +90,8 @@ impl Daemon {
             tls: user.tls.clone(),
             ..Default::default()
         };
-        let assembled = self.assemble_layers(id, &params, &dir, &u.name, profile, layer, false, None)?;
+        let assembled =
+            self.assemble_layers(id, &params, &dir, &u.name, profile, layer, SessionKind::McpServer(owner), None)?;
         let running = self
             .start_assembled(id, params, dir.clone(), &u.dir, &u.name, assembled, [in_r.into(), out_w.into(), err])
             .await?;

@@ -25,10 +25,16 @@ fn render(p: &Value) -> String {
     }
     let prov: Vec<&Value> = p["provenance"].as_array().into_iter().flatten().collect();
     if !prov.is_empty() {
-        out.push_str("  the session's labels were raised by:\n");
+        // A pinned MCP server's session is judged with its agent session's
+        // labels (ADR-038).
+        match p["labels_session"].as_str().filter(|l| Some(*l) != p["session"].as_str()) {
+            Some(l) => out.push_str(&format!("  it was judged with the labels of agent session {l}, raised by:\n")),
+            None => out.push_str("  the session's labels were raised by:\n"),
+        }
         for e in prov {
+            let via = e["raised_in_session"].as_str().map(|s| format!(" in session {s}")).unwrap_or_default();
             out.push_str(&format!(
-                "    {:<16} {}  ({})\n",
+                "    {:<16} {}  ({}{via})\n",
                 e["label"].as_str().unwrap_or("?"),
                 e["cause"].as_str().unwrap_or("?"),
                 e["request_id"].as_str().unwrap_or("?"),

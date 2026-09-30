@@ -308,16 +308,12 @@ impl Relay<'_> {
                     return (self.deny(Some(id), Reason::AuditUnavailable, verb, vec![]), None);
                 }
                 self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
-                let labels = self.ctx.policy.labels();
+                // What the server itself reads or writes raises these same
+                // labels from its own session (ADR-038); the configured
+                // lists add what its egress cannot show (tool semantics).
                 for (l, on) in [(Label::ExternalEffect, write), (Label::UntrustedInput, untrusted)] {
-                    if on && labels.raise(l) {
-                        let ev = self
-                            .ctx
-                            .event(EventKind::SessionLabel, &rid)
-                            .dest(self.dest.clone())
-                            .detail("label", l.as_str())
-                            .detail("cause", verb.clone());
-                        let _ = self.ctx.recorder.append(&ev);
+                    if on {
+                        self.ctx.raise_label(&rid, &self.dest, l, verb.clone());
                     }
                 }
                 self.pending.insert(id.to_string());

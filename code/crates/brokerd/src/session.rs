@@ -25,7 +25,7 @@ mod running;
 
 pub use mcp_launch::McpProcess;
 
-use assemble::Assembled;
+use assemble::{Assembled, SessionKind};
 use running::{Listener, accept_loop};
 
 /// Every grant expires with its task (the `task-expiry` forbid).
@@ -196,7 +196,7 @@ impl Daemon {
         assembled: Assembled,
         stdio: [OwnedFd; 3],
     ) -> Result<Running, StartFailure> {
-        let Assembled { profile, user_policy, egress, shadow, grants, warnings, identity } = assembled;
+        let Assembled { profile, user_policy, egress, shadow, grants, warnings, identity, labels_session } = assembled;
 
         // Session directories.
         let session_dir = self.dirs.sessions_dir().join(id.as_str());
@@ -237,6 +237,7 @@ impl Daemon {
                 warnings,
                 shadow,
                 identity,
+                labels_session,
             )
             .await;
         if result.is_err() {

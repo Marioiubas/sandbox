@@ -10,6 +10,7 @@ pub mod pin;
 mod relay;
 
 use crate::dirs::BrokerDirs;
+use crate::labels::LabelOwner;
 use crate::pipeline::{Outcome, PipelineCtx};
 use crate::proto::Exited;
 use crate::session::Daemon;
@@ -66,7 +67,10 @@ where
 
     // Start and pin the server before anything from the agent is relayed.
     let started = match m.daemon.upgrade() {
-        Some(d) => d.start_mcp_server(&name, &cfg, &m.user).await.map_err(|f| f.message).map(|p| (d, p)),
+        // The server's session carries this agent session's labels (ADR-038).
+        Some(d) => {
+            d.start_mcp_server(&name, &cfg, &m.user, LabelOwner::of(&ctx)).await.map_err(|f| f.message).map(|p| (d, p))
+        }
         None => Err("the daemon is shutting down".into()),
     };
     let mut server = None;

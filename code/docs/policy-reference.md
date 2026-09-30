@@ -302,6 +302,16 @@ sentinel. Every tool call is authorized and logged. Resources, prompts and
 the server's own requests (such as sampling) are not relayed.
 Only your own or your org's policy can define servers; a repository cannot.
 
+A server works for the agent session that connected to it and shares that
+session's labels. What the server reads through its own grants counts as
+the agent session's reading: a private repository is a sensitive read, a
+public issue is untrusted input. The server's own writes are held by the
+Rule of Two like the agent's, even for a tool missing from `tools.write`.
+`tools.write` and `tools.untrusted` add labels when the tool is called,
+for what the broker cannot see from the server's traffic. In the audit
+log, a label raised by a server is on the agent's session and names the
+server's session (`raised_in_session`) and the request that raised it.
+
 ## CI identity (M3)
 
 ```toml

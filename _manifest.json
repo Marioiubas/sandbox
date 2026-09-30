@@ -4536,6 +4536,32 @@
     "sources": []
   },
   {
+    "file": "95-decisions/ADR-038 MCP Server Sessions Share Agent Labels.md",
+    "title": "ADR-038 MCP Server Sessions Share Agent Labels",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "A pinned MCP server's session is started for one agent session and carries that session's raise-only labels, never fresh ones: the server's reads and writes raise the agent's labels and its own requests are judged with them; starting a server requires the agent session's labels; label rows go on the agent session naming the server session and request that raised them.",
+    "links_to": [
+      "ADR-030 MCP Guard as Built",
+      "ADR-040 Label Sources Beyond the Adapters",
+      "Trifecta Session Labels",
+      "MCP Guard",
+      "GitHub MCP Toxic Flow",
+      "ADR-010 Session-Level Trifecta Labels in the MVP",
+      "ADR-033 Public-Sink Rule as Built",
+      "ADR-037 Step-Up Approvals as Built",
+      "Fatigue-Resistant Approval Interfaces",
+      "I9 Hash-Chained Audit Outside the Sandbox",
+      "M3 CI Identity and MCP",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 build (2026-09-26) from a security review of session labels across MCP server sessions and the m3_label_gaps_mcp tests.",
+    "aliases": [
+      "ADR-038"
+    ],
+    "sources": []
+  },
+  {
     "file": "95-decisions/ADR-039 Model API Is Not a Rule-of-Two Sink.md",
     "title": "ADR-039 Model API Is Not a Rule-of-Two Sink",
     "type": "decision",

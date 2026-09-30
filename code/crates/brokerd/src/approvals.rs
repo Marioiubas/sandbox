@@ -21,6 +21,10 @@ pub const MAX_PENDING_PER_SESSION: usize = 32;
 pub struct Pending {
     pub id: String,
     pub session: String,
+    /// The session whose labels the held request was judged with: the same
+    /// session, or for a pinned MCP server's session the agent session it
+    /// serves (ADR-038). Provenance is read from its `session.label` rows.
+    pub labels_session: String,
     /// The denied request that asked for it.
     pub request_id: String,
     pub reason: Reason,
@@ -62,7 +66,14 @@ impl Registry {
     /// Record a pending approval and return its ID. The same session and
     /// actions reuse one pending approval; `None` when the session already
     /// has too many (the request is then denied without one).
-    pub fn request(&self, session: &str, request_id: &str, reason: Reason, keys: Vec<String>) -> Option<String> {
+    pub fn request(
+        &self,
+        session: &str,
+        labels_session: &str,
+        request_id: &str,
+        reason: Reason,
+        keys: Vec<String>,
+    ) -> Option<String> {
         let t = now();
         let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
         pending.retain(|_, p| t - p.created < TTL_SECS);
@@ -76,6 +87,7 @@ impl Registry {
         let p = Pending {
             id: id.clone(),
             session: session.to_string(),
+            labels_session: labels_session.to_string(),
             request_id: request_id.to_string(),
             reason,
             keys,
@@ -124,8 +136,10 @@ impl Registry {
 }
 
 /// `approval.list`: each pending approval with its authority diff and the
-/// provenance a decision needs: which requests raised the session's labels
-/// (ground truth from the audit log, never the agent's own account).
+/// provenance a decision needs: which requests raised the labels it was
+/// judged with (ground truth from the audit log, never the agent's own
+/// account), including those a pinned MCP server's session raised in its
+/// agent session's labels (ADR-038).
 pub fn list_json(d: &crate::session::Daemon) -> serde_json::Value {
     let t = now();
     let items: Vec<serde_json::Value> = d
@@ -135,7 +149,7 @@ pub fn list_json(d: &crate::session::Daemon) -> serde_json::Value {
         .map(|p| {
             let q = audit::Query {
                 after_seq: 0,
-                session: Some(p.session.clone()),
+                session: Some(p.labels_session.clone()),
                 kind: Some(audit::EventKind::SessionLabel),
                 decision: None,
                 reason: None,
@@ -152,12 +166,14 @@ pub fn list_json(d: &crate::session::Daemon) -> serde_json::Value {
                         "label": e.event.detail.get("label"),
                         "cause": e.event.detail.get("cause"),
                         "request_id": e.event.request_id.map(|r| r.to_string()),
+                        "raised_in_session": e.event.detail.get("raised_in_session"),
                     })
                 })
                 .collect();
             serde_json::json!({
                 "id": p.id,
                 "session": p.session,
+                "labels_session": p.labels_session,
                 "request_id": p.request_id,
                 "reason": p.reason.as_str(),
                 "why": p.reason.explain(),
@@ -211,17 +227,17 @@ mod tests {
         let policy = Arc::new(EgressPolicy::default());
         r.register("s1", policy.clone());
         let k = vec!["github pr.create github.com/acme/web".to_string()];
-        let a = r.request("s1", "req-1", Reason::RuleOfTwo, k.clone()).unwrap();
+        let a = r.request("s1", "s1", "req-1", Reason::RuleOfTwo, k.clone()).unwrap();
         assert!(a.starts_with("apr-") && a.len() == 14);
         assert_eq!(
-            r.request("s1", "req-2", Reason::RuleOfTwo, k.clone()),
+            r.request("s1", "s1", "req-2", Reason::RuleOfTwo, k.clone()),
             Some(a.clone()),
             "same actions, same approval"
         );
         for n in 1..MAX_PENDING_PER_SESSION {
-            assert!(r.request("s1", "req", Reason::RuleOfTwo, vec![format!("k{n}")]).is_some());
+            assert!(r.request("s1", "s1", "req", Reason::RuleOfTwo, vec![format!("k{n}")]).is_some());
         }
-        assert_eq!(r.request("s1", "req", Reason::RuleOfTwo, vec!["one too many".into()]), None);
+        assert_eq!(r.request("s1", "s1", "req", Reason::RuleOfTwo, vec!["one too many".into()]), None);
         let p = r.grant(&a, Scope::Once).unwrap();
         assert_eq!(p.keys, k);
         assert!(policy.approvals().is_approved(&k[0]));
@@ -231,5 +247,21 @@ mod tests {
         r.unregister("s1");
         assert!(r.list().is_empty());
         assert!(r.grant(&b, Scope::Session).is_err());
+    }
+
+    /// A write held in a pinned MCP server's session was judged with its
+    /// agent session's labels (ADR-038): the approval names that session
+    /// for provenance, and is granted into the server's session.
+    #[test]
+    fn a_held_server_request_names_the_session_whose_labels_held_it() {
+        let r = Registry::default();
+        let server = Arc::new(EgressPolicy::default());
+        r.register("srv", server.clone());
+        let k = vec!["github issue.comment github.com/acme/web".to_string()];
+        let a = r.request("srv", "agent", "req-1", Reason::RuleOfTwo, k.clone()).unwrap();
+        let p = r.get(&a).unwrap();
+        assert_eq!((p.session.as_str(), p.labels_session.as_str()), ("srv", "agent"));
+        r.grant(&a, Scope::Once).unwrap();
+        assert!(server.approvals().is_approved(&k[0]));
     }
 }
