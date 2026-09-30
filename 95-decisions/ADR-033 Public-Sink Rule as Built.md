@@ -3,7 +3,7 @@ title: "ADR-033 Public-Sink Rule as Built"
 aliases: ["ADR-033"]
 type: decision
 section: decisions
-tags: [sandbox/decisions, decision, topic/trifecta, invariant/i3, milestone/m3]
+tags: [sandbox/decisions, decision, topic/ifc, invariant/i3, milestone/m3]
 status: built
 confidence: medium
 created: 2026-09-25

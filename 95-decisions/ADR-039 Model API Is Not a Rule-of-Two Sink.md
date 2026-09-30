@@ -54,3 +54,8 @@ Upholds I4 (repository policy cannot set it) and I7 (only the user's brokered cr
 ## Tests
 
 `policy::cedar::github_tests::the_model_api_is_not_a_write_destination_for_the_rule_of_two` (with both labels live: `POST` to the model API passes, `POST` elsewhere is held; a GitHub grant and a repository layer cannot set `model_api`); `brokerd` profile tests compile the marked profiles.
+
+## Relationships
+
+- decided-by:: M3 build
+- amends:: [[ADR-010 Session-Level Trifecta Labels in the MVP]]

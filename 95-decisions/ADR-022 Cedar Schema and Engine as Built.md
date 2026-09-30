@@ -3,7 +3,7 @@ title: "ADR-022 Cedar Schema and Engine as Built"
 aliases: ["ADR-022"]
 type: decision
 section: decisions
-tags: [sandbox/decisions, decision, topic/policy, control/egress, control/l7, invariant/i4, invariant/i6, invariant/i8, milestone/m2]
+tags: [sandbox/decisions, decision, topic/policy, control/egress, invariant/i4, invariant/i6, invariant/i8, milestone/m2]
 status: built
 confidence: medium
 created: 2026-09-24

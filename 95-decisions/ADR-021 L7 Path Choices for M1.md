@@ -3,7 +3,7 @@ title: "ADR-021 L7 Path Choices for M1"
 aliases: ["ADR-021"]
 type: decision
 section: decisions
-tags: [sandbox/decisions, decision, topic/network, topic/credentials, control/l7, boundary/tb3, boundary/tb4, invariant/i1, invariant/i6, invariant/i7, invariant/i9, milestone/m1]
+tags: [sandbox/decisions, decision, topic/egress, topic/credentials, control/egress, boundary/tb3, boundary/tb4, invariant/i1, invariant/i6, invariant/i7, invariant/i9, milestone/m1]
 status: built
 confidence: medium
 created: 2026-09-24

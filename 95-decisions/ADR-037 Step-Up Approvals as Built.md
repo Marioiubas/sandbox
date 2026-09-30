@@ -57,3 +57,9 @@ Upholds I8 and I9; the control socket's unreachability from the sandbox is what 
 ## Tests
 
 `policy::approvals::tests::*`, `policy::cedar::github_tests::a_human_approval_lifts_exactly_one_action_once`, `brokerd::approvals::tests::*`, and `m3_approvals::a_held_write_is_approved_on_the_host_once_and_never_from_inside` (the agent's own `broker approve` from inside the sandbox fails; a non-terminal approve without `--yes` refuses; the approved retry passes once and the next PR is held again; one allowed row lists `approvals_used`; only the approved PR reached the upstream; audit chain verifies).
+
+## Relationships
+
+- decided-by:: M3 build
+- implements:: [[Fatigue-Resistant Approval Interfaces]]
+- extends:: [[ADR-010 Session-Level Trifecta Labels in the MVP]]

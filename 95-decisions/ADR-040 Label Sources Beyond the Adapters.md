@@ -56,3 +56,9 @@ Strengthens the trifecta labels; upholds I1 (the git probe carries no credential
 ## Tests
 
 `l7::github::tests::routes_map_to_verbs` (restricted routes, bodies, `ref` queries), `l7::git::tests::pull_request_refs_are_recognised_in_upload_pack_requests` and `upload_pack_reader_is_total`, `policy::egress::sensitivity::tests::intranet_addresses_and_declared_grants_are_sensitive`, end to end `m3_label_gaps_github::*` and `m3_label_gaps_git::*`; `m3_git_labels`, `m1_git` and the GitHub suites still pass.
+
+## Relationships
+
+- decided-by:: M3 build (security review)
+- amends:: [[ADR-029 GitHub API Adapter and Session Labels as Built]]
+- amends:: [[ADR-036 Git Fetch Visibility by Anonymous Probe]]
