@@ -248,4 +248,3 @@ mod decode_tests {
         assert_eq!(decode_body(&h, &Bytes::from(gz(&[b'a'; 2048])), 1024), Err(Reason::BodyTooLarge));
     }
 }
-
