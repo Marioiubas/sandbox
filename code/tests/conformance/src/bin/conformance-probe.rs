@@ -4,6 +4,9 @@
 //! Exit codes: 0 = the action succeeded (reached / read / wrote);
 //! 10 = the action was blocked; 20 = inconclusive; 2 = usage error.
 //! stdout carries one line: `ALLOWED ...`, `DENIED ...` or `INCONCLUSIVE ...`.
+//! Filesystem probes are DENIED only for a refusal (EACCES, EPERM, EROFS);
+//! any other error, such as ENOENT for a path that does not exist, is
+//! INCONCLUSIVE (see `conformance-probe/fs.rs`).
 
 // A binary's modules live beside it in `conformance-probe/` (a directory
 // without `main.rs`, so cargo does not treat them as binaries).
@@ -81,6 +84,32 @@ fn errno_str(e: &std::io::Error) -> String {
     format!("{e} (errno {:?})", e.raw_os_error())
 }
 
+/// The symbolic errno (`ENOENT`), printed as `errno=NAME` so tests can
+/// match a platform's mechanism by name rather than by number.
+fn errno_name(e: &std::io::Error) -> String {
+    let Some(n) = e.raw_os_error() else { return "none".into() };
+    let known = [
+        (libc::EPERM, "EPERM"),
+        (libc::ENOENT, "ENOENT"),
+        (libc::ENXIO, "ENXIO"),
+        (libc::EACCES, "EACCES"),
+        (libc::EBUSY, "EBUSY"),
+        (libc::EEXIST, "EEXIST"),
+        (libc::EXDEV, "EXDEV"),
+        (libc::ENOTDIR, "ENOTDIR"),
+        (libc::EISDIR, "EISDIR"),
+        (libc::EINVAL, "EINVAL"),
+        (libc::ETXTBSY, "ETXTBSY"),
+        (libc::EROFS, "EROFS"),
+        (libc::EMLINK, "EMLINK"),
+        (libc::ELOOP, "ELOOP"),
+        (libc::ENAMETOOLONG, "ENAMETOOLONG"),
+        (libc::ENOTEMPTY, "ENOTEMPTY"),
+        (libc::EOPNOTSUPP, "EOPNOTSUPP"),
+    ];
+    known.iter().find(|(v, _)| *v == n).map(|(_, s)| s.to_string()).unwrap_or_else(|| format!("E{n}"))
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(cmd) = args.first().cloned() else { usage() };
@@ -122,9 +151,8 @@ fn main() {
             }
         }
         "tcp" | "udp" | "dns-udp" | "dns-tcp" | "icmp" | "unix" | "unix-socket" => net::run(&cmd, rest),
-        "read" | "list" | "write" | "write-new" | "mkdir" | "rename" | "symlink" | "hardlink" | "read-when-exists" => {
-            fs::run(&cmd, rest)
-        }
+        "read" | "list" | "write" | "write-new" | "mkdir" | "rename" | "unlink" | "symlink" | "hardlink"
+        | "read-when-exists" => fs::run(&cmd, rest),
         "env-has" | "env-scan" | "secret-scan" => secrets::run(&cmd, rest),
         _ => usage(),
     }

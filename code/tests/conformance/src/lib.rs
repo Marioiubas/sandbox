@@ -8,7 +8,10 @@
 //!
 //! The broker binaries must be built first: `cargo build --workspace --bins`.
 
+pub mod fs_fixture;
 pub mod m1;
+
+pub use fs_fixture::{CanaryHome, FileState, assert_denied_or, assert_fs_denied, assert_read_denied, host_tmp};
 
 use audit::{AuditEvent, DecisionResult, Reason, SqliteRecorder};
 use std::io::{Read, Write};
@@ -48,6 +51,15 @@ impl ProbeResult {
     pub fn denied(&self) -> bool {
         self.code == 10
     }
+    /// Neither allowed nor refused: for a filesystem probe, an error other
+    /// than EACCES, EPERM or EROFS (ENOENT above all).
+    pub fn inconclusive(&self) -> bool {
+        self.code == 20
+    }
+    /// The `errno=NAME` a filesystem probe printed, if any.
+    pub fn errno(&self) -> Option<&str> {
+        self.stdout[self.stdout.rfind("errno=")? + 6..].split_whitespace().next()
+    }
 }
 
 impl From<Output> for ProbeResult {
@@ -65,6 +77,26 @@ pub struct Harness {
     pub repo: tempfile::TempDir,
     pub bins: Bins,
     pub daemon_env: Vec<(String, String)>,
+    /// `Opts::canary_home`.
+    pub canary: Option<CanaryHome>,
+    /// `Opts::private_install`: removed only after the daemon is stopped.
+    install: Option<tempfile::TempDir>,
+}
+
+/// Fixture options, all off by default.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Opts {
+    /// A `CanaryHome` that brokerd protects like the real home.
+    pub canary_home: bool,
+    /// `BROKER_HOME` under /var/tmp rather than /tmp, so its config and state
+    /// are real host paths inside the Linux sandbox too (masked there, like
+    /// `~/.config/broker` and `~/.local/state/broker`), not merely absent
+    /// because /tmp is a private tmpfs.
+    pub visible_state: bool,
+    /// Run a private copy of `broker`, `brokerd` and the shim from a host
+    /// directory, so probes may try to replace or delete the broker's own
+    /// binaries without risking the ones other tests run.
+    pub private_install: bool,
 }
 
 /// Short-path directory outside the per-user temp dir (Unix socket path
@@ -85,18 +117,42 @@ impl Harness {
 
     /// As `with_daemon_env`, with `init` preparing the session repository.
     pub fn custom(config: &str, daemon_env: &[(&str, &str)], init: impl FnOnce(&Path)) -> Self {
-        let home = short_tmp("bkc.");
+        Self::with_opts(config, daemon_env, init, Opts::default())
+    }
+
+    pub fn with_opts(config: &str, daemon_env: &[(&str, &str)], init: impl FnOnce(&Path), opts: Opts) -> Self {
+        let home = if opts.visible_state { host_tmp("bkc.") } else { short_tmp("bkc.") };
         std::fs::create_dir_all(home.path().join("config")).unwrap();
         std::fs::write(home.path().join("config/broker.toml"), config).unwrap();
         // Outside the macOS per-user temp dir, which sandboxes may write (ADR-016).
         let repo = short_tmp("repo.");
         init(repo.path());
-        Harness {
-            home,
-            repo,
-            bins: bins(),
-            daemon_env: daemon_env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+        let mut daemon_env: Vec<(String, String)> =
+            daemon_env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let canary = opts.canary_home.then(CanaryHome::new);
+        if let Some(c) = &canary {
+            daemon_env.push(("BROKER_TEST_PROTECT_HOME".into(), c.path.display().to_string()));
         }
+        let mut bins = bins();
+        let install = opts.private_install.then(|| {
+            let d = host_tmp("bkb.");
+            for b in ["broker", "brokerd", "broker-sandbox-shim"] {
+                std::fs::copy(bins.broker.with_file_name(b), d.path().join(b)).unwrap();
+            }
+            bins.broker = d.path().canonicalize().unwrap().join("broker");
+            d
+        });
+        Harness { home, repo, bins, daemon_env, canary, install }
+    }
+
+    /// The canary home (`Opts::canary_home`).
+    pub fn canary_home(&self) -> &CanaryHome {
+        self.canary.as_ref().expect("Opts::canary_home")
+    }
+
+    /// Where this harness's `broker`, `brokerd` and shim run from.
+    pub fn install_dir(&self) -> PathBuf {
+        self.bins.broker.parent().unwrap().canonicalize().unwrap()
     }
 
     pub fn repo_path(&self) -> PathBuf {
@@ -149,6 +205,33 @@ impl Harness {
     pub fn spawn_sh(&self, script: &str) -> std::process::Child {
         let argv = ["/bin/sh".to_string(), "-c".to_string(), script.to_string()];
         self.base_cmd(None, &argv, &[]).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap()
+    }
+
+    /// Several probes, in order, in one session (one sandbox and policy for
+    /// all of them, instead of a session each).
+    pub fn probe_batch(&self, probes: &[Vec<String>]) -> Vec<ProbeResult> {
+        let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
+        let probe = q(&self.bins.probe.display().to_string());
+        let mut script = String::new();
+        for (i, args) in probes.iter().enumerate() {
+            let args: Vec<String> = args.iter().map(|a| q(a)).collect();
+            script.push_str(&format!("echo '@@probe {i}'; {probe} {} 2>&1; echo \"@@rc {i} $?\"\n", args.join(" ")));
+        }
+        let out = self.sh(&script);
+        assert_eq!(out.code, 0, "probe batch session: {out:?}");
+        (0..probes.len())
+            .map(|i| {
+                let (begin, end) = (format!("@@probe {i}\n"), format!("@@rc {i} "));
+                let s = out.stdout.find(&begin).map(|p| p + begin.len()).expect("batch output");
+                let e = s + out.stdout[s..].find(&end).expect("batch output");
+                let code = out.stdout[e + end.len()..].lines().next().and_then(|l| l.trim().parse().ok());
+                ProbeResult {
+                    code: code.expect("exit code"),
+                    stdout: out.stdout[s..e].to_string(),
+                    stderr: String::new(),
+                }
+            })
+            .collect()
     }
 
     pub fn events(&self) -> Vec<AuditEvent> {
@@ -257,6 +340,8 @@ impl Drop for Harness {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();
+        // A private install goes only after its daemon has stopped.
+        self.install.take();
     }
 }
 

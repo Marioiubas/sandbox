@@ -140,45 +140,77 @@ fn cat09_proxy_bypass() {
     assert_eq!(sock.accepts.load(std::sync::atomic::Ordering::SeqCst), 0, "host Unix socket was reached");
 }
 
+/// In-repository agent configuration, created on the host before the
+/// session so each write probe hits a real file (I5). A write into a
+/// directory that does not exist fails with ENOENT whether or not the
+/// sandbox protects it, which is what these probes used to test on macOS.
+const REPO_AGENT_CONFIG: &[&str] = &[
+    ".claude/settings.json",
+    ".mcp.json",
+    ".vscode/settings.json",
+    ".envrc",
+    ".codex/config.toml",
+    ".broker/broker.toml",
+];
+
+fn init_repo_with_agent_config(p: &std::path::Path) {
+    init_repo(p);
+    for f in REPO_AGENT_CONFIG {
+        let path = p.join(f);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, format!("# host copy of {f}\n")).unwrap();
+    }
+}
+
 #[test]
 fn cat10_filesystem() {
-    let secrets = tempfile::Builder::new().prefix("bks.").tempdir_in("/tmp").unwrap();
+    // The secrets directory and the canary home are real host paths the
+    // sandbox sees (not the private /tmp of the Linux sandbox), and every
+    // probed file exists on the host before the session.
+    let secrets = host_tmp("bks.");
     let secrets_dir = secrets.path().canonicalize().unwrap();
-    std::fs::write(secrets_dir.join("canary-key"), "CANARY-SECRET-7f3a").unwrap();
+    let canary_key = secrets_dir.join("canary-key");
+    std::fs::write(&canary_key, "CANARY-SECRET-7f3a").unwrap();
     let cfg = format!("version = 1\n\n[filesystem]\ndeny_read = [\"{}\"]\n", secrets_dir.display());
-    let h = Harness::new(&cfg);
+    let opts = Opts { canary_home: true, ..Default::default() };
+    let h = Harness::with_opts(&cfg, &[], init_repo_with_agent_config, opts);
     let repo = h.repo_path();
+    let ch = h.canary_home();
     let r = |p: &str| repo.join(p).display().to_string();
-    // Controls: the repository is writable and git commits work.
+    let s = |p: &std::path::Path| p.display().to_string();
+    let mut protected: Vec<_> = REPO_AGENT_CONFIG.iter().map(|p| repo.join(p)).collect();
+    protected.extend([repo.join(".git/config"), repo.join(".git/hooks/pre-commit"), canary_key.clone()]);
+    let before = FileState::of(&protected);
+    // Controls: the repository is writable, git commits work, the canary
+    // home is visible (so a missing file there would be a fixture bug).
     assert_allowed(&h.probe(&["write", &r("src.txt")]), "write in the repo");
     assert_allowed(&h.probe(&["read", &r("README.md")]), "read in the repo");
+    assert_allowed(&h.probe(&["read", &s(&ch.join(CanaryHome::PLAIN))]), "read an unprotected file in the canary home");
     // Secret reads.
-    assert_denied(
-        &h.probe(&["read", &secrets_dir.join("canary-key").display().to_string()]),
-        "policy deny_read canary",
-    );
+    assert_read_denied(&h.probe(&["read", &s(&canary_key)]), &canary_key, "policy deny_read canary");
+    let key = ch.join(CanaryHome::SSH_KEY);
+    assert_read_denied(&h.probe(&["read", &s(&key)]), &key, "~/.ssh/id_ed25519 (canary home)");
     let home = std::env::var("HOME").unwrap();
-    let ssh_key = format!("{home}/.ssh/id_ed25519");
-    if std::path::Path::new(&ssh_key).exists() {
-        assert_denied(&h.probe(&["read", &ssh_key]), "~/.ssh/id_ed25519");
+    let real_key = std::path::Path::new(&home).join(".ssh/id_ed25519");
+    if real_key.is_file() {
+        assert_read_denied(&h.probe(&["read", &s(&real_key)]), &real_key, "the user's own ~/.ssh/id_ed25519");
     }
-    assert_denied(&h.probe(&["read", &h.audit_db().display().to_string()]), "audit log (I9)");
-    // Writes to protected names inside the writable repo (I5).
-    for p in [
-        ".git/hooks/pre-commit",
-        ".git/config",
-        ".claude/settings.json",
-        ".mcp.json",
-        ".vscode/settings.json",
-        ".envrc",
-        ".codex/config.toml",
-        ".broker/broker.toml",
-    ] {
-        assert_denied(&h.probe(&["write", &r(p)]), p);
+    assert_read_denied(&h.probe(&["read", &s(&h.audit_db())]), &h.audit_db(), "audit log (I9)");
+    // Writes to protected names inside the writable repo (I5): each exists,
+    // or (a new hook) its directory does.
+    for p in [".git/hooks/pre-commit", ".git/config"].iter().chain(REPO_AGENT_CONFIG) {
+        assert_fs_denied(&h.probe(&["write", &r(p)]), p);
     }
-    assert_denied(&h.probe(&["mkdir", &r(".cursor/rules")]), ".cursor");
+    assert_fs_denied(&h.probe(&["mkdir", &r(".cursor/rules")]), ".cursor");
     // Writes outside the grants, including `..` traversal.
-    assert_denied(&h.probe(&["write-new", &format!("{home}/.broker-probe-{}", std::process::id())]), "write in $HOME");
+    assert_fs_denied(
+        &h.probe(&["write-new", &format!("{home}/.broker-probe-{}", std::process::id())]),
+        "write in $HOME",
+    );
+    assert_fs_denied(&h.probe(&["write-new", &s(&ch.join(".broker-probe"))]), "new file in the canary home");
+    for p in CanaryHome::CONFIG {
+        assert_fs_denied(&h.probe(&["write", &s(&ch.join(p))]), &format!("~/{p} (canary home)"));
+    }
     let outside = repo.parent().unwrap().join(format!("broker-probe-outside-{}", std::process::id()));
     let dotdot = format!("{}/../{}", repo.display(), outside.file_name().unwrap().to_string_lossy());
     let res = h.probe(&["write-new", &dotdot]);
@@ -186,37 +218,56 @@ fn cat10_filesystem() {
     // write may succeed there; either way the host path must be untouched.
     assert!(!outside.exists(), "`..` traversal wrote {} on the host: {res:?}", outside.display());
     if cfg!(target_os = "macos") {
-        assert_denied(&res, "`..` out of the repo");
+        assert_fs_denied(&res, "`..` out of the repo");
     }
-    // Link and rename tricks.
-    assert_denied(&h.probe(&["rename", &r(".git"), &r(".gitx")]), "rename .git (replant gitdir)");
+    // Link and rename tricks. Linux answers these through its mount table:
+    // `.git` is a bind mountpoint (EBUSY to rename) and `.git/config` a
+    // read-only bind (EXDEV to rename over or link across).
+    assert_denied_or(&h.probe(&["rename", &r(".git"), &r(".gitx")]), "rename .git (replant gitdir)", &["EBUSY"]);
     std::fs::write(repo.join("evil-config"), "[core]\n\tfsmonitor = touch /tmp/pwned\n").unwrap();
-    assert_denied(&h.probe(&["rename", &r("evil-config"), &r(".git/config")]), "rename over .git/config");
-    assert_denied(&h.probe(&["hardlink", &r(".git/config"), &r("cfg-link")]), "hardlink to .git/config");
-    assert_allowed(
-        &h.probe(&["symlink", &repo.join(".git/hooks").display().to_string(), &r("hooks-link")]),
-        "symlink creation",
-    );
-    assert_denied(&h.probe(&["write", &r("hooks-link/post-commit")]), "write through a symlink into .git/hooks");
-    assert_allowed(
-        &h.probe(&["symlink", &secrets_dir.join("canary-key").display().to_string(), &r("secret-link")]),
-        "symlink creation",
-    );
-    assert_denied(&h.probe(&["read", &r("secret-link")]), "read a secret through a symlink");
-    // A secret created after the session started is still unreadable.
+    let res = h.probe(&["rename", &r("evil-config"), &r(".git/config")]);
+    assert_denied_or(&res, "rename over .git/config", &["EXDEV"]);
+    assert_denied_or(&h.probe(&["hardlink", &r(".git/config"), &r("cfg-link")]), "hardlink to .git/config", &["EXDEV"]);
+    assert_allowed(&h.probe(&["symlink", &s(&repo.join(".git/hooks")), &r("hooks-link")]), "symlink creation");
+    assert_fs_denied(&h.probe(&["write", &r("hooks-link/post-commit")]), "write through a symlink into .git/hooks");
+    assert_allowed(&h.probe(&["symlink", &s(&canary_key), &r("secret-link")]), "symlink creation");
+    assert_read_denied(&h.probe(&["read", &r("secret-link")]), &canary_key, "read a secret through a symlink");
+    // A secret created after the session started is still unreadable (the
+    // probe polls through ENOENT until the file appears).
     let late = secrets_dir.join("late-key");
-    let child = h.spawn_probe(&["read-when-exists", &late.display().to_string(), "5"]);
+    let child = h.spawn_probe(&["read-when-exists", &s(&late), "5"]);
     std::thread::sleep(std::time::Duration::from_millis(800));
     std::fs::write(&late, "LATE-SECRET").unwrap();
     let out: ProbeResult = child.wait_with_output().unwrap().into();
-    assert!(out.code == 10 || out.code == 20, "late secret readable: {out:?}");
-    // The host-side file was never modified by the sandbox.
-    let cfg_now = std::fs::read_to_string(repo.join(".git/config")).unwrap();
-    assert!(!cfg_now.contains("fsmonitor"), ".git/config was modified");
-    assert!(!repo.join(".git/hooks/pre-commit").exists());
-    // Placeholders (Linux) are removed at teardown; nothing new is left behind.
-    for p in [".mcp.json", ".envrc", ".claude", ".vscode", ".codex", ".cursor", ".broker"] {
+    assert_read_denied(&out, &late, "a secret created after the session started");
+    // Nothing on the host changed, and nothing new is left behind (Linux
+    // placeholders for absent protected names are removed at teardown).
+    before.assert_same(&FileState::of(&protected), "repository config and secrets");
+    ch.assert_unchanged();
+    for p in [".cursor", ".gitx", "cfg-link", "hooks-link/post-commit"] {
         assert!(!repo.join(p).exists(), "{p} left in the repository after the session");
+    }
+}
+
+#[test]
+fn cat10_absent_protected_names_cannot_be_created() {
+    // A protected name missing from the repository cannot be created: macOS
+    // refuses the create, Linux binds an empty read-only placeholder there
+    // for the session. `mkdir <name>/x` is refused on both, strictly.
+    let h = Harness::new("version = 1\n");
+    let repo = h.repo_path();
+    let names = [".claude", ".mcp.json", ".codex", ".cursor", ".gemini", ".vscode", ".idea", ".envrc", ".broker"];
+    for name in names {
+        assert!(!repo.join(name).exists(), "fixture: {name}");
+        assert_fs_denied(&h.probe(&["mkdir", &repo.join(name).join("x").display().to_string()]), name);
+        // On Linux the placeholder is a directory, so creating a file of that
+        // name is EEXIST, not a refusal; the mkdir above covers Linux.
+        if cfg!(target_os = "macos") {
+            assert_fs_denied(&h.probe(&["write-new", &repo.join(name).display().to_string()]), name);
+        }
+    }
+    for name in names {
+        assert!(!repo.join(name).exists(), "{name} left in the repository after the session");
     }
 }
 
@@ -228,7 +279,7 @@ fn cat10_non_repo_directory_cannot_grow_git_hooks() {
     let repo = h.repo_path();
     std::fs::remove_dir_all(repo.join(".git")).unwrap();
     let r = h.probe(&["mkdir", &repo.join(".git/hooks").display().to_string()]);
-    assert!(r.denied(), "{r:?}");
+    assert_fs_denied(&r, "mkdir .git/hooks outside a repository");
     assert!(!repo.join(".git/hooks").exists());
     assert!(!repo.join(".git").exists(), "placeholder removed at teardown");
 }

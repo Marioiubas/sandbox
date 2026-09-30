@@ -57,6 +57,7 @@ impl Daemon {
             path_dirs: path_var.as_deref().unwrap_or("").split(':').map(PathBuf::from).collect(),
             broker_dirs: self.dirs.all(),
             install_dir: self.shim.parent().map(Path::to_path_buf),
+            extra_homes: launcher::test_protected_homes(),
         })?;
 
         let faults = launcher::injected_faults();

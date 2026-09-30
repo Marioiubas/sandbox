@@ -1,9 +1,11 @@
 //! Invariant tests that need real sessions: I1 (env canaries, partial until
-//! M1), I2 (fail-closed launch), I5 (repo policy inert), I6 (bypass corpus
+//! M1), I2 (fail-closed launch), I5 (repo policy inert; broker state, config,
+//! binaries and host agent config unwritable), I6 (bypass corpus
 //! end to end), I8 (no flag disables isolation), I9 (audit outside, chained).
 
 use audit::{EventKind, Reason};
 use conformance::*;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const AGENT_BYPASS_FLAGS: &[&str] = &[
@@ -102,6 +104,142 @@ fn i5_repository_policy_is_never_loaded_in_m0() {
     let r = h.probe(&["proxy", "connect", "allowed.test", &up.port.to_string(), "allowed.test"]);
     assert!(r.denied(), "a repo-supplied grant must not widen policy: {r:?}");
     assert_eq!(up.accepts.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+/// What a probe in the I5 batch must meet: allowed (a control), or refused,
+/// with the extra errnos Linux may answer with instead (see the test).
+enum Want {
+    Allowed,
+    Refused(Vec<&'static str>),
+}
+
+/// How the Linux sandbox shows a host file: through the read-only root, as
+/// a direct child of a masked broker directory (an empty read-only tmpfs,
+/// so a write there is EROFS), or further below one (its parent does not
+/// exist in the mask, so ENOENT).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shown {
+    Visible,
+    MaskRoot,
+    MaskNested,
+}
+
+#[test]
+fn i5_broker_state_config_and_binaries_are_not_writable() {
+    // Every target is a real host file created before the probes run, at a
+    // host path the sandbox sees (BROKER_HOME, the binaries and the canary
+    // home under /var/tmp, not in the Linux sandbox's private /tmp), and the
+    // binaries are a private copy, so a probe that wrongly succeeds breaks
+    // nothing else.
+    let opts = Opts { canary_home: true, visible_state: true, private_install: true };
+    let h = Harness::with_opts("version = 1\n", &[], init_repo, opts);
+    let repo = h.repo_path();
+    // Control; the first session also creates the state dir, audit DB and control socket.
+    assert!(h.probe(&["write", &repo.join("control.txt").display().to_string()]).allowed());
+    let home = h.home.path().canonicalize().unwrap();
+    let (config, state, run) = (home.join("config"), home.join("state"), home.join("run"));
+    h.write_secret("canary.pem", b"broker-canary-file-secret");
+    std::fs::create_dir_all(state.join("mcp-manifests")).unwrap();
+    for f in ["repo-policy-approvals.json", "mcp-approvals.json", "mcp-manifests/github.tools.json"] {
+        std::fs::write(state.join(f), "{}\n").unwrap();
+    }
+    let (install, ch) = (h.install_dir(), h.canary_home());
+    // (path, how the Linux sandbox shows it, a running executable there).
+    use Shown::*;
+    let mut targets = vec![
+        (config.join("broker.toml"), MaskRoot, false),
+        (config.join("canary.pem"), MaskRoot, false),
+        (state.join("audit.db"), MaskRoot, false),
+        (state.join("repo-policy-approvals.json"), MaskRoot, false),
+        (state.join("mcp-approvals.json"), MaskRoot, false),
+        (state.join("mcp-manifests/github.tools.json"), MaskNested, false),
+    ];
+    // On Linux all three run during a session (the shim as the network bridge).
+    for b in ["broker", "brokerd", "broker-sandbox-shim"] {
+        targets.push((install.join(b), Visible, cfg!(target_os = "linux")));
+    }
+    targets.extend(CanaryHome::CONFIG.iter().map(|p| (ch.join(p), Visible, false)));
+    for (t, ..) in &targets {
+        assert!(t.is_file(), "fixture: {} must exist on the host", t.display());
+    }
+    let fixed: Vec<PathBuf> = targets.iter().map(|t| t.0.clone()).filter(|p| !p.ends_with("audit.db")).collect();
+    let before = FileState::of(&fixed);
+    let ino = |p: &Path| std::os::unix::fs::MetadataExt::ino(&std::fs::metadata(p).unwrap());
+    let (db, ctl) = (state.join("audit.db"), run.join("ctl.sock"));
+    let (db_ino, ctl_ino) = (ino(&db), ino(&ctl));
+
+    // Linux answers some of these through its mount table and masks rather
+    // than EACCES/EPERM/EROFS (accepted there only, by name): a rename from
+    // the writable repository onto a read-only mount, or a link across one,
+    // is EXDEV; a masked directory is an empty read-only tmpfs, so a link
+    // (which needs its source) and anything below a subdirectory of the mask
+    // meet ENOENT, for files that exist on the host (checked above); and the
+    // kernel refuses to open a running executable for writing (ETXTBSY)
+    // before it checks the mount, so there rename, unlink, replace and plant
+    // carry the proof. macOS must answer every probe with EPERM or EACCES.
+    let s = |p: &Path| p.display().to_string();
+    let mut batch: Vec<(Vec<String>, Want, String)> = Vec::new();
+    let mut add = |args: Vec<String>, want: Want| {
+        let what = args.join(" ");
+        batch.push((args, want, what));
+    };
+    let v = |a: &[&str]| a.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    for (i, (t, shown, running)) in targets.iter().enumerate() {
+        let t = s(t);
+        let hidden = if *shown == MaskNested { vec!["ENOENT"] } else { vec![] };
+        let with = |extra: &[&'static str]| Want::Refused(hidden.iter().chain(extra).copied().collect());
+        let busy: &[&str] = if *running { &["ETXTBSY"] } else { &[] };
+        let (repl, link, sym) =
+            (repo.join(format!("repl-{i}")), repo.join(format!("link-{i}")), repo.join(format!("sym-{i}")));
+        std::fs::write(&repl, "replacement\n").unwrap();
+        add(v(&["write", &t]), with(busy));
+        add(v(&["rename", &t, &format!("{t}.broker-probe")]), with(&[]));
+        add(v(&["unlink", &t]), with(&[]));
+        add(v(&["rename", &s(&repl), &t]), with(&["EXDEV"]));
+        add(v(&["hardlink", &t, &s(&link)]), with(if *shown == Visible { &["EXDEV"] } else { &["EXDEV", "ENOENT"] }));
+        add(v(&["symlink", &t, &s(&sym)]), Want::Allowed);
+        add(v(&["write", &s(&sym)]), with(busy));
+    }
+    let repl = repo.join("repl-ctl");
+    std::fs::write(&repl, "replacement\n").unwrap();
+    add(v(&["rename", &s(&ctl), &format!("{}.broker-probe", s(&ctl))]), Want::Refused(vec![]));
+    add(v(&["unlink", &s(&ctl)]), Want::Refused(vec![]));
+    add(v(&["rename", &s(&repl), &s(&ctl)]), Want::Refused(vec!["EXDEV"]));
+    // New files: planted policy, approvals, manifests, binaries, rc files.
+    let planted = [
+        config.join("planted.toml"),
+        state.join("planted.json"),
+        state.join("mcp-manifests/planted.tools.json"),
+        run.join("planted"),
+        install.join("planted"),
+        ch.join(".zshenv"),
+    ];
+    for p in &planted {
+        // `mcp-manifests/` exists on the host, but not inside the Linux mask.
+        let hidden = if p.parent() == Some(&state.join("mcp-manifests")) { vec!["ENOENT"] } else { vec![] };
+        add(v(&["write-new", &s(p)]), Want::Refused(hidden));
+    }
+    let args: Vec<Vec<String>> = batch.iter().map(|b| b.0.clone()).collect();
+    for (r, (_, want, what)) in h.probe_batch(&args).iter().zip(&batch) {
+        match want {
+            Want::Allowed => assert!(r.allowed(), "control {what}: {r:?}"),
+            Want::Refused(linux) => assert_denied_or(r, what, linux),
+        }
+    }
+
+    // The host is untouched: same bytes, same audit DB and socket, nothing planted.
+    before.assert_same(&FileState::of(&fixed), "broker config, state, binaries and host agent config");
+    assert_eq!((ino(&db), ino(&ctl)), (db_ino, ctl_ino), "audit DB or control socket replaced");
+    assert!(h.verify_audit().is_ok(), "audit chain intact");
+    for (t, ..) in &targets {
+        assert!(!PathBuf::from(format!("{}.broker-probe", t.display())).exists(), "{} renamed", t.display());
+    }
+    for p in &planted {
+        assert!(!p.exists(), "{} planted", p.display());
+    }
+    ch.assert_unchanged();
+    assert!((0..targets.len()).all(|i| !repo.join(format!("link-{i}")).exists()), "a hard link to a target exists");
+    assert!(h.probe(&["write", &repo.join("control.txt").display().to_string()]).allowed(), "the broker still works");
 }
 
 // ---------------------------------------------------------------- I6 ------
@@ -247,7 +385,10 @@ fn i1_host_secrets_in_the_client_environment_never_reach_the_sandbox() {
 
 #[test]
 fn i9_every_decision_is_chained_and_explainable() {
-    let h = Harness::new("version = 1\n");
+    // The audit DB at a host path the Linux sandbox sees (masked), not in its
+    // private /tmp, so the write below meets the sandbox's refusal.
+    let opts = Opts { visible_state: true, ..Default::default() };
+    let h = Harness::with_opts("version = 1\n", &[], init_repo, opts);
     let r = h.probe(&["proxy", "connect", "evil.example", "443", "-"]);
     assert!(r.denied());
     let rid = r.stdout.split("request=").nth(1).map(|s| s.trim().to_string()).expect("request id in the deny");
@@ -261,8 +402,8 @@ fn i9_every_decision_is_chained_and_explainable() {
     assert!(out.status.success());
     // The sandbox itself can neither read nor write the log.
     let db = h.audit_db().display().to_string();
-    assert!(h.probe(&["read", &db]).denied());
-    assert!(h.probe(&["write", &db]).denied());
+    assert_read_denied(&h.probe(&["read", &db]), &h.audit_db(), "read the audit log");
+    assert_fs_denied(&h.probe(&["write", &db]), "write the audit log");
     assert!(h.verify_audit().is_ok());
 }
 
@@ -324,7 +465,8 @@ fn i4_repo_policy_only_narrows_and_needs_approval() {
 
 #[test]
 fn i8_learn_mode_keeps_sandbox_proxy_and_ceiling() {
-    let h = Harness::new("version = 1\n");
+    let opts = Opts { canary_home: true, ..Default::default() };
+    let h = Harness::with_opts("version = 1\n", &[], init_repo, opts);
     let learn = |args: &[&str]| {
         let mut argv = vec![h.bins.probe.display().to_string()];
         argv.extend(args.iter().map(|s| s.to_string()));
@@ -335,12 +477,16 @@ fn i8_learn_mode_keeps_sandbox_proxy_and_ceiling() {
             .current_dir(h.repo.path())
             .env("BROKER_HOME", h.home.path())
             .env("BROKER_DAEMON_IDLE_SECS", "3")
+            .envs(h.daemon_env.iter().map(|(k, v)| (k, v)))
             .output()
             .unwrap();
         ProbeResult::from(out)
     };
-    let home = std::env::var("HOME").unwrap();
-    assert!(learn(&["read", &format!("{home}/.ssh/id_ed25519")]).denied(), "secrets stay unreadable");
+    // A canary key that exists on every host (the user's own may not).
+    let key = h.canary_home().join(CanaryHome::SSH_KEY);
+    let plain = h.canary_home().join(CanaryHome::PLAIN).display().to_string();
+    assert!(learn(&["read", &plain]).allowed(), "control: the canary home is visible");
+    assert_read_denied(&learn(&["read", &key.display().to_string()]), &key, "secrets stay unreadable");
     assert!(learn(&["tcp", "1.1.1.1", "443"]).denied(), "no direct route");
     assert!(learn(&["proxy", "connect", "169.254.169.254", "443", "-"]).denied(), "metadata denied");
     assert!(learn(&["proxy", "connect", "pastebin.com", "443", "pastebin.com"]).denied(), "ceiling holds");

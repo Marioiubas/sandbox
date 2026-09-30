@@ -121,6 +121,18 @@ pub fn injected_faults() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Canary homes for the conformance suite: `BROKER_TEST_PROTECT_HOME` names a
+/// directory that gets every home-relative protection of the real home (the
+/// default deny-read and deny-write lists) *in addition to* the real one,
+/// which keeps all of its own, so tests can probe a canary `~/.ssh` key and
+/// rc files instead of the user's, which may be absent and must never be
+/// written by a failing probe. Like fault injection it can only add deny
+/// rules (or refuse the launch: a relative path, or one inside a writable
+/// root), never remove one, so it cannot weaken isolation (I5, I8).
+pub fn test_protected_homes() -> Vec<PathBuf> {
+    std::env::var_os("BROKER_TEST_PROTECT_HOME").filter(|v| !v.is_empty()).map(PathBuf::from).into_iter().collect()
+}
+
 /// Mark injected layers as failed in a probe report.
 pub fn apply_faults(report: &mut BackendReport) {
     let faults = injected_faults();

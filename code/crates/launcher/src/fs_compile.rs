@@ -30,6 +30,10 @@ pub struct FsInputs {
     pub broker_dirs: Vec<PathBuf>,
     /// Directory holding the broker binaries: never writable.
     pub install_dir: Option<PathBuf>,
+    /// Further directories protected exactly like `home`, in addition to it
+    /// (canary homes in the conformance suite; see
+    /// `launcher::test_protected_homes`). Only ever adds rules.
+    pub extra_homes: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -203,7 +207,7 @@ fn gitdir_from_file(repo: &Path, dotgit: &Path) -> Option<PathBuf> {
 }
 
 pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
-    let home = resolve(&i.home)?;
+    let homes = std::iter::once(&i.home).chain(&i.extra_homes).map(|h| resolve(h)).collect::<Result<Vec<_>, _>>()?;
     let mut writable: BTreeSet<PathBuf> = BTreeSet::new();
     let mut base_roots = vec![&i.repo, &i.session_tmp];
     base_roots.extend(i.platform_tmp.iter());
@@ -212,7 +216,7 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         if !r.exists() {
             return Err(FsError::MissingWritable(r));
         }
-        if r == Path::new("/") || home.starts_with(&r) {
+        if r == Path::new("/") || homes.iter().any(|h| h.starts_with(&r)) {
             return Err(FsError::WritableTooBroad(r));
         }
         writable.insert(r);
@@ -235,7 +239,8 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         broker.insert(inst);
     }
 
-    let mut deny_read: BTreeSet<PathBuf> = DEFAULT_DENY_READ.iter().map(|r| home.join(r)).collect();
+    let under_homes = |rel: &'static [&'static str]| homes.iter().flat_map(move |h| rel.iter().map(move |r| h.join(r)));
+    let mut deny_read: BTreeSet<PathBuf> = under_homes(DEFAULT_DENY_READ).collect();
     for d in &i.extra_deny_read {
         deny_read.insert(resolve(d)?);
     }
@@ -243,7 +248,7 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         deny_read.insert(resolve(b)?);
     }
 
-    let mut deny_write: BTreeSet<PathBuf> = HOME_DENY_WRITE.iter().map(|r| home.join(r)).collect();
+    let mut deny_write: BTreeSet<PathBuf> = under_homes(HOME_DENY_WRITE).collect();
     deny_write.extend(broker.iter().cloned());
     let mut missing = BTreeSet::new();
     let mut deny_entry = BTreeSet::new();
@@ -414,6 +419,24 @@ mod tests {
         let mut i = inputs(&f);
         i.extra_write = vec![f.repo.join("../..")];
         assert!(matches!(compile(&i), Err(FsError::DotDot(_))));
+    }
+
+    #[test]
+    fn extra_homes_only_add_rules() {
+        let f = fixture();
+        let base = compile(&inputs(&f)).unwrap();
+        let canary = f.home.parent().unwrap().join("canary-home");
+        let mut i = inputs(&f);
+        i.extra_homes = vec![canary.clone()];
+        let c = compile(&i).unwrap();
+        assert_eq!((&c.writable, &c.deny_entry), (&base.writable, &base.deny_entry));
+        assert!(base.deny_read.iter().all(|p| c.deny_read.contains(p)), "the real home keeps every rule");
+        assert!(base.deny_write.iter().all(|p| c.deny_write.contains(p)), "the real home keeps every rule");
+        assert!(c.deny_read.contains(&canary.join(".ssh")) && c.deny_write.contains(&canary.join(".zshrc")));
+        i.extra_homes = vec![f.repo.join("h")];
+        assert!(matches!(compile(&i), Err(FsError::WritableTooBroad(_))), "a protected home inside a writable root");
+        i.extra_homes = vec![PathBuf::from("relative")];
+        assert!(matches!(compile(&i), Err(FsError::NotAbsolute(_))));
     }
 
     #[test]
