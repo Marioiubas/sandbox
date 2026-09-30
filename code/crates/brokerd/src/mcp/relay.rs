@@ -405,3 +405,7 @@ pub(super) fn drain() -> Duration {
 pub(super) fn pin_timeout() -> Duration {
     PIN_TIMEOUT
 }
+
+#[cfg(test)]
+#[path = "relay_tests.rs"]
+mod tests;
