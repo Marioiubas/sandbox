@@ -39,6 +39,10 @@ pub enum EventKind {
     /// A human approved a pending request's actions for the session.
     #[serde(rename = "approval.granted")]
     ApprovalGranted,
+    /// A denial enforced by the OS sandbox inside a session (the kernel's
+    /// report of it), deduplicated per operation and target (ADR-041).
+    #[serde(rename = "kernel.denied")]
+    KernelDenied,
 }
 
 impl EventKind {
@@ -56,6 +60,7 @@ impl EventKind {
             EventKind::PolicyReload => "policy.reload",
             EventKind::ApprovalRequested => "approval.requested",
             EventKind::ApprovalGranted => "approval.granted",
+            EventKind::KernelDenied => "kernel.denied",
         }
     }
 }

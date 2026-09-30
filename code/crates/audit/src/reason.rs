@@ -181,6 +181,10 @@ pub enum Reason {
 
     // ---- launch (I2) ----
     LaunchRefused,
+    /// The OS sandbox (Seatbelt) refused an operation inside a session: a
+    /// kernel-enforced denial, put on record from the kernel's report
+    /// (ADR-041).
+    SandboxDenied,
 }
 
 impl Reason {
@@ -266,6 +270,7 @@ impl Reason {
         Reason::UpstreamTls,
         Reason::AuditUnavailable,
         Reason::LaunchRefused,
+        Reason::SandboxDenied,
     ];
 
     pub fn as_str(&self) -> &'static str {
@@ -350,6 +355,7 @@ impl Reason {
             Reason::UpstreamTls => "upstream_tls",
             Reason::AuditUnavailable => "audit_unavailable",
             Reason::LaunchRefused => "launch_refused",
+            Reason::SandboxDenied => "sandbox_denied",
         }
     }
 
@@ -412,14 +418,14 @@ impl Reason {
             | CeilingTunnel => "policy",
             UpstreamConnectFailed | UpstreamTls => "upstream",
             AuditUnavailable => "audit",
-            LaunchRefused => "launcher",
+            LaunchRefused | SandboxDenied => "launcher",
         }
     }
 
     /// The trust boundary at which the decision was made (Trust Boundaries).
     pub fn boundary(&self) -> &'static str {
         match self {
-            Reason::LaunchRefused => "TB2",
+            Reason::LaunchRefused | Reason::SandboxDenied => "TB2",
             Reason::UpstreamConnectFailed
             | Reason::UpstreamTls
             | Reason::MintFailed

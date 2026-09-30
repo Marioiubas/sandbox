@@ -99,6 +99,9 @@ impl Reason {
             UpstreamTls => "the upstream certificate failed verification",
             AuditUnavailable => "the audit log could not record the decision, so it was denied",
             LaunchRefused => "a required isolation layer or the proxy was not available",
+            SandboxDenied => {
+                "the OS sandbox refused the operation (file, socket or service outside the session's rules)"
+            }
         }
     }
 }

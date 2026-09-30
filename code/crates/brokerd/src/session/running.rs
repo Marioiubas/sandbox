@@ -66,7 +66,7 @@ impl Running {
 
     /// Kill everything left in the session, remove its directories, and
     /// write `session.stop`.
-    pub fn teardown(self, daemon: &Daemon, exited: &Exited) {
+    pub fn teardown(mut self, daemon: &Daemon, exited: &Exited) {
         self.accept.abort();
         // SAFETY: the sandbox leads its own process group (setsid).
         unsafe { libc::kill(-(self.pid as i32), libc::SIGKILL) };
@@ -79,6 +79,9 @@ impl Running {
             s.remove(self.id.as_str());
         }
         daemon.approvals.unregister(self.id.as_str());
+        if let Some(c) = self.collector.take() {
+            c.stop();
+        }
         let mut ev = AuditEvent::new(EventKind::SessionStop)
             .session(&self.id)
             .detail("exit_code", exited.code.map(i64::from))

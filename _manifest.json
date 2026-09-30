@@ -4605,5 +4605,25 @@
       "https://docs.github.com/en/rest",
       "https://git-scm.com/docs/protocol-v2"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-041 Kernel Denials on the Audit Record.md",
+    "title": "ADR-041 Kernel Denials on the Audit Record",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "On macOS every Seatbelt deny rule carries the tag `broker:<session>`; brokerd streams the kernel's own reports (pid 0, Sandbox.kext) from the unified log and writes one attributed `kernel.denied` row (reason `sandbox_denied`) per process, operation and target, capped at 500 per session; the shim's launch checks are recorded and flagged. A record, not a control. Linux Landlock and seccomp denials remain unrecorded (residual).",
+    "links_to": [
+      "I9 Hash-Chained Audit Outside the Sandbox",
+      "Sandbox Launcher",
+      "Audit Recorder and Event Schema",
+      "Conformance Probe Matrix",
+      "ADR-028 M2 Plan Items Built Differently or Deferred",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-09-30) from the kernel-denial collector and its tests.",
+    "aliases": [
+      "ADR-041"
+    ],
+    "sources": []
   }
 ]

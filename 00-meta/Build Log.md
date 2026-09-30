@@ -354,3 +354,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **CI:** `real-github` passed on `dee6270` and `1d35fb6`; the failure diagnostics stay in place.
 - **MCP relay tested directly:** `brokerd::mcp::relay::tests` (4 unit tests and a property test over arbitrary frames), closing the coverage audit's gap that the relay had none; no defect found.
 
+## 2026-09-30: kernel denials on the audit record (M4)
+
+- **Built:** [[ADR-041 Kernel Denials on the Audit Record]]: Seatbelt deny rules tagged per session; brokerd streams the kernel's reports and writes attributed `kernel.denied` rows (`code/crates/brokerd/src/kernel_denials.rs`). Tests: `brokerd::kernel_denials::tests::*`, `m4_kernel_denials`.
+- **Found:** a user process named `Sandbox` could forge reports under a `sender == "Sandbox"` predicate; only pid-0 Sandbox.kext reports are taken now. Skipping rows by the shim's process name was forgeable too; shim checks are now recorded and flagged.
+- **Correction:** ADR-028 said kernel denials surface as `fs.denied`; that kind was never emitted.
+- **Open:** Linux kernel denials unrecorded; vault notes I9, Sandbox Launcher, Conformance Probe Matrix and Open Questions not yet updated for ADR-041.

@@ -101,6 +101,8 @@ pub struct Running {
     agent: String,
     enduser: String,
     groups: Vec<String>,
+    /// The session's kernel-denial collector (ADR-041; macOS).
+    collector: Option<crate::kernel_denials::Collector>,
 }
 
 impl Daemon {

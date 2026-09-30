@@ -236,6 +236,13 @@ impl Daemon {
         let policy = ctx.policy.clone();
         let accept = tokio::spawn(accept_loop(listener, ctx));
         let backend = self.backend.clone();
+        // Stream the kernel's denial reports before the agent can cause any.
+        let mut base = AuditEvent::new(EventKind::KernelDenied).session(id);
+        base.enduser = Some(enduser.clone());
+        base.enduser_groups = groups.clone();
+        base.agent = Some(params.argv[0].clone());
+        base.sandbox = Some(self.backend.name().to_string());
+        let collector = crate::kernel_denials::Collector::start(base, self.recorder.clone() as Arc<dyn Recorder>);
         let launched = tokio::task::spawn_blocking(move || backend.launch(spec)).await;
         let handle = match launched {
             Ok(Ok(h)) => h,
@@ -298,6 +305,7 @@ impl Daemon {
             agent: params.argv[0].clone(),
             enduser,
             groups,
+            collector: Some(collector),
         })
     }
 }

@@ -3,6 +3,14 @@
 pub mod linux;
 pub mod seatbelt;
 
+/// The tag every Seatbelt deny rule of a session carries (`with message`),
+/// by which the daemon attributes the kernel's denial reports to the
+/// session (ADR-041): `broker:<session>`, for alphanumeric session IDs only.
+pub fn seatbelt_session_tag(session: &str) -> Option<String> {
+    let ok = !session.is_empty() && session.len() <= 64 && session.bytes().all(|b| b.is_ascii_alphanumeric());
+    ok.then(|| format!("broker:{session}"))
+}
+
 pub mod container {
     //! Docker/Podman backend: phase 2 ([[Two-Tier Isolation Design]]).
     use crate::{BackendReport, LayerStatus, SandboxBackend, SandboxHandle, SandboxSpec};

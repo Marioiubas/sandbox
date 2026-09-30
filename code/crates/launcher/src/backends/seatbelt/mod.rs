@@ -102,9 +102,13 @@ impl SandboxBackend for SeatbeltBackend {
             anyhow::bail!("macos-seatbelt requires a loopback egress endpoint");
         };
         check_outside_writable(&spec.shim, &spec.fs.writable)?;
-        let profile =
-            sbpl::generate(&sbpl::SbplInputs { fs: &spec.fs, broker_port: port, tty: spec.tty_path.as_deref() })
-                .map_err(|e| anyhow::anyhow!("cannot generate SBPL: {e}"))?;
+        let profile = sbpl::generate(&sbpl::SbplInputs {
+            fs: &spec.fs,
+            broker_port: port,
+            tty: spec.tty_path.as_deref(),
+            tag: sbpl::session_tag(&spec.session).as_deref(),
+        })
+        .map_err(|e| anyhow::anyhow!("cannot generate SBPL: {e}"))?;
         let profile_path = spec.session_dir.join("sandbox.sb");
         std::fs::write(&profile_path, &profile)?;
 

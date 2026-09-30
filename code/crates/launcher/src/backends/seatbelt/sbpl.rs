@@ -18,7 +18,13 @@ pub struct SbplInputs<'a> {
     pub fs: &'a CompiledFsPolicy,
     pub broker_port: u16,
     pub tty: Option<&'a Path>,
+    /// Appended to every deny rule (`with message`): the kernel's denial
+    /// reports carry it, so the broker can attribute them to the session
+    /// and put them on the audit record (ADR-041).
+    pub tag: Option<&'a str>,
 }
+
+pub use super::super::seatbelt_session_tag as session_tag;
 
 /// Mach services every session may reach.
 pub const MACH_ALLOW: &[&str] = &[
@@ -60,8 +66,15 @@ fn path_rules(kind: &str, paths: &[PathBuf]) -> Result<String, String> {
 }
 
 pub fn generate(i: &SbplInputs) -> Result<String, String> {
+    let wm = match i.tag {
+        Some(t) if t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b':' || b == b'-') => {
+            format!(" (with message \"{t}\")")
+        }
+        Some(_) => return Err("unrepresentable session tag".into()),
+        None => String::new(),
+    };
     let mut s = String::new();
-    s.push_str("(version 1)\n(deny default)\n");
+    let _ = writeln!(s, "(version 1)\n(deny default{wm})");
     s.push_str("; processes stay in this sandbox; signals and inspection only within it\n");
     s.push_str("(allow process-exec process-fork)\n");
     s.push_str("(allow signal (target same-sandbox))\n");
@@ -85,7 +98,7 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
     s.push_str(")\n");
     s.push_str("; filesystem: read-mostly, secrets denied (I1)\n(allow file-read*)\n");
     if !i.fs.deny_read.is_empty() {
-        let _ = writeln!(s, "(deny file-read*{})", path_rules("subpath", &i.fs.deny_read)?);
+        let _ = writeln!(s, "(deny file-read*{}{wm})", path_rules("subpath", &i.fs.deny_read)?);
     }
     if !i.fs.writable.is_empty() {
         let _ = writeln!(s, "; writable roots\n(allow file-write*{})", path_rules("subpath", &i.fs.writable)?);
@@ -93,14 +106,14 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
     if !i.fs.deny_write.is_empty() {
         let _ = writeln!(
             s,
-            "; mandatory deny-write (I5); last match wins\n(deny file-write*{})",
+            "; mandatory deny-write (I5); last match wins\n(deny file-write*{}{wm})",
             path_rules("subpath", &i.fs.deny_write)?
         );
     }
     if !i.fs.deny_entry.is_empty() {
         let _ = writeln!(
             s,
-            "; entries that may not be renamed or replaced\n(deny file-write*{})",
+            "; entries that may not be renamed or replaced\n(deny file-write*{}{wm})",
             path_rules("literal", &i.fs.deny_entry)?
         );
     }
@@ -110,7 +123,7 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
     for m in MACH_NEVER {
         let _ = write!(s, " (global-name \"{m}\")");
     }
-    s.push_str(")\n(deny appleevent-send)\n(deny network-bind network-inbound)\n");
+    let _ = write!(s, "{wm})\n(deny appleevent-send{wm})\n(deny network-bind network-inbound{wm})\n");
     Ok(s)
 }
 
@@ -132,8 +145,17 @@ mod tests {
     #[test]
     fn golden_shape() {
         let f = fs();
-        let p = generate(&SbplInputs { fs: &f, broker_port: 54017, tty: Some(Path::new("/dev/ttys003")) }).unwrap();
+        let p = generate(&SbplInputs { fs: &f, broker_port: 54017, tty: Some(Path::new("/dev/ttys003")), tag: None })
+            .unwrap();
         assert!(p.starts_with("(version 1)\n(deny default)\n"));
+        // With a session tag, every deny rule carries it (ADR-041).
+        let tag = session_tag("01M3S0E43XS2PKE5QME2ETACHQ").unwrap();
+        let t = generate(&SbplInputs { fs: &f, broker_port: 54017, tty: None, tag: Some(&tag) }).unwrap();
+        let denies = t.lines().filter(|l| l.starts_with("(deny")).count();
+        assert!(denies >= 6);
+        assert_eq!(t.matches("(with message \"broker:01M3S0E43XS2PKE5QME2ETACHQ\")").count(), denies);
+        assert_eq!(session_tag("a\"b"), None);
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: Some("x\") (allow default") }).is_err());
         assert!(p.contains("(deny file-read* (subpath \"/Users/dev/.ssh\"))"));
         assert!(p.contains("(allow network-outbound (remote ip \"localhost:54017\"))"));
         assert!(p.contains("(literal \"/dev/ttys003\")"));
@@ -152,13 +174,13 @@ mod tests {
         assert!(quote(Path::new("/a\nb")).is_none());
         let mut f = fs();
         f.writable.push("/x\n(allow default)".into());
-        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None }).is_err());
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).is_err());
     }
 
     #[test]
     fn only_one_network_allow() {
         let f = fs();
-        let p = generate(&SbplInputs { fs: &f, broker_port: 4242, tty: None }).unwrap();
+        let p = generate(&SbplInputs { fs: &f, broker_port: 4242, tty: None, tag: None }).unwrap();
         assert_eq!(p.matches("(allow network").count(), 1);
     }
 }
