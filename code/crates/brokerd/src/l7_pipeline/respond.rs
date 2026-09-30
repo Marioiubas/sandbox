@@ -25,13 +25,17 @@ pub(super) fn decode_body(headers: &http::HeaderMap, raw: &Bytes, max: usize) ->
     match l7::filter::coding(headers) {
         Some(l7::filter::Coding::Identity) => Ok(raw.to_vec()),
         Some(l7::filter::Coding::Gzip) => {
+            // Exactly one gzip member: a decoder that stops at the first
+            // member would read less than a server that inflates them all
+            // (a push's second member could carry unchecked ref updates).
             let mut out = Vec::new();
-            flate2::read::GzDecoder::new(&raw[..])
-                .take(max as u64 + 1)
-                .read_to_end(&mut out)
-                .map_err(|_| Reason::GitParseError)?;
+            let mut dec = flate2::bufread::GzDecoder::new(&raw[..]);
+            (&mut dec).take(max as u64 + 1).read_to_end(&mut out).map_err(|_| Reason::MalformedRequest)?;
             if out.len() > max {
                 return Err(Reason::BodyTooLarge);
+            }
+            if !dec.into_inner().is_empty() {
+                return Err(Reason::MalformedRequest);
             }
             Ok(out)
         }
@@ -215,3 +219,33 @@ impl Drop for OutcomeBody {
         }
     }
 }
+
+#[cfg(test)]
+mod decode_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn gz(data: &[u8]) -> Vec<u8> {
+        let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        e.write_all(data).unwrap();
+        e.finish().unwrap()
+    }
+
+    #[test]
+    fn a_gzip_body_is_one_member_and_nothing_else() {
+        let mut h = http::HeaderMap::new();
+        h.insert(http::header::CONTENT_ENCODING, "gzip".parse().unwrap());
+        let one = gz(b"0032want 0000000000000000000000000000000000000000\n0000");
+        assert_eq!(decode_body(&h, &Bytes::from(one.clone()), 1 << 20).unwrap().len(), 54);
+        // A second member (or any trailing bytes) is refused, not ignored.
+        let mut two = one.clone();
+        two.extend(gz(b"more commands"));
+        assert_eq!(decode_body(&h, &Bytes::from(two), 1 << 20), Err(Reason::MalformedRequest));
+        let mut trailing = one;
+        trailing.push(0);
+        assert_eq!(decode_body(&h, &Bytes::from(trailing), 1 << 20), Err(Reason::MalformedRequest));
+        assert_eq!(decode_body(&h, &Bytes::from_static(b"not gzip"), 1 << 20), Err(Reason::MalformedRequest));
+        assert_eq!(decode_body(&h, &Bytes::from(gz(&[b'a'; 2048])), 1024), Err(Reason::BodyTooLarge));
+    }
+}
+

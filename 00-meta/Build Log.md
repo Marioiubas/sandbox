@@ -324,3 +324,10 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found (review agent; 8 gaps, 4 high, each with a failing test):** the MCP server's labels never reached the agent's session (in progress separately); maintainer-only GitHub data under public repositories; attacker text outside issues and pulls; pull-request heads fetched over git; credentialed reads on generic hosts; intranet reads; push advertisements; a probe that asked about a normalised path. Plus the model-API outage (ADR-039).
 - **Closed:** [[ADR-040 Label Sources Beyond the Adapters]]; new grant key `sensitive`. Tests: `m3_label_gaps_github::*`, `m3_label_gaps_git::*`, unit tests in `l7::github`, `l7::git`, `policy::egress::sensitivity`. Full suite: 344 tests pass (8 invariant tests timed out once under load from parallel agent builds and passed on rerun).
 
+### 2026-09-30: CI fix, gzip bodies, nightly covert measurement
+
+- **CI (f7189a2) failed on Linux only:** `m3_label_gaps_git::the_visibility_probe_asks_about_the_repository_that_was_fetched` fetched `/Acme/secret.git` from a fake forge whose repository directory is `acme/secret.git` (case-insensitive APFS hid it on macOS). The fake now serves owner and repository names case-insensitively, as GitHub does.
+- **Hardened:** request bodies with `Content-Encoding: gzip` are decoded as exactly one gzip member; a second member or trailing bytes are refused (`malformed_request`), because a decoder that stops at the first member reads less than a server that inflates them all (a push's second member could carry unchecked ref updates). Gzip errors no longer report `git_parse_error`. Test: `l7_pipeline::respond::decode_tests`.
+- **Category 11** (covert channels) is now measured every night on Linux (`fuzz-nightly.yml`, job `covert`), reported in the run summary.
+- **Nightly fuzzing:** four scheduled runs (2026-09-27 to 09-30) passed on all 18 targets; the running totals are in each run's summary.
+

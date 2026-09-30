@@ -83,3 +83,34 @@ jobs:
         with:
           name: fuzz-crash-${{ matrix.target }}
           path: code/tests/fuzz/artifacts/${{ matrix.target }}
+
+  covert:
+    # M4 category 11: covert-channel bandwidth through an allowed host,
+    # measured every night and reported in the run summary (a measurement,
+    # never claimed zero; not a gate). `m4_covert` is #[ignore]d in the
+    # regular suite because it takes minutes.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          gate=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          if [ -f "$gate" ] && [ "$(cat "$gate")" = "1" ]; then
+            sudo install -m 0644 packaging/apparmor/broker-bwrap /etc/apparmor.d/broker-bwrap
+            sudo apparmor_parser -r /etc/apparmor.d/broker-bwrap || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Build
+        run: cargo build --workspace --bins --locked
+      - name: Measure (category 11)
+        run: |
+          set -o pipefail
+          cargo test -p conformance --test m4_covert --locked -- --ignored --nocapture 2>&1 | tee covert.txt
+          {
+            echo "### Covert channels (category 11), Linux"
+            echo '```'
+            grep -iE "bytes/s|KB/s|channel|bandwidth" covert.txt || tail -20 covert.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
