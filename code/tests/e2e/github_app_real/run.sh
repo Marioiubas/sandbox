@@ -9,6 +9,24 @@ set -eu
 repo="$1"; other="$2"; branch="$3"; work="$4"
 b() { broker run -- "$@"; }
 remote() { git ls-remote "https://github.com/$1" "$2" | cut -f1; }
+# On failure, show what the broker decided and what GitHub answered (the
+# audit log holds credential fingerprints, never secrets).
+diag() {
+  echo "--- broker audit, last 60 rows: time kind result reason verb status credential ---"
+  broker audit query --json --limit 60 2>/dev/null | python3 -c '
+import json, sys
+for l in sys.stdin:
+    try:
+        e = json.loads(l)["event"]
+    except Exception:
+        continue
+    d = e.get("detail") or {}
+    print(e.get("ts", "")[11:23], e.get("kind"), (e.get("decision") or {}).get("result", ""), e.get("reason") or "",
+          d.get("verb", ""), d.get("status", ""), d.get("credential_origin", ""), d.get("credential_fp", ""),
+          d.get("label", ""), d.get("cause", ""))
+' || true
+}
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then diag; fi' EXIT
 
 main_before=$(remote "$repo" refs/heads/main)
 tip_before=$(remote "$repo" "refs/heads/$branch")

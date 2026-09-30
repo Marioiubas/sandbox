@@ -42,10 +42,15 @@ fn setup() -> Fx {
         .join(format!("mcp-desc-{}.txt", h.home.path().file_name().unwrap().to_string_lossy()));
     std::fs::write(&desc, "Read an issue from the tracker.").unwrap();
     let server = h.bins.broker.parent().unwrap().join("fake-mcp-server");
+    // The fake API's data is this test's public fixture: `sensitive = false`
+    // keeps its credentialed reads (ADR-040) from raising `sensitive_read` in
+    // the agent's session (ADR-038), which would otherwise hold `post_comment`
+    // depending on whether the read's label lands first.
     h.set_config(&format!(
         "version = 1\n[tls]\nextra_roots = [\"{}\"]\n\n[mcp.gh]\ncommand = [\"{}\", \"--desc-file\", \"{}\", \"--api\", \"https://api.test:{}\", \"--ask-sampling\"]\n\
          tools.write = [\"post_comment\"]\ntools.untrusted = [\"read_issue\"]\n\n\
          [[mcp.gh.egress]]\nid = \"api\"\nhost = \"api.test\"\nports = [{}]\naddrs = [\"127.0.0.1\"]\nallow_addr_classes = [\"loopback\"]\nmethods = [\"GET\", \"POST\"]\n\
+         sensitive = false\n\
          credential = {{ kind = \"static\", ref = \"file:mcp-token\", env = \"GITHUB_TOKEN\" }}\n",
         ca.pem_path.display(),
         server.display(),
