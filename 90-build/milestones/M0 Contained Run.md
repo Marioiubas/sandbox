@@ -7,7 +7,7 @@ tags: [sandbox/build, milestone, milestone/m0, topic/isolation, topic/egress, to
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-09-30
 summary: "Weeks 1-2: workspace skeleton, broker run, Seatbelt and bwrap+Landlock+seccomp backends, empty netns plus UDS bridge, CONNECT and SOCKS5 with host allowlist, canonicaliser, broker DNS, fail-closed launch; done when claude and codex fix a failing test on macOS 15/26 and Ubuntu 22.04/24.04 with probe categories 3, 4, 5, 9 and 10 fully denied."
 related: ["[[Sandbox Launcher]]", "[[Seatbelt]]", "[[bubblewrap]]", "[[Landlock]]", "[[seccomp-bpf]]", "[[Netguard Ingress]]", "[[Hostname Canonicaliser]]", "[[Broker DNS Resolver]]", "[[I2 Fail-Closed Launch]]", "[[Conformance Probe Matrix]]", "[[Broker CLI and Daemon]]", "[[M1 Secrets Outside]]"]
 sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://github.com/anthropic-experimental/sandbox-runtime", "https://learn.chatgpt.com/codex/sandboxing", "https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md", "https://code.claude.com/docs/en/sandboxing"]
@@ -199,3 +199,4 @@ Next milestone: [[M1 Secrets Outside]], which adds TLS termination and credentia
 - ADRs: [[ADR-016 macOS M0 Compatibility Exceptions]], [[ADR-017 Landlock Filesystem Layer Required]], [[ADR-018 seccomp Filter Shape for M0]], [[ADR-019 Mandatory Deny-Write List Additions]].
 - Remaining to mark M0 `built`: A1 for Codex and for macOS 15, Ubuntu 22.04 and 24.04; a green CI run on all four runners.
 - 2026-09-24: CI run 35999705456 on commit 9a63853: lint, fuzz smoke and the test job are green on **macOS 15, macOS 26, Ubuntu 22.04 and Ubuntu 24.04** GitHub runners (109 tests each). A2, A3, A5, A6 and A7 therefore pass on all four targets, and A4 passes on all four (CI plants a canary `~/.ssh/id_ed25519`). `broker doctor` on the runners: Seatbelt canary enforced on both macOS versions; Landlock ABI 4 on Ubuntu 22.04 and ABI 7 on Ubuntu 24.04 (x86_64). Remaining for `built`: A1 for Codex, and for Claude Code on macOS 15 and both Ubuntu versions.
+- 2026-09-30: the `~/.ssh/id_ed25519` acceptance item is now tested for real: a canary home (`BROKER_TEST_PROTECT_HOME`, which can only add protections) holds a random canary key, and the filesystem probe no longer counts "file not found" as a denial (`cat10_filesystem`, `i8_learn_mode_keeps_sandbox_proxy_and_ceiling`). A1 is still 1 of 8 cells.
