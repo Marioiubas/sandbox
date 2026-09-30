@@ -347,3 +347,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found (coverage audit):** the filesystem probe reported "denied" for any error, so probes of absent files passed whatever the sandbox did (macOS in-repository agent config; the `~/.ssh/id_ed25519` M0 item on hosts without that key).
 - **Fixed (review agent, merged):** "denied" only for EACCES, EPERM or EROFS; anything else is "inconclusive" with its errno; fixtures create every probed file (a canary home through `BROKER_TEST_PROTECT_HOME`, which can only add protections); host files are checked unchanged. New `i5_broker_state_config_and_binaries_are_not_writable` (100 probes) and `cat10_absent_protected_names_cannot_be_created`. **No sandbox gap:** every probe that must be refused was refused by the kernel on macOS 26 and Linux. [[I5 Config Outside Writable Mounts]] is now `built`.
 
+### 2026-09-30: fuzz targets for the remaining parsers
+
+- **Added** six cargo-fuzz targets for parsers of untrusted bytes that had none (coverage audit): `http_head`, `fetch_url`, `repo_policy`, `sts_xml`, `app_token`, `git_route`; `canon` now also fuzzes `HostPattern::parse`. Each asserts a property (canonical fixed points, no method override accepted, no wider App scope accepted, RPC only for POST), not only absence of panics; about a million runs each locally, no finding. CI smoke and nightly now cover 24 targets.
+- **Still without a target:** the MCP relay's JSON-RPC handling (`brokerd::mcp::relay`), the sentinel checks, launcher shim decoding; kernel-level denials are still not written to the audit log (category 3/5/9/10 probes are denied by the kernel, not logged).
+- **CI:** `real-github` passed on `dee6270` and `1d35fb6`; the failure diagnostics stay in place.
+

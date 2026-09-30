@@ -148,3 +148,40 @@ name = "graphql"
 path = "fuzz_targets/graphql.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "http_head"
+path = "fuzz_targets/http_head.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fetch_url"
+path = "fuzz_targets/fetch_url.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "repo_policy"
+path = "fuzz_targets/repo_policy.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "sts_xml"
+path = "fuzz_targets/sts_xml.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "app_token"
+path = "fuzz_targets/app_token.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "git_route"
+path = "fuzz_targets/git_route.rs"
+test = false
+doc = false
+
