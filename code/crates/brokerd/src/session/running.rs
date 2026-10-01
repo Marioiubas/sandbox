@@ -82,15 +82,11 @@ impl Running {
         if let Some(c) = self.collector.take() {
             c.stop();
         }
-        let mut ev = AuditEvent::new(EventKind::SessionStop)
-            .session(&self.id)
+        let ev = AuditEvent::new(EventKind::SessionStop)
+            .attributed_as(&self.attribution)
             .detail("exit_code", exited.code.map(i64::from))
             .detail("exit_signal", exited.signal.map(i64::from))
             .detail("stats", self.stats.snapshot());
-        ev.enduser = Some(self.enduser);
-        ev.enduser_groups = self.groups;
-        ev.agent = Some(self.agent);
-        ev.sandbox = Some(self.backend_name);
         let _ = self.recorder.append(&ev);
     }
 }

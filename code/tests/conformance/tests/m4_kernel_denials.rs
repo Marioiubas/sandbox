@@ -48,5 +48,50 @@ fn kernel_denials_are_on_the_sessions_record() {
     });
     assert!(checks.is_some(), "the shim's launch checks are on the record");
     assert!(!h.repo_path().join(".git/hooks/pre-commit").exists(), "and the kernel refused it");
+    h.assert_attributed();
     h.verify_audit().unwrap();
+}
+
+/// Linux (ADR-041): brokerd cannot read Landlock's denials unprivileged, but
+/// from ABI 7 the launcher asks the kernel to log the agent's denials after
+/// exec to the host's audit log. A TCP connect to a loopback port other than
+/// the bridge is refused by Landlock alone; its record must appear. Needs
+/// auditd running and passwordless sudo to read the log: run by CI on
+/// ubuntu-24.04 (ABI 7).
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "needs host audit (auditd) and sudo; run by CI on ubuntu-24.04"]
+fn landlock_denials_reach_the_host_audit_log() {
+    use audit::EventKind;
+    use conformance::*;
+    use std::process::Command;
+
+    let log = || {
+        let out = Command::new("sudo").args(["-n", "cat", "/var/log/audit/audit.log"]).output().unwrap();
+        assert!(out.status.success(), "cannot read the host audit log: {out:?}");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let port = 20000 + (std::process::id() % 40000) as u16;
+    let pattern = format!("dest={port}");
+    let before = log().lines().filter(|l| l.contains(&pattern)).count();
+
+    let h = Harness::new("version = 1\n");
+    let r = h.probe(&["tcp", "127.0.0.1", &port.to_string()]);
+    assert!(r.denied(), "{r:?}");
+    let ready = h.events().into_iter().find(|e| e.kind == EventKind::SessionReady).expect("session.ready");
+    let layers = serde_json::to_string(&ready.detail["layers"]).unwrap();
+    assert!(layers.contains("host audit after exec on"), "ABI 7 or later expected: {layers}");
+
+    let found = conformance::m1::wait_for(std::time::Duration::from_secs(10), || {
+        let lines: Vec<String> = log()
+            .lines()
+            .filter(|l| l.contains(&pattern) && l.contains("blockers=net.connect_tcp"))
+            .map(str::to_string)
+            .collect();
+        (lines.len() > before).then_some(lines)
+    });
+    assert!(found.is_some(), "no Landlock record for {pattern}; last lines:\n{}", {
+        let all = log();
+        all.lines().rev().take(20).collect::<Vec<_>>().join("\n")
+    });
 }

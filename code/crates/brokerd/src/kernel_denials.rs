@@ -95,11 +95,10 @@ pub struct Recording {
 }
 
 impl Recording {
-    /// `base` carries the session's attribution; its kind is replaced.
-    pub fn new(mut base: AuditEvent) -> Option<Self> {
+    /// `base` carries the session's attribution (only that is copied).
+    pub fn new(base: AuditEvent) -> Option<Self> {
         let session: &SessionId = base.session.as_ref()?;
         let tag = launcher::backends::seatbelt_session_tag(session.as_str())?;
-        base.kind = EventKind::KernelDenied;
         Some(Recording { base, tag, seen: Default::default(), rows: 0 })
     }
 
@@ -119,9 +118,8 @@ impl Recording {
             return None;
         }
         self.rows += 1;
-        let mut ev = self
-            .base
-            .clone()
+        let mut ev = AuditEvent::new(EventKind::KernelDenied)
+            .attributed_as(&self.base)
             .request(&RequestId::new())
             .deny(Reason::SandboxDenied, vec![])
             .detail("layer", "seatbelt");
@@ -213,6 +211,8 @@ mod tests {
         let s = SessionId::new();
         let mut base = AuditEvent::new(EventKind::SessionStart).session(&s);
         base.enduser = Some("00uTEST".into());
+        let base_ts = base.ts.clone();
+        std::thread::sleep(std::time::Duration::from_millis(5));
         let mut r = Recording::new(base).unwrap();
         let tag = r.tag().to_string();
         let msg = |p: &str, op: &str, t: &str| format!("Sandbox: {p} deny(1) {op} {t}\n{tag}");
@@ -235,6 +235,7 @@ mod tests {
         assert_eq!((ev.kind, ev.reason), (EventKind::KernelDenied, Some(Reason::SandboxDenied)));
         assert_eq!(ev.session.as_ref(), Some(&s));
         assert_eq!(ev.enduser.as_deref(), Some("00uTEST"), "attributed like every row (I9)");
+        assert!(ev.ts > base_ts, "the row's own time, not the template's");
         assert!(ev.request_id.is_some());
         assert_eq!(ev.detail["target"], "/secret");
         assert!(r.row(&msg("cat(6)", "file-read-data", "/secret")).is_none(), "deduplicated");

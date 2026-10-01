@@ -62,6 +62,10 @@ pub struct PipelineCtx {
     /// The end user's IdP groups (on every row).
     pub groups: Vec<String>,
     pub agent: String,
+    /// SHA-256 of the agent binary, when it could be hashed (on every row).
+    pub agent_sha256: Option<String>,
+    /// The task the session runs (on every row).
+    pub task: Option<String>,
     pub sandbox: String,
     pub policy: Arc<EgressPolicy>,
     pub resolver: Arc<dyn PolicyResolver>,
@@ -107,6 +111,8 @@ impl PipelineCtx {
         ev.enduser = Some(self.enduser.clone());
         ev.enduser_groups = self.groups.clone();
         ev.agent = Some(self.agent.clone());
+        ev.agent_sha256 = self.agent_sha256.clone();
+        ev.task = self.task.clone();
         ev.sandbox = Some(self.sandbox.clone());
         ev
     }

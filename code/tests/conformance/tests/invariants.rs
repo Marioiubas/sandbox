@@ -405,6 +405,8 @@ fn i9_every_decision_is_chained_and_explainable() {
     assert_read_denied(&h.probe(&["read", &db]), &h.audit_db(), "read the audit log");
     assert_fs_denied(&h.probe(&["write", &db]), "write the audit log");
     assert!(h.verify_audit().is_ok());
+    // Attributed: every row of every session names who and what (I9).
+    assert!(h.assert_attributed() >= 9);
 }
 
 // ---------------------------------------------------------------- I4 ------

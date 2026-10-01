@@ -46,6 +46,8 @@ fn fx() -> Fx {
         enduser: "local:test".into(),
         groups: vec![],
         agent: "probe".into(),
+        agent_sha256: None,
+        task: None,
         sandbox: "test".into(),
         policy: Arc::new(policy),
         resolver: Arc::new(StaticResolver::default()),

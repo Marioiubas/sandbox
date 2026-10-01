@@ -35,7 +35,9 @@ pub struct Pending {
 
 #[derive(Default)]
 pub struct Registry {
-    sessions: Mutex<HashMap<String, Arc<EgressPolicy>>>,
+    /// Running sessions: the policy approvals are granted into, and the
+    /// attribution their `approval.granted` rows carry (I9).
+    sessions: Mutex<HashMap<String, (Arc<EgressPolicy>, audit::AuditEvent)>>,
     pending: Mutex<HashMap<String, Pending>>,
 }
 
@@ -53,8 +55,13 @@ fn new_id() -> String {
 
 impl Registry {
     /// A running session whose policy approvals are granted into.
-    pub fn register(&self, session: &str, policy: Arc<EgressPolicy>) {
-        self.sessions.lock().unwrap_or_else(|p| p.into_inner()).insert(session.to_string(), policy);
+    pub fn register(&self, session: &str, policy: Arc<EgressPolicy>, attribution: audit::AuditEvent) {
+        self.sessions.lock().unwrap_or_else(|p| p.into_inner()).insert(session.to_string(), (policy, attribution));
+    }
+
+    /// The attribution of a running session's rows.
+    pub fn attribution(&self, session: &str) -> Option<audit::AuditEvent> {
+        self.sessions.lock().unwrap_or_else(|p| p.into_inner()).get(session).map(|(_, a)| a.clone())
     }
 
     /// The session ended: its pending approvals go with it.
@@ -125,7 +132,7 @@ impl Registry {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(&p.session)
-            .cloned()
+            .map(|(policy, _)| policy.clone())
             .ok_or_else(|| format!("the session of {id} is no longer running"))?;
         for k in &p.keys {
             policy.approvals().grant(k.clone(), scope);
@@ -203,8 +210,12 @@ pub fn grant_json(d: &crate::session::Daemon, params: &serde_json::Value) -> Res
     let session = audit::SessionId::try_from(p.session.clone()).map_err(|e| e.to_string())?;
     let approver = crate::dirs::passwd_user().map(|u| format!("local:{}", u.name)).unwrap_or_else(|_| "local".into());
     // On record first (I9): no row, no approval.
-    let mut ev = audit::AuditEvent::new(audit::EventKind::ApprovalGranted)
-        .session(&session)
+    let mut ev = audit::AuditEvent::new(audit::EventKind::ApprovalGranted);
+    ev = match d.approvals.attribution(session.as_str()) {
+        Some(a) => ev.attributed_as(&a),
+        None => ev.session(&session),
+    };
+    let mut ev = ev
         .detail("approval", p.id.as_str())
         .detail("scope", scope.as_str())
         .detail("approver", approver.as_str())
@@ -225,7 +236,7 @@ mod tests {
     fn requests_are_deduplicated_bounded_and_granted_into_the_session() {
         let r = Registry::default();
         let policy = Arc::new(EgressPolicy::default());
-        r.register("s1", policy.clone());
+        r.register("s1", policy.clone(), audit::AuditEvent::new(audit::EventKind::SessionStart));
         let k = vec!["github pr.create github.com/acme/web".to_string()];
         let a = r.request("s1", "s1", "req-1", Reason::RuleOfTwo, k.clone()).unwrap();
         assert!(a.starts_with("apr-") && a.len() == 14);
@@ -256,7 +267,7 @@ mod tests {
     fn a_held_server_request_names_the_session_whose_labels_held_it() {
         let r = Registry::default();
         let server = Arc::new(EgressPolicy::default());
-        r.register("srv", server.clone());
+        r.register("srv", server.clone(), audit::AuditEvent::new(audit::EventKind::SessionStart));
         let k = vec!["github issue.comment github.com/acme/web".to_string()];
         let a = r.request("srv", "agent", "req-1", Reason::RuleOfTwo, k.clone()).unwrap();
         let p = r.get(&a).unwrap();

@@ -97,10 +97,8 @@ pub struct Running {
     placeholders: Vec<PathBuf>,
     stats: Arc<Stats>,
     recorder: Arc<SqliteRecorder>,
-    backend_name: String,
-    agent: String,
-    enduser: String,
-    groups: Vec<String>,
+    /// The session's attribution, copied onto its stop row (I9).
+    attribution: AuditEvent,
     /// The session's kernel-denial collector (ADR-041; macOS).
     collector: Option<crate::kernel_denials::Collector>,
 }

@@ -242,6 +242,27 @@ impl Harness {
         }
     }
 
+    /// I9: every row of a session carries the attribution its
+    /// `session.start` row does (end user, groups, agent and its hash,
+    /// task, sandbox). Returns the number of session rows checked.
+    pub fn assert_attributed(&self) -> usize {
+        let evs = self.events();
+        let mut n = 0;
+        for start in evs.iter().filter(|e| e.kind == EventKind::SessionStart) {
+            assert!(start.enduser.is_some() && start.agent.is_some() && start.task.is_some(), "{start:?}");
+            assert!(start.sandbox.is_some() && start.agent_sha256.is_some(), "{start:?}");
+            for e in evs.iter().filter(|e| e.session == start.session) {
+                let who = |e: &AuditEvent| {
+                    (e.enduser.clone(), e.enduser_groups.clone(), e.agent.clone(), e.agent_sha256.clone())
+                };
+                assert_eq!(who(e), who(start), "{:?} {:?}", e.kind, e.detail);
+                assert_eq!((&e.task, &e.sandbox), (&start.task, &start.sandbox), "{:?}", e.kind);
+                n += 1;
+            }
+        }
+        n
+    }
+
     pub fn deny_reasons(&self) -> Vec<Reason> {
         self.events()
             .into_iter()

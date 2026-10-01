@@ -303,6 +303,13 @@ fn landlock_apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Resul
     if kernel_abi >= 4 {
         created = created.add_rule(NetPort::new(l.bridge_port, AccessNet::ConnectTcp))?;
     }
+    // From ABI 7 (Linux 6.15) the agent's denials after exec reach the host's
+    // audit log when the host has audit enabled (the kernel's default logs
+    // only before exec). brokerd cannot read that log unprivileged; it is the
+    // host administrator's record (ADR-041).
+    if kernel_abi >= 7 {
+        created = created.log_new_exec(true)?;
+    }
     let status = created.restrict_self()?;
     let fs_ok = status.ruleset != RulesetStatus::NotEnforced;
     layers.push(layer(
@@ -310,10 +317,11 @@ fn landlock_apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Resul
         true,
         fs_ok,
         format!(
-            "kernel ABI {kernel_abi}, {:?}, {} read roots, {} write roots",
+            "kernel ABI {kernel_abi}, {:?}, {} read roots, {} write roots, host audit after exec {}",
             status.ruleset,
             read_roots.len(),
-            write_roots.len()
+            write_roots.len(),
+            if status.log_new_exec { "on" } else { "off" }
         ),
     ));
     if !fs_ok {

@@ -131,5 +131,7 @@ fn a_held_write_is_approved_on_the_host_once_and_never_from_inside() {
     assert_eq!(used, 1, "exactly one allowed request used the approval");
     let posts = api.seen().iter().filter(|s| s.method == "POST").count();
     assert_eq!(posts, 1, "only the approved PR reached GitHub");
+    assert!(granted.task.is_some() && granted.agent.is_some(), "the grant is attributed like every row: {granted:?}");
+    h.assert_attributed();
     h.verify_audit().unwrap();
 }

@@ -158,6 +158,14 @@ impl Daemon {
         // Start the data plane before the agent, so its first request has a
         // listener (I2); then launch, which verifies the layers from inside.
         let groups = identity.as_ref().map(|i| i.groups.clone()).unwrap_or_default();
+        // Who and what every row of this session is attributed to (I9).
+        let mut attribution = AuditEvent::new(EventKind::SessionStart).session(id);
+        attribution.enduser = Some(enduser.clone());
+        attribution.enduser_groups = groups.clone();
+        attribution.agent = Some(params.argv[0].clone());
+        attribution.agent_sha256 = agent_sha.clone();
+        attribution.task = Some(format!("task-{id}"));
+        attribution.sandbox = Some(self.backend.name().to_string());
         let stats = Arc::new(Stats::default());
         let egress_mode = egress.mode().as_str();
         let ctx = Arc::new(PipelineCtx {
@@ -166,6 +174,8 @@ impl Daemon {
             enduser: enduser.clone(),
             groups: groups.clone(),
             agent: params.argv[0].clone(),
+            agent_sha256: attribution.agent_sha256.clone(),
+            task: attribution.task.clone(),
             sandbox: self.backend.name().to_string(),
             policy: Arc::new(egress),
             resolver: self.resolver.clone(),
@@ -195,7 +205,7 @@ impl Daemon {
         };
         let probe_layers = self.backend.probe().map(|r| r.layers).unwrap_or_default();
         let mut ev = AuditEvent::new(EventKind::SessionStart)
-            .session(id)
+            .attributed_as(&attribution)
             .detail("profile", profile.name.as_str())
             .detail(
                 "identity",
@@ -220,12 +230,6 @@ impl Daemon {
             // A pinned MCP server's session: whose labels it carries (ADR-038).
             ev = ev.detail("labels_session", labels_session.as_str());
         }
-        ev.enduser = Some(enduser.clone());
-        ev.enduser_groups = groups.clone();
-        ev.agent = Some(params.argv[0].clone());
-        ev.agent_sha256 = agent_sha;
-        ev.sandbox = Some(self.backend.name().to_string());
-        ev.task = Some(format!("task-{}", id));
         if faults.iter().any(|f| f == "audit") || self.recorder.append(&ev).is_err() {
             return Err(StartFailure {
                 message: "audit log unavailable; the session was not started".into(),
@@ -237,12 +241,9 @@ impl Daemon {
         let accept = tokio::spawn(accept_loop(listener, ctx));
         let backend = self.backend.clone();
         // Stream the kernel's denial reports before the agent can cause any.
-        let mut base = AuditEvent::new(EventKind::KernelDenied).session(id);
-        base.enduser = Some(enduser.clone());
-        base.enduser_groups = groups.clone();
-        base.agent = Some(params.argv[0].clone());
-        base.sandbox = Some(self.backend.name().to_string());
-        let collector = crate::kernel_denials::Collector::start(base, self.recorder.clone() as Arc<dyn Recorder>).await;
+        let collector =
+            crate::kernel_denials::Collector::start(attribution.clone(), self.recorder.clone() as Arc<dyn Recorder>)
+                .await;
         let launched = tokio::task::spawn_blocking(move || backend.launch(spec)).await;
         let handle = match launched {
             Ok(Ok(h)) => h,
@@ -261,13 +262,9 @@ impl Daemon {
         };
 
         // The layers as verified from inside the sandbox by the shim.
-        let mut ready = AuditEvent::new(EventKind::SessionReady)
-            .session(id)
+        let ready = AuditEvent::new(EventKind::SessionReady)
+            .attributed_as(&attribution)
             .detail("layers", serde_json::to_value(&handle.verified).unwrap_or_default());
-        ready.enduser = Some(enduser.clone());
-        ready.enduser_groups = groups.clone();
-        ready.agent = Some(params.argv[0].clone());
-        ready.sandbox = Some(self.backend.name().to_string());
         if self.recorder.append(&ready).is_err() {
             // I9: no audit, no session.
             let mut child = handle.child;
@@ -277,7 +274,7 @@ impl Daemon {
             accept.abort();
             return Err(StartFailure { message: "audit log unavailable".into(), layers: handle.verified });
         }
-        self.approvals.register(id.as_str(), policy);
+        self.approvals.register(id.as_str(), policy, attribution.clone());
         if let Ok(mut s) = self.sessions.lock() {
             s.insert(id.to_string(), handle.pid);
         }
@@ -301,10 +298,7 @@ impl Daemon {
             placeholders: handle.placeholders,
             stats,
             recorder: self.recorder.clone(),
-            backend_name: self.backend.name().to_string(),
-            agent: params.argv[0].clone(),
-            enduser,
-            groups,
+            attribution,
             collector: Some(collector),
         })
     }

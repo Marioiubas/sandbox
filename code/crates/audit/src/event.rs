@@ -172,6 +172,21 @@ impl AuditEvent {
         self
     }
 
+    /// This event attributed like `t`: session, end user and groups, agent
+    /// and its hash, task and sandbox (I9). Kind, time and everything else
+    /// stay this event's own, so a session's template never lends a row its
+    /// timestamp.
+    pub fn attributed_as(mut self, t: &AuditEvent) -> Self {
+        self.session = t.session.clone();
+        self.enduser = t.enduser.clone();
+        self.enduser_groups = t.enduser_groups.clone();
+        self.agent = t.agent.clone();
+        self.agent_sha256 = t.agent_sha256.clone();
+        self.task = t.task.clone();
+        self.sandbox = t.sandbox.clone();
+        self
+    }
+
     pub fn request(mut self, r: &RequestId) -> Self {
         self.request_id = Some(r.clone());
         self
