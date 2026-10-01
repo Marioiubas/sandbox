@@ -1,5 +1,6 @@
 pub mod approve;
 pub mod audit;
+pub mod audit_stats;
 pub mod ctl;
 pub mod daemon;
 pub mod doctor;

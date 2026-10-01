@@ -137,6 +137,14 @@ pub enum AuditCmd {
         #[arg(long, default_value_t = 0)]
         from_seq: i64,
     },
+    /// Per-session counts: allows, denies by reason, approval prompts and
+    /// grants, kernel denials, labels raised (from the audit log).
+    Stats {
+        #[arg(long)]
+        session: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Show the most recent events.
     Tail {
         #[arg(short = 'n', default_value_t = 20)]
@@ -257,6 +265,7 @@ fn main() {
         Command::Why { request_id } => cmd::why::why(&request_id),
         Command::Audit { action: AuditCmd::Verify } => cmd::audit::verify(),
         Command::Audit { action: AuditCmd::Tail { n } } => cmd::audit::tail(n),
+        Command::Audit { action: AuditCmd::Stats { session, json } } => cmd::audit_stats::stats(session, json),
         Command::Audit { action: AuditCmd::Query { session, kind, decision, reason, host, after, limit, json } } => {
             let mut p = serde_json::Map::new();
             let mut put = |k: &str, v: Option<serde_json::Value>| {

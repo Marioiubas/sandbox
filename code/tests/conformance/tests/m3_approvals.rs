@@ -132,6 +132,14 @@ fn a_held_write_is_approved_on_the_host_once_and_never_from_inside() {
     let posts = api.seen().iter().filter(|s| s.method == "POST").count();
     assert_eq!(posts, 1, "only the approved PR reached GitHub");
     assert!(granted.task.is_some() && granted.agent.is_some(), "the grant is attributed like every row: {granted:?}");
+    // L4: prompts and denies per session, from the broker's records.
+    let st = h.broker(&["audit", "stats", "--json"]);
+    assert_eq!(st.code, 0, "{st:?}");
+    let v: serde_json::Value = serde_json::from_str(&st.stdout).unwrap();
+    let s = v.as_array().unwrap().iter().find(|s| s["prompts"].as_u64() > Some(0)).expect("the prompting session");
+    assert_eq!((s["prompts"].as_u64(), s["approvals_granted"].as_u64()), (Some(2), Some(1)), "{s}");
+    assert!(s["denies_by_reason"]["rule_of_two"].as_u64() >= Some(2), "{s}");
+    assert!(h.broker(&["audit", "stats"]).stdout.contains("rule_of_two"));
     h.assert_attributed();
     h.verify_audit().unwrap();
 }
