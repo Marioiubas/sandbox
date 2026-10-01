@@ -54,7 +54,8 @@ required = true
         if cfg!(target_os = "macos") {
             "kernel denials: recorded on each session's audit log"
         } else {
-            "kernel denials: enforced but not recorded"
+            // Every supported CI kernel can notify (ADR-043).
+            "kernel denials: seccomp refusals recorded on each session's audit log"
         },
     ] {
         assert!(r.stdout.contains(want), "missing {want:?} in:\n{}", r.stdout);

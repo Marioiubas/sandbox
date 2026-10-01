@@ -34,7 +34,7 @@ fn doctor_inner() -> anyhow::Result<i32> {
     if let Some(abi) = report.landlock_abi {
         println!("  landlock ABI: {abi}");
     }
-    println!("kernel denials: {}", kernel_denials(report.landlock_abi));
+    println!("kernel denials: {}", kernel_denials(&report));
     let dirs = ctl::dirs()?;
     println!("config:  {}", dirs.config_file().display());
     println!("state:   {}", dirs.state_dir.display());
@@ -107,15 +107,25 @@ fn doctor_inner() -> anyhow::Result<i32> {
 /// How the broker handles TLS for a grant (the compatibility matrix).
 /// What reaches a record when the kernel layers refuse something (ADR-041).
 /// The kernel enforces every refusal either way.
-fn kernel_denials(landlock_abi: Option<u8>) -> String {
+/// On Linux, seccomp refusals are recorded when the kernel can hand brokerd
+/// a listener (the optional layer `seccomp_notify`, ADR-043).
+fn kernel_denials(report: &launcher::BackendReport) -> String {
     if cfg!(target_os = "macos") {
         return "recorded on each session's audit log from the kernel's own reports (best effort, capped)".into();
     }
-    let host = match landlock_abi {
+    let host = match report.landlock_abi {
         Some(a) if a >= 7 => "; Landlock refusals reach this host's audit log if the host has audit enabled",
         _ => "",
     };
-    format!("enforced but not recorded on the broker's audit log{host}")
+    let seccomp = report.layers.iter().any(|l| l.name == "seccomp_notify" && l.ok);
+    if seccomp {
+        format!(
+            "seccomp refusals recorded on each session's audit log as brokerd answers them (capped); \
+             Landlock and mount refusals enforced but not recorded on the broker's audit log{host}"
+        )
+    } else {
+        format!("enforced but not recorded on the broker's audit log{host}")
+    }
 }
 
 fn tls_mode(g: &policy::Grant) -> String {
