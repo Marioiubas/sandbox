@@ -105,9 +105,24 @@ pub fn run(cmd: &str, rest: &[String]) -> ! {
             // SAFETY: socket(2) with constant arguments.
             let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0) };
             if fd < 0 {
-                denied(format!("socket(AF_UNIX): {}", errno_str(&std::io::Error::last_os_error())));
+                let e = std::io::Error::last_os_error();
+                denied(format!("socket(AF_UNIX): {} errno={}", errno_str(&e), errno_name(&e)));
             }
             allowed("socket(AF_UNIX) created")
+        }
+        "packet-socket" => {
+            #[cfg(target_os = "linux")]
+            {
+                // SAFETY: socket(2) with constant arguments.
+                let fd = unsafe { libc::socket(libc::AF_PACKET, libc::SOCK_RAW, 0) };
+                if fd < 0 {
+                    let e = std::io::Error::last_os_error();
+                    denied(format!("socket(AF_PACKET): {} errno={}", errno_str(&e), errno_name(&e)));
+                }
+                allowed("socket(AF_PACKET) created")
+            }
+            #[cfg(not(target_os = "linux"))]
+            inconclusive("packet sockets are Linux-only")
         }
         _ => usage(),
     }

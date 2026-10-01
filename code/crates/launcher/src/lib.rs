@@ -110,6 +110,44 @@ pub struct SandboxHandle {
     /// Paths created as placeholders for protected names; removed on teardown
     /// if still empty.
     pub placeholders: Vec<PathBuf>,
+    /// Linux: the syscalls the seccomp layer refuses, as brokerd answers them
+    /// (ADR-043). `None` on macOS.
+    pub seccomp: Option<SeccompFeed>,
+}
+
+/// One system call the Linux seccomp layer refused, as brokerd answered it
+/// (ADR-043): the syscall number and plain register arguments only, never
+/// anything read through a pointer the sandbox controls.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeccompDenial {
+    /// The calling process in brokerd's (the host's) PID namespace.
+    pub pid: u32,
+    /// Its `comm` while the call was held: advisory, a process can take any
+    /// name (`None` if it was gone before it could be read).
+    pub process: Option<String>,
+    pub nr: i64,
+    pub syscall: &'static str,
+    /// Named plain arguments: socket domain and type, clone flags, ...
+    pub args: Vec<(&'static str, u64)>,
+}
+
+/// The refused syscalls of one Linux session, in the order they were
+/// answered. The kernel enforces each refusal whether or not anyone reads
+/// this: it is the record, not the control.
+pub struct SeccompFeed {
+    pub denials: std::sync::mpsc::Receiver<SeccompDenial>,
+    pub stop: SeccompStop,
+}
+
+/// Dropping this stops answering the session's notifications: brokerd
+/// closes the listener, and from then on the kernel fails every notified
+/// syscall with ENOSYS (still refused, no longer recorded).
+pub struct SeccompStop(pub std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for SeccompStop {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
 }
 
 /// Fault injection for the fail-closed tests (I2): `BROKER_FAULT_INJECT` is a

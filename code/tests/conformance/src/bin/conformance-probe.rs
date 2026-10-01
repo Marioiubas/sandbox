@@ -106,6 +106,7 @@ fn errno_name(e: &std::io::Error) -> String {
         (libc::ENAMETOOLONG, "ENAMETOOLONG"),
         (libc::ENOTEMPTY, "ENOTEMPTY"),
         (libc::EOPNOTSUPP, "EOPNOTSUPP"),
+        (libc::ENOSYS, "ENOSYS"),
     ];
     known.iter().find(|(v, _)| *v == n).map(|(_, s)| s.to_string()).unwrap_or_else(|| format!("E{n}"))
 }
@@ -136,10 +137,25 @@ fn main() {
                 if r == 0 {
                     allowed(format!("attached to {pid}"));
                 }
-                denied(format!("ptrace: {}", errno_str(&std::io::Error::last_os_error())));
+                let e = std::io::Error::last_os_error();
+                denied(format!("ptrace: {} errno={}", errno_str(&e), errno_name(&e)));
             }
             #[cfg(not(target_os = "linux"))]
             inconclusive("ptrace probe is Linux-only")
+        }
+        "unshare-user" => {
+            #[cfg(target_os = "linux")]
+            {
+                // SAFETY: unshare(2) with a constant flag; on success this
+                // probe process alone moves into a new user namespace.
+                if unsafe { libc::unshare(libc::CLONE_NEWUSER) } == 0 {
+                    allowed("unshare(CLONE_NEWUSER) succeeded");
+                }
+                let e = std::io::Error::last_os_error();
+                denied(format!("unshare(CLONE_NEWUSER): {} errno={}", errno_str(&e), errno_name(&e)));
+            }
+            #[cfg(not(target_os = "linux"))]
+            inconclusive("unshare is Linux-only")
         }
         "exec" => {
             // exec <program> [args]: succeed iff the program ran and exited 0.
@@ -150,7 +166,9 @@ fn main() {
                 Err(e) => denied(format!("{prog}: {}", errno_str(&e))),
             }
         }
-        "tcp" | "udp" | "dns-udp" | "dns-tcp" | "icmp" | "unix" | "unix-socket" => net::run(&cmd, rest),
+        "tcp" | "udp" | "dns-udp" | "dns-tcp" | "icmp" | "unix" | "unix-socket" | "packet-socket" => {
+            net::run(&cmd, rest)
+        }
         "read" | "list" | "write" | "write-new" | "mkdir" | "rename" | "unlink" | "symlink" | "hardlink"
         | "read-when-exists" => fs::run(&cmd, rest),
         "env-has" | "env-scan" | "secret-scan" => secrets::run(&cmd, rest),

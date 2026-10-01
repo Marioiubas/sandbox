@@ -3,6 +3,7 @@
 
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener};
+use std::os::fd::AsRawFd;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 
@@ -20,6 +21,14 @@ pub fn start(port: u16, sock: &Path) -> anyhow::Result<()> {
                 0 => {
                     // Non-dumpable: the agent (same uid) cannot read our memory via /proc.
                     unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) };
+                    // Nothing of the launch's: the status pipe and the
+                    // seccomp channel to brokerd are the shim's (ADR-043).
+                    for fd in [crate::shim::STATUS_FD, crate::shim::NOTIFY_FD] {
+                        if fd != listener.as_raw_fd() {
+                            // SAFETY: a descriptor this process does not use.
+                            unsafe { libc::close(fd) };
+                        }
+                    }
                     serve(listener, sock);
                     unsafe { libc::_exit(0) };
                 }

@@ -2,7 +2,8 @@
 //! to a protected path and a direct connection, refused by Seatbelt inside
 //! a session, become `kernel.denied` rows on that session with reason
 //! `sandbox_denied`, attributed like every row, separate from the shim's
-//! own launch checks. On Linux there is no collector (a residual).
+//! own launch checks. On Linux the syscalls seccomp refuses do too
+//! (ADR-043, user notification); Landlock's go to the host's audit log only.
 
 #[cfg(target_os = "macos")]
 #[test]
@@ -94,4 +95,89 @@ fn landlock_denials_reach_the_host_audit_log() {
         let all = log();
         all.lines().rev().take(20).collect::<Vec<_>>().join("\n")
     });
+}
+
+/// Linux (ADR-043): socket(AF_UNIX), socket(AF_PACKET), unshare(CLONE_NEWUSER)
+/// and ptrace inside a session are refused with EPERM, answered by brokerd
+/// through the seccomp listener, and each becomes an attributed
+/// `kernel.denied` row with layer `seccomp`, the syscall and its plain
+/// arguments. The shim's own check (socket(AF_UNIX) before exec) is on the
+/// record too, flagged `launch_check`: the listener was served before the
+/// agent ran.
+#[cfg(target_os = "linux")]
+#[test]
+fn seccomp_denials_are_on_the_sessions_record() {
+    use audit::{AuditEvent, EventKind, Reason};
+    use conformance::m1::wait_for;
+    use conformance::*;
+    use std::time::Duration;
+
+    let h = Harness::new("version = 1\n");
+    let probes: Vec<Vec<String>> =
+        [vec!["unix-socket"], vec!["packet-socket"], vec!["unshare-user"], vec!["ptrace", "1"]]
+            .iter()
+            .map(|p| p.iter().map(|s| s.to_string()).collect())
+            .collect();
+    for (p, r) in probes.iter().zip(h.probe_batch(&probes)) {
+        assert!(r.denied(), "{p:?}: {r:?}");
+        assert_eq!(r.errno(), Some("EPERM"), "{p:?}: brokerd's answer, not ENOSYS: {r:?}");
+    }
+    let ready = h.events().into_iter().find(|e| e.kind == EventKind::SessionReady).expect("session.ready");
+    let layers = ready.detail["layers"].as_array().cloned().unwrap_or_default();
+    let notify = layers.iter().rfind(|l| l["name"] == "seccomp_notify").expect("seccomp_notify layer");
+    assert_eq!((notify["ok"].as_bool(), notify["required"].as_bool()), (Some(true), Some(false)), "{notify}");
+    let session = ready.session.clone().expect("session");
+
+    let num = |e: &AuditEvent, k: &str| e.detail.get(k).and_then(|v| v.as_u64());
+    let text = |e: &AuditEvent, k: &str| e.detail.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let wanted: [(&str, &str, u64); 4] = [
+        ("socket", "domain", libc::AF_UNIX as u64),
+        ("socket", "domain", libc::AF_PACKET as u64),
+        ("unshare", "flags", libc::CLONE_NEWUSER as u64),
+        ("ptrace", "request", libc::PTRACE_ATTACH as u64),
+    ];
+    let rows = wait_for(Duration::from_secs(10), || {
+        let v: Vec<AuditEvent> = h
+            .events()
+            .into_iter()
+            .filter(|e| e.kind == EventKind::KernelDenied && text(e, "layer") == "seccomp")
+            .collect();
+        // The probe's own attempts (comm `conformance-probe` cut to 15 bytes).
+        let agent =
+            |e: &&AuditEvent| e.detail.get("launch_check").is_none() && text(*e, "process") == "conformance-pro";
+        let all = wanted.iter().all(|&(sys, k, val)| {
+            v.iter().filter(agent).any(|e: &AuditEvent| text(e, "syscall") == sys && num(e, k) == Some(val))
+        });
+        all.then_some(v)
+    })
+    .expect("every refused syscall recorded within 10 s");
+    for e in &rows {
+        assert_eq!(e.reason, Some(Reason::SandboxDenied), "{e:?}");
+        assert_eq!(e.session.as_ref(), Some(&session), "attributed to the session that was denied");
+        assert!(num(e, "pid").is_some() && e.detail.contains_key("nr"), "{e:?}");
+    }
+    let check = rows.iter().find(|e| e.detail.get("launch_check").is_some()).expect("the shim's check is recorded");
+    assert_eq!((text(check, "syscall"), num(check, "domain")), ("socket".to_string(), Some(libc::AF_UNIX as u64)));
+    h.assert_attributed();
+    h.verify_audit().unwrap();
+}
+
+/// Linux (ADR-043): if brokerd does not take the seccomp listener, the
+/// shim's check gets ENOSYS instead of EPERM and the launch is refused
+/// before the agent runs (I2): no refused syscall is ever allowed for want
+/// of an answer.
+#[cfg(target_os = "linux")]
+#[test]
+fn an_unserved_seccomp_listener_refuses_the_launch() {
+    use audit::EventKind;
+    use conformance::*;
+
+    let h = Harness::with_daemon_env("version = 1\n", &[("BROKER_FAULT_INJECT", "seccomp_notify")]);
+    let marker = h.repo_path().join("AGENT-RAN");
+    let r = h.probe(&["write-new", &marker.display().to_string()]);
+    assert_eq!(r.code, 125, "{r:?}");
+    assert!(!marker.exists(), "the agent ran");
+    assert!(r.stderr.contains("launch refused") && r.stderr.contains("ENOSYS"), "{}", r.stderr);
+    assert_eq!(h.events().iter().filter(|e| e.kind == EventKind::LaunchRefused).count(), 1);
+    assert!(h.events().iter().all(|e| e.kind != EventKind::SessionReady), "no session.ready");
 }

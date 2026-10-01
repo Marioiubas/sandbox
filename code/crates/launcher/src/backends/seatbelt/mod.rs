@@ -140,10 +140,10 @@ impl SandboxBackend for SeatbeltBackend {
         cmd.arg("-f").arg(&profile_path).arg(&spec.shim).arg("--spec").arg(shim_spec.encode()).arg("--");
         cmd.args(&spec.argv);
         cmd.env_clear().envs(&spec.env).current_dir(&spec.cwd);
-        let (child, status) = spawn_with_status(cmd, spec.stdio, Duration::from_secs(15))?;
+        let (child, status) = spawn_with_status(cmd, spec.stdio, None, Duration::from_secs(15))?;
         let mut verified = report.layers;
         verified.extend(status.layers);
-        Ok(SandboxHandle { pid: child.id(), child, verified, placeholders: vec![] })
+        Ok(SandboxHandle { pid: child.id(), child, verified, placeholders: vec![], seccomp: None })
     }
 }
 

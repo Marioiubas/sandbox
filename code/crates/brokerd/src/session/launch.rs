@@ -242,11 +242,11 @@ impl Daemon {
         let accept = tokio::spawn(accept_loop(listener, ctx));
         let backend = self.backend.clone();
         // Stream the kernel's denial reports before the agent can cause any.
-        let collector =
+        let mut collector =
             crate::kernel_denials::Collector::start(attribution.clone(), self.recorder.clone() as Arc<dyn Recorder>)
                 .await;
         let launched = tokio::task::spawn_blocking(move || backend.launch(spec)).await;
-        let handle = match launched {
+        let mut handle = match launched {
             Ok(Ok(h)) => h,
             Ok(Err(e)) => {
                 accept.abort();
@@ -261,6 +261,11 @@ impl Daemon {
                 return Err(StartFailure { message: format!("launcher task failed: {e}"), layers: vec![] });
             }
         };
+        // Linux: the syscalls seccomp refused so far (the shim's own check
+        // among them) are queued; record them and the rest (ADR-043).
+        if let Some(feed) = handle.seccomp.take() {
+            collector.attach_seccomp(feed, attribution.clone(), self.recorder.clone() as Arc<dyn Recorder>);
+        }
 
         // The layers as verified from inside the sandbox by the shim.
         let ready = AuditEvent::new(EventKind::SessionReady)

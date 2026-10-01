@@ -10,12 +10,15 @@
 //! The kernel enforces the denial whether or not it is recorded: this is
 //! the record, not the control. The kernel rate-limits its reports, and a
 //! collector that cannot start (no `log`, no permission) records nothing,
-//! so the absence of rows proves nothing. On Linux,
-//! Landlock and seccomp do not report denials to an unprivileged process,
-//! so there is no collector there (a residual, ADR-041).
+//! so the absence of rows proves nothing. On Linux, Landlock does not
+//! report denials to an unprivileged process (a residual, ADR-041); the
+//! syscalls seccomp refuses reach brokerd as user notifications and are
+//! recorded by [`seccomp`] (ADR-043).
 
 use audit::{AuditEvent, EventKind, Reason, Recorder, RequestId, SessionId};
 use std::sync::Arc;
+
+pub mod seccomp;
 
 /// Most `kernel.denied` rows per session; one more row says the rest were
 /// suppressed.
@@ -138,10 +141,12 @@ impl Recording {
     }
 }
 
-/// The unified-log stream for one session (macOS), stopped at teardown.
+/// The unified-log stream for one session (macOS), or the session's
+/// seccomp listener (Linux, ADR-043), stopped at teardown.
 pub struct Collector {
     child: Option<tokio::process::Child>,
     reader: Option<tokio::task::JoinHandle<()>>,
+    seccomp: Option<launcher::SeccompStop>,
 }
 
 impl Collector {
@@ -151,7 +156,7 @@ impl Collector {
     /// the agent's first denials are not lost to a stream not yet live.
     pub async fn start(base: AuditEvent, recorder: Arc<dyn Recorder>) -> Collector {
         use tokio::io::AsyncBufReadExt;
-        let inert = Collector { child: None, reader: None };
+        let inert = Collector { child: None, reader: None, seccomp: None };
         if !cfg!(target_os = "macos") {
             return inert;
         }
@@ -187,12 +192,23 @@ impl Collector {
                 take(&line);
             }
         });
-        Collector { child: Some(child), reader: Some(reader) }
+        Collector { child: Some(child), reader: Some(reader), seccomp: None }
+    }
+
+    /// Linux: record the syscalls the launcher's serving thread answers for
+    /// this session (ADR-043). `base` carries the session's attribution.
+    pub fn attach_seccomp(&mut self, feed: launcher::SeccompFeed, base: AuditEvent, recorder: Arc<dyn Recorder>) {
+        let launcher::SeccompFeed { denials, stop } = feed;
+        seccomp::drain(denials, base, recorder);
+        self.seccomp = Some(stop);
     }
 
     /// Stop after a short drain: the kernel's reports arrive shortly after
     /// the denial, so the last ones of a session would otherwise be lost.
+    /// A seccomp listener is closed at once (its rows are already queued;
+    /// anything still running in the sandbox now gets ENOSYS).
     pub fn stop(mut self) {
+        drop(self.seccomp.take());
         let (Some(mut child), Some(reader)) = (self.child.take(), self.reader.take()) else { return };
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
