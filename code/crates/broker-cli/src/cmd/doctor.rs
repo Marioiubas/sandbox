@@ -34,6 +34,7 @@ fn doctor_inner() -> anyhow::Result<i32> {
     if let Some(abi) = report.landlock_abi {
         println!("  landlock ABI: {abi}");
     }
+    println!("kernel denials: {}", kernel_denials(report.landlock_abi));
     let dirs = ctl::dirs()?;
     println!("config:  {}", dirs.config_file().display());
     println!("state:   {}", dirs.state_dir.display());
@@ -104,6 +105,19 @@ fn doctor_inner() -> anyhow::Result<i32> {
 }
 
 /// How the broker handles TLS for a grant (the compatibility matrix).
+/// What reaches a record when the kernel layers refuse something (ADR-041).
+/// The kernel enforces every refusal either way.
+fn kernel_denials(landlock_abi: Option<u8>) -> String {
+    if cfg!(target_os = "macos") {
+        return "recorded on each session's audit log from the kernel's own reports (best effort, capped)".into();
+    }
+    let host = match landlock_abi {
+        Some(a) if a >= 7 => "; Landlock refusals reach this host's audit log if the host has audit enabled",
+        _ => "",
+    };
+    format!("enforced but not recorded on the broker's audit log{host}")
+}
+
 fn tls_mode(g: &policy::Grant) -> String {
     if g.passthrough {
         return "TLS passthrough for pinning clients (nothing decrypted, no credential)".into();

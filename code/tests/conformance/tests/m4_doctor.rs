@@ -51,6 +51,11 @@ required = true
         "`broker login` to https://idp.example.com (required",
         "QUIC / HTTP/3, other UDP",
         "result: all required layers available",
+        if cfg!(target_os = "macos") {
+            "kernel denials: recorded on each session's audit log"
+        } else {
+            "kernel denials: enforced but not recorded"
+        },
     ] {
         assert!(r.stdout.contains(want), "missing {want:?} in:\n{}", r.stdout);
     }

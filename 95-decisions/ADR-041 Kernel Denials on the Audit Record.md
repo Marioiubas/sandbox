@@ -62,3 +62,7 @@ Strengthens I9. Weakens none.
 
 - decided-by:: M4 build
 - extends:: [[I9 Hash-Chained Audit Outside the Sandbox]]
+
+## Build log
+
+- 2026-10-01: `broker doctor` says what is recorded on this host: on macOS kernel denials are recorded on each session's audit log (best effort, capped); on Linux they are enforced but not recorded on the broker's log, and from Landlock ABI 7 reach the host's audit log when the host has audit enabled (`m4_doctor`).
