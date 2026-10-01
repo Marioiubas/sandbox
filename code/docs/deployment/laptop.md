@@ -30,7 +30,8 @@ if any required layer is missing; there is no flag that skips a layer.
 
 ## Install
 
-Build from source (Rust 1.96 or newer):
+Prebuilt `.deb`, `.rpm`, static Linux tarballs and a macOS build are
+described in `packages.md`. Or build from source (Rust 1.96 or newer):
 
 ```bash
 cargo build --release --locked --manifest-path code/Cargo.toml
