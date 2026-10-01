@@ -143,8 +143,7 @@ fn seccomp_denials_are_on_the_sessions_record() {
             .filter(|e| e.kind == EventKind::KernelDenied && text(e, "layer") == "seccomp")
             .collect();
         // The probe's own attempts (comm `conformance-probe` cut to 15 bytes).
-        let agent =
-            |e: &&AuditEvent| e.detail.get("launch_check").is_none() && text(*e, "process") == "conformance-pro";
+        let agent = |e: &&AuditEvent| e.detail.get("launch_check").is_none() && text(e, "process") == "conformance-pro";
         let all = wanted.iter().all(|&(sys, k, val)| {
             v.iter().filter(agent).any(|e: &AuditEvent| text(e, "syscall") == sys && num(e, k) == Some(val))
         });

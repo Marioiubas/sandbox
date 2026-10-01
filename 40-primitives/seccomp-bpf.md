@@ -9,8 +9,8 @@ status: verified
 confidence: high
 milestone: M0
 created: 2026-09-24
-updated: 2026-09-24
-related: ["[[bubblewrap]]", "[[Landlock]]", "[[Sandbox Launcher]]", "[[Topology-Forced Egress]]", "[[Broker CLI and Daemon]]", "[[Tech Stack]]", "[[I2 Fail-Closed Launch]]", "[[ADR-003 Topology-Enforced Egress]]", "[[Open Questions and Unverified Claims]]"]
+updated: 2026-10-01
+related: ["[[bubblewrap]]", "[[Landlock]]", "[[Sandbox Launcher]]", "[[Topology-Forced Egress]]", "[[Broker CLI and Daemon]]", "[[Tech Stack]]", "[[I2 Fail-Closed Launch]]", "[[ADR-003 Topology-Enforced Egress]]", "[[ADR-018 seccomp Filter Shape for M0]]", "[[ADR-043 Seccomp Denials Recorded via User Notification]]", "[[Open Questions and Unverified Claims]]"]
 ---
 
 # seccomp-bpf
@@ -97,6 +97,11 @@ Arguments are checked with argument comparators on the `domain`/`type` registers
 
 See `sources:` in the frontmatter; every URL is cited inline above.
 
+## Implementation notes
+
+- 2026-10-01, user notification ([[ADR-043 Seccomp Denials Recorded via User Notification]]): `SECCOMP_RET_USER_NOTIF` (Linux 5.0) hands each matching syscall to whoever holds the filter's listener, which answers it; if the listener is closed the kernel fails pending and later calls with `ENOSYS` and never runs them, ERRNO and KILL outrank USER_NOTIF when filters stack, a filter chain has at most one listener (`EBUSY`), and `SECCOMP_FILTER_FLAG_WAIT_KILLABLE_RECV` (5.19) keeps ordinary signals from interrupting a call the supervisor has received ([seccomp_unotify(2)](https://man7.org/linux/man-pages/man2/seccomp_unotify.2.html), [kernel/seccomp.c](https://github.com/torvalds/linux/blob/master/kernel/seccomp.c)). The broker uses it only to **record**: the supervisor (brokerd) always answers EPERM and never lets a call continue, so the pointer-argument races the man page warns about cannot widen anything. Confirmed on the CI kernels by `inner::notify::tests` (closed listener: every refused syscall gets ENOSYS; second listener: EBUSY, and the EPERM filter outranks the first filter's USER_NOTIF).
+
 ## Build log
 
 - 2026-09-24: filter built with `seccompiler` 0.5.0 ([[ADR-018 seccomp Filter Shape for M0]]); `Seccomp: 2` and `socket(AF_UNIX)` = EPERM verified from inside the sandbox on Linux 6.12 aarch64.
+- 2026-10-01 (M4): the deny filter returns `USER_NOTIF` when the kernel gives a listener: the same compiled program with only its EPERM return patched (`code/crates/launcher/src/backends/linux/inner/seccomp.rs`), installed last after the `clone3` and x32 ENOSYS filters; the shim hands the listener to brokerd and closes it before exec (`inner/notify.rs`), brokerd answers EPERM and records a `kernel.denied` row with layer `seccomp` ([[ADR-043 Seccomp Denials Recorded via User Notification]]). Without a listener (Linux < 5.0, `EBUSY`) ADR-018's EPERM filter goes in unchanged. The property test this note asked for exists: a classic-BPF interpreter evaluates every filter set under the kernel's precedence rule and proves the refused set unchanged (`inner::seccomp::tests`).

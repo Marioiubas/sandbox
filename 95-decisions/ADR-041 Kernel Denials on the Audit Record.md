@@ -8,8 +8,8 @@ status: built
 confidence: medium
 created: 2026-09-30
 updated: 2026-10-01
-summary: "On macOS every Seatbelt deny rule carries the tag `broker:<session>`; brokerd streams the kernel's own reports (pid 0, Sandbox.kext) from the unified log and writes one attributed `kernel.denied` row (reason `sandbox_denied`) per process, operation and target, capped at 500 per session; the shim's launch checks are recorded and flagged. A record, not a control. Linux Landlock and seccomp denials remain unrecorded (residual)."
-related: ["[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Sandbox Launcher]]", "[[Audit Recorder and Event Schema]]", "[[Conformance Probe Matrix]]", "[[ADR-028 M2 Plan Items Built Differently or Deferred]]", "[[ADR-023 OCSF and OTLP Export as Built]]", "[[MOC Decisions]]"]
+summary: "On macOS every Seatbelt deny rule carries the tag `broker:<session>`; brokerd streams the kernel's own reports (pid 0, Sandbox.kext) from the unified log and writes one attributed `kernel.denied` row (reason `sandbox_denied`) per process, operation and target, capped at 500 per session; the shim's launch checks are recorded and flagged. A record, not a control. Linux Landlock denials remain unrecorded (residual); Linux seccomp denials are recorded since ADR-043."
+related: ["[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Sandbox Launcher]]", "[[Audit Recorder and Event Schema]]", "[[Conformance Probe Matrix]]", "[[ADR-028 M2 Plan Items Built Differently or Deferred]]", "[[ADR-023 OCSF and OTLP Export as Built]]", "[[ADR-043 Seccomp Denials Recorded via User Notification]]", "[[MOC Decisions]]"]
 sources: []
 superseded_by: 
 code: ["code/crates/brokerd/src/kernel_denials.rs", "code/crates/launcher/src/backends/seatbelt/sbpl.rs", "code/tests/conformance/tests/m4_kernel_denials.rs"]
@@ -40,14 +40,14 @@ built (2026-09-30, M4), macOS only.
 |---|---|
 | Skip every row from a process named `broker-sandbox-shim` | Any process can take that name and hide its denials. |
 | Dedupe by operation and target only | The shim's port-443 check would hide the agent's own direct connect. |
-| Linux: Landlock audit records (Linux 6.15+) or `SECCOMP_FILTER_FLAG_LOG` | They go to the kernel audit subsystem, which needs audit enabled and `CAP_AUDIT_READ`, auditd or `CAP_SYSLOG` to read; an unprivileged daemon cannot (verified from primary sources 2026-10-01, see [[Open Questions and Unverified Claims]]). seccomp `SECCOMP_RET_USER_NOTIF` is the one unprivileged channel (fails closed with `ENOSYS` if brokerd goes away); not built. |
+| Linux: Landlock audit records (Linux 6.15+) or `SECCOMP_FILTER_FLAG_LOG` | They go to the kernel audit subsystem, which needs audit enabled and `CAP_AUDIT_READ`, auditd or `CAP_SYSLOG` to read; an unprivileged daemon cannot (verified from primary sources 2026-10-01, see [[Open Questions and Unverified Claims]]). seccomp `SECCOMP_RET_USER_NOTIF` is the one unprivileged channel (fails closed with `ENOSYS` if brokerd goes away); built for seccomp in [[ADR-043 Seccomp Denials Recorded via User Notification]] (2026-10-01). |
 
 ## Consequences
 
 - macOS sessions now have a row for kernel-refused reads, writes and connects, including routine noise (for example `mach-lookup com.apple.diagnosticd`), filterable by `detail.operation`.
 - The kernel rate-limits and coalesces reports ("N duplicate reports"), and a flood of distinct denials can reach the cap; absence of rows proves nothing.
 - `kernel.denied` rows are not exported to OCSF ([[ADR-023 OCSF and OTLP Export as Built]] maps request decisions only); a File System Activity mapping is not built. Learn mode, shadow mode and the conformance harness's broker-deny counts read request decisions only, so these rows never become policy or count as broker denials.
-- **Residual:** Linux Landlock, seccomp and mount denials are enforced but not recorded on the broker's chain.
+- **Residual:** Linux Landlock, seccomp and mount denials are enforced but not recorded on the broker's chain. (2026-10-01: seccomp's now are, as user notifications answered by brokerd, [[ADR-043 Seccomp Denials Recorded via User Notification]]; Landlock and mount denials remain.)
 - **Linux, host record (2026-10-01):** from Landlock ABI 7 (Linux 6.15) the launcher sets `LANDLOCK_RESTRICT_SELF_LOG_NEW_EXEC_ON`, so on a host with audit enabled the agent's Landlock denials after exec reach the host's own audit log (the kernel's default logs only before exec). That is the administrator's record, not the broker's: brokerd cannot read it unprivileged. Nothing changes on a host with audit off. The `landlock_fs` layer detail says `host audit after exec on|off`. Test: `m4_kernel_denials::landlock_denials_reach_the_host_audit_log` (CI, ubuntu-24.04 with auditd: a TCP connect to a loopback port other than the bridge, refused by Landlock alone, appears as a `blockers=net.connect_tcp` record). Verified on CI run 36909489407 (GitHub ubuntu-24.04 runner, Linux 6.17, ABI 7, auditd: `enabled 1`, record found).
 
 ## Invariants affected
@@ -62,7 +62,9 @@ Strengthens I9. Weakens none.
 
 - decided-by:: M4 build
 - extends:: [[I9 Hash-Chained Audit Outside the Sandbox]]
+- extended-by:: [[ADR-043 Seccomp Denials Recorded via User Notification]]
 
 ## Build log
 
 - 2026-10-01: `broker doctor` says what is recorded on this host: on macOS kernel denials are recorded on each session's audit log (best effort, capped); on Linux they are enforced but not recorded on the broker's log, and from Landlock ABI 7 reach the host's audit log when the host has audit enabled (`m4_doctor`).
+- 2026-10-01: the Linux seccomp part of the residual is closed by [[ADR-043 Seccomp Denials Recorded via User Notification]]: the deny filter returns `USER_NOTIF`, brokerd answers EPERM and writes `kernel.denied` rows with layer `seccomp` through the same 500-row cap and attribution (`code/crates/brokerd/src/kernel_denials/seccomp.rs`, `Collector::attach_seccomp`); Landlock and mount denials on Linux remain unrecorded on the broker's chain. `broker doctor` now says so on Linux.
