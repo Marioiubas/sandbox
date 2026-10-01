@@ -7,7 +7,7 @@ tags: [sandbox/meta, meta, topic/build]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-09-30
+updated: 2026-10-01
 summary: "Chronological, append-only log Claude Code writes while building: date, milestone, what changed, notes updated, ADRs created, test status."
 related: ["[[CLAUDE]]", "[[MVP Plan]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[M4 Harden and Ship]]", "[[Dashboard]]"]
 sources: []
@@ -360,3 +360,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Found:** a user process named `Sandbox` could forge reports under a `sender == "Sandbox"` predicate; only pid-0 Sandbox.kext reports are taken now. Skipping rows by the shim's process name was forgeable too; shim checks are now recorded and flagged.
 - **Correction:** ADR-028 said kernel denials surface as `fs.denied`; that kind was never emitted.
 - **Open:** Linux kernel denials unrecorded; vault notes I9, Sandbox Launcher, Conformance Probe Matrix and Open Questions not yet updated for ADR-041.
+
+## 2026-10-01: release packaging and supply chain (M4)
+
+- **Built:** [[ADR-042 Release Packaging as Built]]: `.github/workflows/release.yml` and `code/packaging/` produce static musl tarballs, `.deb` and `.rpm` (nfpm) for x86_64 and aarch64, an unsigned universal2 macOS tarball, per-program CycloneDX SBOMs, `SHA256SUMS`, SLSA provenance and keyless cosign bundles; `v*` tags create draft releases only. User guide: `code/docs/deployment/packages.md`.
+- **Tests:** `release.yml` jobs `linux` (static checks), `macos` (both slices, `broker doctor`), `smoke` (installed `.deb` on Ubuntu 24.04 x86_64 and arm64 with the AppArmor userns gate on; `.rpm` on Fedora 43), `supply-chain` (every cosign bundle and attestation verified). Green on branch `packaging`: runs 36910376549 and 36912092416.
+- **Found:** the launcher's seccomp filter did not compile for musl (`TIOCSTI`/`TIOCLINUX` are `c_int` there); fixed in `launcher/src/backends/linux/inner.rs`.
+- **Invariants touched:** I2 and I5 upheld (the installer never weakens a layer; programs in root-owned `/usr/bin`); the CA never reaches a trust store.
+- **Notes updated:** [[M4 Harden and Ship]] (two packaging items done, the macOS item started), [[Tech Stack]] (release tool pins), [[MOC Decisions]].
+- **Next step (owner):** Apple Developer ID and notary secrets, a Homebrew tap, apt/yum repositories, the package maintainer address; the first tag exercises the draft-release job.

@@ -7,9 +7,9 @@ tags: [sandbox/build, concept, topic/build, topic/supply-chain, platform/macos, 
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-01
 summary: "Rust single static binary (tokio, hyper 1.x, rustls, rcgen; hudsucker as reference), cedar-policy in-process and cedar-policy-symcc with cvc5 in CI, bwrap plus landlock plus seccompiler plus nix, generated SBPL, SQLite WAL, OpenTelemetry/OCSF, axum plus Postgres control plane, and signed, notarised, SBOM-carrying packaging."
-related: ["[[ADR-015 Rust for the Endpoint and Custom Proxy]]", "[[Cedar]]", "[[Repository Layout]]", "[[Landlock]]", "[[seccomp-bpf]]", "[[bubblewrap]]", "[[Seatbelt]]", "[[Audit Recorder and Event Schema]]", "[[Control Plane and Policy Bundles]]", "[[M4 Harden and Ship]]", "[[L1 Conformance Suite]]", "[[Open Questions and Unverified Claims]]"]
+related: ["[[ADR-015 Rust for the Endpoint and Custom Proxy]]", "[[Cedar]]", "[[Repository Layout]]", "[[Landlock]]", "[[seccomp-bpf]]", "[[bubblewrap]]", "[[Seatbelt]]", "[[Audit Recorder and Event Schema]]", "[[Control Plane and Policy Bundles]]", "[[M4 Harden and Ship]]", "[[L1 Conformance Suite]]", "[[Open Questions and Unverified Claims]]", "[[ADR-042 Release Packaging as Built]]"]
 sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://github.com/openai/codex/blob/main/codex-rs/linux-sandbox/README.md", "https://github.com/NVIDIA/openshell", "https://lib.rs/crates/hakoniwa", "https://github.com/omjadas/hudsucker", "https://docs.rs/cedar-policy-symcc", "https://crates.io/crates/landlock", "https://landlock.io/rust-landlock/landlock/enum.ABI.html", "https://oneuptime.com/blog/post/2026-01-07-rust-sandboxing-seccomp-landlock/view", "https://github.com/craigbalding/safeyolo/issues/620", "https://raw.githubusercontent.com/openai/codex/main/codex-rs/linux-sandbox/README.md", "https://learn.chatgpt.com/codex/sandboxing", "https://github.com/apple/containerization/issues/737", "https://arxiv.org/html/2403.04651"]
 ---
 
@@ -114,6 +114,7 @@ SQLite holds the audit ring buffer, learned traces, token-cache metadata (never 
 - decided-by:: [[ADR-015 Rust for the Endpoint and Custom Proxy]]
 - decided-by:: [[ADR-007 Cedar with a TOML Front-End]]
 - decided-by:: [[ADR-013 Seatbelt for macOS MVP with VZ Hedge]]
+- decided-by:: [[ADR-042 Release Packaging as Built]]
 - part-of:: [[Repository Layout]]
 - depends-on:: [[Cedar]]
 - depends-on:: [[Landlock]]
@@ -153,4 +154,5 @@ SQLite holds the audit ring buffer, learned traces, token-cache metadata (never 
 
 - 2026-09-24: M0 pins (resolved in `code/Cargo.lock`, toolchain `rust-toolchain.toml` 1.96.0, edition 2024): tokio 1.53.1, anyhow 1.0.104, async-trait 0.1.92, base64 0.22.1, clap 4.6.7, hex 0.4.3, idna 1.1.0, landlock 0.4.7, libc 0.2.189, nix 0.31.3, psl 2.1.237, rusqlite 0.40.2 (bundled SQLite), seccompiler 0.5.0, serde 1.0.229, serde_json 1.0.151, sha2 0.10.9, thiserror 2.0.21, toml 1.1.6, getrandom 0.3.4, proptest 1.11.0, tempfile 3.27.0, libfuzzer-sys 0.4.13 (fuzz crate). Not yet dependencies: hyper, rustls, rcgen (M1), cedar-policy (M2), opentelemetry (M2). Direct bwrap invocation was kept over hakoniwa.
 - 2026-09-24 (M1 pins, crates.io): hyper 1.11.1, hyper-util 0.1.20, http 1, http-body-util 0.1.5, rustls 0.23 (ring provider), tokio-rustls 0.26.5, rcgen 0.14 (ring), ring 0.17.14, webpki-roots 1 / webpki-root-certs 1, rustls-pki-types 1, flate2 1.1, sha1 0.10, time 0.3; cargo-fuzz installed from crates.io. `hudsucker` was not used: the L7 path is hyper directly, to keep the surface minimal.
+- 2026-10-01 (M4 packaging, [[ADR-042 Release Packaging as Built]]): release tools pinned in `.github/workflows/release.yml` (versions and SHA-256 digests): cargo-zigbuild 0.23.4 with zig 0.16.0 for the musl cross builds, nfpm 2.47.0, cargo-cyclonedx 0.5.9, cosign v3.0.6 (keyless, no stored key; installed by `sigstore/cosign-installer` v4.1.2), `actions/attest-build-provenance` v4.2.2; the Fedora 43 image of the `.rpm` smoke test is pinned by digest. macOS: universal2 by `lipo`; Developer ID signing and notarisation steps exist but skip until the owner's Apple secrets are set. Homebrew tap and apt/yum repositories not started.
 - 2026-09-24 (M2 pins): cedar-policy 4.13.0 (default features, `datetime` included), cedar-policy-core =4.13.0 and cedar-policy-symcc =0.7.0 (feature `gates` of `policy`; symcc pins cedar-policy =4.13.0), cvc5 1.3.1 static release builds in CI with pinned SHA-256 digests. The OTel SDK is not used ([[ADR-023 OCSF and OTLP Export as Built]]).
