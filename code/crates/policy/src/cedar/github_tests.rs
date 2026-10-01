@@ -198,6 +198,18 @@ fn mcp_calls_decide() {
     e.labels().raise(Label::SensitiveRead);
     assert_eq!(call("post", true, true).unwrap_err().0, Reason::RuleOfTwo);
     assert!(call("read", true, false).is_ok(), "reads still pass");
+    // A human approval lifts exactly this call (server, tool, arguments), once.
+    let key = crate::approvals::mcp_approval_key("gh", "post", "sha256:a");
+    e.approvals().grant(key.clone(), crate::approvals::Scope::Once);
+    let other_args = e.authorize_mcp("gh", "sha256:x", true, "post", "sha256:b", true);
+    assert_eq!(other_args.unwrap_err().0, Reason::RuleOfTwo, "other arguments are another call");
+    assert_eq!(call("post", true, true).unwrap().1.as_deref(), Some(key.as_str()), "allowed, naming the approval");
+    e.approvals().consume(std::slice::from_ref(&key));
+    assert_eq!(call("post", true, true).unwrap_err().0, Reason::RuleOfTwo, "used up");
+    // An approval never lifts anything but the approval-conditional rule.
+    e.approvals()
+        .grant(crate::approvals::mcp_approval_key("gh", "delete_repo", "sha256:a"), crate::approvals::Scope::Session);
+    assert_eq!(call("delete_repo", true, false).unwrap_err().0, Reason::McpToolNotAllowed);
     // Invalid definitions fail closed.
     for bad in [
         "version = 1\n[mcp.gh]\ncommand = [\"relative\"]\n",

@@ -42,6 +42,7 @@ fn fx() -> Fx {
     let session = SessionId::new();
     let ctx = Arc::new(PipelineCtx {
         labels_session: session.clone(),
+        labels_attribution: None,
         session,
         enduser: "local:test".into(),
         groups: vec![],

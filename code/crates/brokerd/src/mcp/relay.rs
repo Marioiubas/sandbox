@@ -191,20 +191,40 @@ impl Relay<'_> {
 
     /// Log a deny and build the JSON-RPC error the agent receives.
     pub fn deny(&self, id: Option<Value>, reason: Reason, verb: String, extra: Vec<(&str, Value)>) -> Option<Value> {
-        let rid = RequestId::new();
+        self.deny_as(&RequestId::new(), id, reason, verb, extra, None)
+    }
+
+    /// As [`deny`](Self::deny) for request `rid`, naming a pending approval
+    /// the user can grant outside the sandbox (ADR-037).
+    pub fn deny_as(
+        &self,
+        rid: &RequestId,
+        id: Option<Value>,
+        reason: Reason,
+        verb: String,
+        mut extra: Vec<(&str, Value)>,
+        approval: Option<String>,
+    ) -> Option<Value> {
         self.ctx.stats.denied.fetch_add(1, Ordering::Relaxed);
-        let mut ev = self.event(&rid, verb).deny(reason, vec![]);
+        if let Some(a) = &approval {
+            extra.push(("approval", a.as_str().into()));
+        }
+        let mut ev = self.event(rid, verb).deny(reason, vec![]);
         for (k, v) in extra {
             ev = ev.detail(k, v);
         }
         if let Err(e) = self.ctx.recorder.append(&ev) {
             eprintln!("brokerd: audit append failed for mcp deny {rid}: {e:#}");
         }
+        let ask = approval
+            .as_ref()
+            .map(|a| format!("; it needs the user's approval: ask them to run `broker approve {a}` outside the sandbox, then retry"))
+            .unwrap_or_default();
         id.map(|id| {
             json!({"jsonrpc": "2.0", "id": id, "error": {
                 "code": DENIED,
-                "message": format!("broker: denied ({}): {}; run `broker why {rid}`", reason.as_str(), reason.explain()),
-                "data": {"reason": reason.as_str(), "request_id": rid.as_str()},
+                "message": format!("broker: denied ({}): {}{ask}; run `broker why {rid}`", reason.as_str(), reason.explain()),
+                "data": {"reason": reason.as_str(), "request_id": rid.as_str(), "approval": approval},
             }})
         })
     }
@@ -296,16 +316,29 @@ impl Relay<'_> {
             ]
         };
         match self.ctx.policy.authorize_mcp(self.name, &manifest.sha256, true, &tool, &integrity, write) {
+            Err((reason, _)) if policy::approvals::is_approval_reason(reason) => {
+                // Held for a human: the exact call, with its arguments shown.
+                let rid = RequestId::new();
+                let key = policy::approvals::mcp_approval_key(self.name, &tool, &integrity);
+                let approval = self.pending_approval(&rid, reason, key, &args);
+                (self.deny_as(&rid, Some(id), reason, verb, extra(), approval), None)
+            }
             Err((reason, _)) => (self.deny(Some(id), reason, verb, extra()), None),
-            Ok(ids) => {
+            Ok((ids, used)) => {
                 // Write-ahead (I9): no row, no call.
                 let rid = RequestId::new();
                 let mut ev = self.event(&rid, verb.clone()).allow(ids);
                 for (k, x) in extra() {
                     ev = ev.detail(k, x);
                 }
+                if let Some(k) = &used {
+                    ev = ev.detail("approvals_used", vec![k.clone()]);
+                }
                 if self.ctx.recorder.append(&ev).is_err() {
                     return (self.deny(Some(id), Reason::AuditUnavailable, verb, vec![]), None);
+                }
+                if let Some(k) = used {
+                    self.ctx.policy.approvals().consume(&[k]);
                 }
                 self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
                 // What the server itself reads or writes raises these same

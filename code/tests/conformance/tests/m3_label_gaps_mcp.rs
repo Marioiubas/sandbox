@@ -290,3 +290,80 @@ fn labels_raised_through_a_server_stay_with_its_agent_session() {
     ));
     assert_eq!(second.stdout.trim(), "200 201", "{second:?}");
 }
+
+/// Step-up approval of an MCP tool call (ADR-037): a write tool held by the
+/// relay's Rule of Two leaves a pending approval naming the exact call and
+/// showing its arguments; approved once on the host, the same call passes
+/// the relay once (the next is held again), and other arguments are another
+/// call. The server's own egress is a separate action and is still judged
+/// with the agent's labels (a second approval would be needed for it).
+#[test]
+fn an_mcp_write_can_be_approved_once_on_the_host() {
+    use std::io::Read;
+    use std::time::Duration;
+    let f = setup();
+    f.approve();
+    let call = |id: u64, body: &str| {
+        format!(
+            "{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"tools/call\",\"params\":{{\"name\":\"post_comment\",\"arguments\":{{\"body\":\"{body}\"}}}}}}\n"
+        )
+    };
+    let dir = f.h.repo.path();
+    std::fs::write(dir.join("a.jsonl"), frames(&["read_issue"])).unwrap();
+    std::fs::write(dir.join("b.jsonl"), call(11, "ship it")).unwrap();
+    std::fs::write(dir.join("c.jsonl"), format!("{}{}{}", call(12, "ship it"), call(13, "other"), call(14, "ship it")))
+        .unwrap();
+    let wait = |cond: &str| format!("i=0; while ! {cond} && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done; ");
+    let script = format!(
+        "{issues}( cat a.jsonl; {w10}cat b.jsonl; {wa}cat c.jsonl; {w14}) | {broker} mcp connect gh > replies.jsonl; cat replies.jsonl",
+        issues = f.curl("GET", "/repos/acme/public/issues"),
+        w10 = wait("grep -q '\"id\":10' replies.jsonl"),
+        wa = wait("[ -f approved ]"),
+        w14 = wait("grep -q '\"id\":14' replies.jsonl"),
+        broker = f.h.bins.broker.display(),
+    );
+    let mut child = f.h.spawn_sh(&script);
+    // Held by the relay: the pending approval shows the exact call.
+    let req = conformance::m1::wait_for(Duration::from_secs(60), || {
+        f.h.events().into_iter().find(|e| {
+            e.kind == EventKind::ApprovalRequested && e.detail.get("server").and_then(|v| v.as_str()) == Some("gh")
+        })
+    })
+    .expect("an approval request for the held tool call");
+    let id = req.detail["approval"].as_str().unwrap().to_string();
+    let diff = req.detail["authority_diff"][0].as_str().unwrap().to_string();
+    assert!(diff.starts_with("+ mcp.call_tool gh post_comment args=sha256:"), "{diff}");
+    let list: serde_json::Value = serde_json::from_str(&f.h.broker(&["approvals", "--json"]).stdout).unwrap();
+    let p = list.as_array().unwrap().iter().find(|p| p["id"] == id.as_str()).expect("listed");
+    assert_eq!(p["subject"]["tool_arguments"], serde_json::json!({"body": "ship it"}));
+    let shown = f.h.broker(&["approve", &id]);
+    assert!(shown.stdout.contains("\"body\": \"ship it\""), "the arguments are shown: {shown:?}");
+    assert_eq!(f.h.broker(&["approve", &id, "--yes"]).code, 0);
+    std::fs::write(dir.join("approved"), b"").unwrap();
+    assert!(child.wait().unwrap().success());
+    let mut out = String::new();
+    child.stdout.take().unwrap().read_to_string(&mut out).unwrap();
+    let reply = |n: u64| {
+        out.lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .find(|v| v["id"] == n)
+            .unwrap_or_else(|| panic!("no reply {n}: {out}"))
+    };
+    let held = |n: u64| reply(n).pointer("/error/data/reason").and_then(|r| r.as_str()) == Some("rule_of_two");
+    assert!(held(11), "held: {out}");
+    assert!(reply(11)["error"]["message"].as_str().unwrap().contains(&format!("broker approve {id}")));
+    assert!(!held(12), "approved once: passes the relay: {out}");
+    assert!(held(13), "other arguments are another call: {out}");
+    assert!(held(14), "used up: {out}");
+    let evs = f.h.events();
+    let used: Vec<_> = evs.iter().filter(|e| e.detail.contains_key("approvals_used")).collect();
+    assert_eq!(used.len(), 1, "one allowed call used the approval");
+    assert_eq!(d(used[0], "approvals_used")[0], diff.trim_start_matches("+ "));
+    // The server's own write is another action, judged with the agent's labels.
+    assert!(
+        !f.api.seen().iter().any(|s| s.method == "POST" && s.path.ends_with("/comments")),
+        "the comment did not reach the API without the second approval"
+    );
+    f.h.assert_attributed();
+    f.h.verify_audit().unwrap();
+}

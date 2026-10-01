@@ -10,6 +10,9 @@ use super::{EXIT_BROKER, ctl};
 use serde_json::{Value, json};
 use std::io::{BufRead, IsTerminal, Write};
 
+/// Bytes of tool arguments shown inline (all of them with `--json`).
+const SHOW_ARGS: usize = 4096;
+
 fn render(p: &Value) -> String {
     let mut out = format!(
         "approval {}  (session {}, {} s left)\n  held back: request {} was denied ({}): {}\n  it would allow, exactly:\n",
@@ -22,6 +25,23 @@ fn render(p: &Value) -> String {
     );
     for d in p["authority_diff"].as_array().into_iter().flatten() {
         out.push_str(&format!("    {}\n", d.as_str().unwrap_or("?")));
+    }
+    // An MCP tool call's key names a digest; the arguments are what runs.
+    if let Some(args) = p["subject"].get("tool_arguments") {
+        let text = serde_json::to_string_pretty(args).unwrap_or_default();
+        out.push_str("  with these tool arguments (as the agent sent them):\n");
+        let mut shown = 0;
+        for line in text.lines() {
+            if shown + line.len() > SHOW_ARGS {
+                out.push_str(&format!(
+                    "    … {} more bytes: `broker approvals --json` shows all\n",
+                    text.len() - shown
+                ));
+                break;
+            }
+            shown += line.len() + 1;
+            out.push_str(&format!("    {line}\n"));
+        }
     }
     let prov: Vec<&Value> = p["provenance"].as_array().into_iter().flatten().collect();
     if !prov.is_empty() {

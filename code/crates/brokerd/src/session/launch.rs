@@ -24,7 +24,7 @@ impl Daemon {
         warnings: Vec<String>,
         shadow: Option<(String, Result<EgressPolicy, String>)>,
         identity: Option<grant::oidc::Identity>,
-        labels_session: SessionId,
+        (labels_session, labels_attribution): (SessionId, Option<AuditEvent>),
     ) -> Result<Running, StartFailure> {
         // Filesystem policy.
         let mut extra_write = Vec::new();
@@ -171,6 +171,7 @@ impl Daemon {
         let ctx = Arc::new(PipelineCtx {
             session: id.clone(),
             labels_session: labels_session.clone(),
+            labels_attribution,
             enduser: enduser.clone(),
             groups: groups.clone(),
             agent: params.argv[0].clone(),

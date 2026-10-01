@@ -6,6 +6,7 @@
 //! JSON-RPC with every `tools/call` authorized. The agent can name a
 //! server; it cannot choose its command (I5).
 
+mod approval;
 pub mod pin;
 mod relay;
 

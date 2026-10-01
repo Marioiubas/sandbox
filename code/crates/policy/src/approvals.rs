@@ -81,6 +81,12 @@ pub fn approval_key(host: &CanonicalHost, port: u16, a: &Action) -> String {
     }
 }
 
+/// The exact MCP tool call an approval names: the server, the tool and a
+/// digest of its arguments, so an approval never covers other arguments.
+pub fn mcp_approval_key(server: &str, tool: &str, args_integrity: &str) -> String {
+    format!("mcp.call_tool {server} {tool} args={args_integrity}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -22,13 +22,20 @@ fuzz_target!(|data: &[u8]| {
     let s = &*SENTINELS;
     let sentinel = s.value_for("a").unwrap().as_bytes();
     let dest = netguard::canon_host(b"api.example.com").unwrap();
-    // Arbitrary bytes are never the sentinel (the fuzzer cannot know it).
-    assert_eq!(s.check(data, &dest), creds::SentinelCheck::NotSentinel);
+    // Only the exact sentinel is honoured (libFuzzer's comparison tracing
+    // can learn it: it is fixed for the life of this process).
+    let want =
+        if data == sentinel { creds::SentinelCheck::Valid("a".into()) } else { creds::SentinelCheck::NotSentinel };
+    assert_eq!(s.check(data, &dest), want);
     // Splice the sentinel between the fragments the input names (0xFF).
     let frags: Vec<&[u8]> = data.split(|b| *b == 0xFF).collect();
     let body = frags.join(sentinel);
     let (out, n) = s.swap_in_body(&body, "a", b"SECRET");
-    assert_eq!(n, frags.len() - 1, "every occurrence counted");
+    // A sentinel (`brk_s_` + hex) cannot overlap itself, so its occurrences
+    // are unambiguous; the fragments may contain some too.
+    let occurrences = body.windows(sentinel.len()).filter(|w| *w == sentinel).count();
+    assert!(n >= frags.len() - 1);
+    assert_eq!(n, occurrences, "every occurrence counted");
     assert!(s.find_any(&out).is_none(), "no sentinel survives the swap");
     if n == 0 {
         assert_eq!(out, body);

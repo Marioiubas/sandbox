@@ -19,12 +19,19 @@ use std::sync::Arc;
 pub struct LabelOwner {
     pub session: SessionId,
     pub labels: Arc<Labels>,
+    /// That session's attribution: its `session.label` rows carry it (I9),
+    /// whichever session's request raised the label.
+    pub attribution: AuditEvent,
 }
 
 impl LabelOwner {
     /// The labels a session's requests are judged with, and whose they are.
     pub fn of(ctx: &PipelineCtx) -> Self {
-        LabelOwner { session: ctx.labels_session.clone(), labels: ctx.policy.labels().clone() }
+        LabelOwner {
+            session: ctx.labels_session.clone(),
+            labels: ctx.policy.labels().clone(),
+            attribution: ctx.labels_attribution.clone().unwrap_or_else(|| ctx.attribution()),
+        }
     }
 }
 
@@ -33,12 +40,12 @@ impl PipelineCtx {
     /// session: on the session whose labels changed, naming this session
     /// when that is another one.
     pub fn label_event(&self, rid: &RequestId, dest: Dest, label: Label, cause: String) -> AuditEvent {
-        let mut ev = self
-            .event(EventKind::SessionLabel, rid)
-            .session(&self.labels_session)
-            .dest(dest)
-            .detail("label", label.as_str())
-            .detail("cause", cause);
+        let mut ev = self.event(EventKind::SessionLabel, rid);
+        ev = match &self.labels_attribution {
+            Some(a) => ev.attributed_as(a),
+            None => ev.session(&self.labels_session),
+        };
+        let mut ev = ev.dest(dest).detail("label", label.as_str()).detail("cause", cause);
         if self.labels_session != self.session {
             ev = ev.detail("raised_in_session", self.session.as_str());
         }
@@ -88,6 +95,7 @@ mod tests {
         }
         PipelineCtx {
             labels_session: owner.map(|o| o.session.clone()).unwrap_or_else(|| session.clone()),
+            labels_attribution: owner.map(|o| o.attribution.clone()),
             session,
             enduser: "local:test".into(),
             groups: vec![],

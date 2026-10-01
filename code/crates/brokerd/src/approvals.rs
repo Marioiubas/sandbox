@@ -30,6 +30,9 @@ pub struct Pending {
     pub reason: Reason,
     /// The approval keys: exactly the actions that would be allowed.
     pub keys: Vec<String>,
+    /// What the keys stand for when a key alone does not show it: an MCP
+    /// tool call's arguments (the key names their digest).
+    pub subject: Option<serde_json::Value>,
     pub created: i64,
 }
 
@@ -80,6 +83,7 @@ impl Registry {
         request_id: &str,
         reason: Reason,
         keys: Vec<String>,
+        subject: Option<serde_json::Value>,
     ) -> Option<String> {
         let t = now();
         let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
@@ -98,6 +102,7 @@ impl Registry {
             request_id: request_id.to_string(),
             reason,
             keys,
+            subject,
             created: t,
         };
         pending.insert(id.clone(), p);
@@ -185,6 +190,7 @@ pub fn list_json(d: &crate::session::Daemon) -> serde_json::Value {
                 "reason": p.reason.as_str(),
                 "why": p.reason.explain(),
                 "authority_diff": p.keys.iter().map(|k| format!("+ {k}")).collect::<Vec<_>>(),
+                "subject": p.subject,
                 "provenance": provenance,
                 "age_secs": t - p.created,
                 "expires_in_secs": TTL_SECS - (t - p.created),
@@ -238,17 +244,17 @@ mod tests {
         let policy = Arc::new(EgressPolicy::default());
         r.register("s1", policy.clone(), audit::AuditEvent::new(audit::EventKind::SessionStart));
         let k = vec!["github pr.create github.com/acme/web".to_string()];
-        let a = r.request("s1", "s1", "req-1", Reason::RuleOfTwo, k.clone()).unwrap();
+        let a = r.request("s1", "s1", "req-1", Reason::RuleOfTwo, k.clone(), None).unwrap();
         assert!(a.starts_with("apr-") && a.len() == 14);
         assert_eq!(
-            r.request("s1", "s1", "req-2", Reason::RuleOfTwo, k.clone()),
+            r.request("s1", "s1", "req-2", Reason::RuleOfTwo, k.clone(), None),
             Some(a.clone()),
             "same actions, same approval"
         );
         for n in 1..MAX_PENDING_PER_SESSION {
-            assert!(r.request("s1", "s1", "req", Reason::RuleOfTwo, vec![format!("k{n}")]).is_some());
+            assert!(r.request("s1", "s1", "req", Reason::RuleOfTwo, vec![format!("k{n}")], None).is_some());
         }
-        assert_eq!(r.request("s1", "s1", "req", Reason::RuleOfTwo, vec!["one too many".into()]), None);
+        assert_eq!(r.request("s1", "s1", "req", Reason::RuleOfTwo, vec!["one too many".into()], None), None);
         let p = r.grant(&a, Scope::Once).unwrap();
         assert_eq!(p.keys, k);
         assert!(policy.approvals().is_approved(&k[0]));
@@ -269,7 +275,7 @@ mod tests {
         let server = Arc::new(EgressPolicy::default());
         r.register("srv", server.clone(), audit::AuditEvent::new(audit::EventKind::SessionStart));
         let k = vec!["github issue.comment github.com/acme/web".to_string()];
-        let a = r.request("srv", "agent", "req-1", Reason::RuleOfTwo, k.clone()).unwrap();
+        let a = r.request("srv", "agent", "req-1", Reason::RuleOfTwo, k.clone(), None).unwrap();
         let p = r.get(&a).unwrap();
         assert_eq!((p.session.as_str(), p.labels_session.as_str()), ("srv", "agent"));
         r.grant(&a, Scope::Once).unwrap();

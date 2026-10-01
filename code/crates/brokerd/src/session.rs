@@ -196,7 +196,17 @@ impl Daemon {
         assembled: Assembled,
         stdio: [OwnedFd; 3],
     ) -> Result<Running, StartFailure> {
-        let Assembled { profile, user_policy, egress, shadow, grants, warnings, identity, labels_session } = assembled;
+        let Assembled {
+            profile,
+            user_policy,
+            egress,
+            shadow,
+            grants,
+            warnings,
+            identity,
+            labels_session,
+            labels_attribution,
+        } = assembled;
 
         // Session directories.
         let session_dir = self.dirs.sessions_dir().join(id.as_str());
@@ -237,7 +247,7 @@ impl Daemon {
                 warnings,
                 shadow,
                 identity,
-                labels_session,
+                (labels_session, labels_attribution),
             )
             .await;
         if result.is_err() {

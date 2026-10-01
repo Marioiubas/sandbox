@@ -58,6 +58,8 @@ pub struct PipelineCtx {
     /// pinned MCP server's session the agent session it was started for
     /// (ADR-038). `session.label` rows are written on it.
     pub labels_session: SessionId,
+    /// The attribution of `labels_session` when it is another session.
+    pub labels_attribution: Option<AuditEvent>,
     pub enduser: String,
     /// The end user's IdP groups (on every row).
     pub groups: Vec<String>,
@@ -107,14 +109,19 @@ pub enum Outcome {
 
 impl PipelineCtx {
     pub(crate) fn event(&self, kind: EventKind, rid: &RequestId) -> AuditEvent {
-        let mut ev = AuditEvent::new(kind).session(&self.session).request(rid);
-        ev.enduser = Some(self.enduser.clone());
-        ev.enduser_groups = self.groups.clone();
-        ev.agent = Some(self.agent.clone());
-        ev.agent_sha256 = self.agent_sha256.clone();
-        ev.task = self.task.clone();
-        ev.sandbox = Some(self.sandbox.clone());
-        ev
+        AuditEvent::new(kind).attributed_as(&self.attribution()).request(rid)
+    }
+
+    /// This session's attribution (I9): who and what its rows name.
+    pub(crate) fn attribution(&self) -> AuditEvent {
+        let mut a = AuditEvent::new(EventKind::SessionStart).session(&self.session);
+        a.enduser = Some(self.enduser.clone());
+        a.enduser_groups = self.groups.clone();
+        a.agent = Some(self.agent.clone());
+        a.agent_sha256 = self.agent_sha256.clone();
+        a.task = self.task.clone();
+        a.sandbox = Some(self.sandbox.clone());
+        a
     }
 }
 

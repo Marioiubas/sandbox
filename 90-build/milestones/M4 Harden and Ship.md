@@ -43,7 +43,7 @@ The hardening emphasis follows the record: the sandbox-runtime NUL-byte parser d
 **Fuzzing and differential testing**
 
 - [ ] Run each `tests/fuzz/fuzz_targets/*` for ≥24 h (continuous nightly jobs accumulate toward this); triage and fix every crash; add each crashing input to the corpus. — started: `.github/workflows/fuzz-nightly.yml` runs every target (27 as of 2026-10-01) for 2 h each per night with the corpus cached between runs and crash inputs uploaded.
-- [ ] HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici ([arXiv 2405.17737](https://arxiv.org/abs/2405.17737)); acceptance is 0 decision-changing discrepancies ([[L1 Conformance Suite]]). — started: `m4_differential` (broker path decision vs server normalisations) found and closed two canonicaliser bypasses; generated inputs and client-parser comparisons remain.
+- [ ] HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici ([arXiv 2405.17737](https://arxiv.org/abs/2405.17737)); acceptance is 0 decision-changing discrepancies ([[L1 Conformance Suite]]). — started: `m4_differential` (broker path decision vs server normalisations) found and closed two canonicaliser bypasses; generated inputs are covered by the `path_differential` fuzz target; client-parser comparisons cannot change a decision (see Implementation notes, 2026-10-01).
 - [ ] Complete all 12 categories of the [[Conformance Probe Matrix]], including category 11 (covert channels: bandwidth measured and reported, not claimed zero) and category 12 (boundary escape). — 1-10 automated (M0-M3); 11 measured by `m4_covert` (query strings ≈81 KB/s, path choice ≈93 B/s, timing ≈0.9 B/s on one laptop); 12 not started (needs nested VMs).
 
 **Evaluation (eval/)**
@@ -154,6 +154,10 @@ All six layers of the [[Evaluation Harness]]: L1 (hard gate), L2 and L3 (first r
 - Report: milestone row "Weeks 9-10 M4 Harden and ship"; six-layer harness thresholds; red-team plan; conclusion.
 - Research note 05 section 5.2 M4 row and section 5.5 (parser differential ~5.5 months exposed).
 - Research note 04a Q2 and Q6.
+
+## Implementation notes
+
+- 2026-10-01: **client URL parsers and decisions.** The broker never decides on a URL string a client parsed: it decides on the request bytes on the wire (request target, `Host`, CONNECT authority, SNI), which `m4_differential` and the `path_differential` fuzz target compare with what servers do after normalising. The one URL it parses from the host, `remote.origin.url` (which names the session repository), is in `.git/config`, which no sandbox can write (mandatory deny-write list); if git resolves a different repository (for example through `insteadOf`), the push names that repository on the wire and is denied (fail closed). A curl/requests/undici comparison would therefore measure client behaviour, not a decision; it is not planned.
 
 ## Build log
 

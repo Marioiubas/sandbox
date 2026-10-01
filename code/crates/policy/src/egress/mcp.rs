@@ -3,6 +3,10 @@
 
 use super::*;
 
+/// An allowed `tools/call`: the determining policy IDs and the approval it
+/// relied on, if any (single use until consumed).
+pub type McpAllowed = (Vec<String>, Option<String>);
+
 impl EgressPolicy {
     /// Compile the pinned MCP servers' call permits into the base set.
     /// Call before any repository layer is conjoined.
@@ -29,7 +33,7 @@ impl EgressPolicy {
         tool: &str,
         args_integrity: &str,
         write: bool,
-    ) -> Result<Vec<String>, (Reason, Vec<String>)> {
+    ) -> Result<McpAllowed, (Reason, Vec<String>)> {
         let mut ents = ent::principal_entities(&self.session);
         ents.push(json!({
             "uid": { "type": "Broker::McpServer", "id": server },
@@ -44,15 +48,18 @@ impl EgressPolicy {
             }
         };
         let res = json!({ "type": "Broker::McpServer", "id": server });
-        let (v, _) = self.eval("mcp.call_tool", &res, ents.clone(), ctx(false));
+        // A human approval of exactly this call (ADR-037), if one is held.
+        let key = crate::approvals::mcp_approval_key(server, tool, args_integrity);
+        let approved = self.approvals().is_approved(&key);
+        let (v, _) = self.eval("mcp.call_tool", &res, ents.clone(), ctx(approved));
         if v.allowed {
-            return Ok(v.determining);
+            return Ok((v.determining, approved.then_some(key)));
         }
         let forbid = |v: &Verdict| v.determining.iter().find_map(|id| self.engine.reason_of(id)).map(reason_from);
         let reason = match forbid(&v) {
             _ if !v.errors.is_empty() => Reason::PolicyError,
             // Would approval help? Only if the call is allowed once approved.
-            Some(r @ (Reason::NeedsApproval | Reason::RuleOfTwo)) => {
+            Some(r @ (Reason::NeedsApproval | Reason::RuleOfTwo)) if !approved => {
                 let (a, _) = self.eval("mcp.call_tool", &res, ents, ctx(true));
                 if a.allowed { r } else { forbid(&a).unwrap_or(Reason::McpToolNotAllowed) }
             }

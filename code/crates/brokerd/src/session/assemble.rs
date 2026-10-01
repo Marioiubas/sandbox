@@ -23,6 +23,8 @@ pub(super) struct Assembled {
     pub identity: Option<grant::oidc::Identity>,
     /// The session whose labels `egress` carries (ADR-038).
     pub labels_session: SessionId,
+    /// That session's attribution, when it is another session.
+    pub labels_attribution: Option<audit::AuditEvent>,
 }
 
 /// Whose session is assembled.
@@ -143,11 +145,11 @@ impl Daemon {
         }
         // One agent session, one set of labels, whichever of its sessions
         // makes the request (ADR-038).
-        let labels_session = match kind {
-            SessionKind::Agent => id.clone(),
+        let (labels_session, labels_attribution) = match kind {
+            SessionKind::Agent => (id.clone(), None),
             SessionKind::McpServer(owner) => {
                 egress = egress.with_labels(owner.labels.clone());
-                owner.session.clone()
+                (owner.session.clone(), Some(owner.attribution.clone()))
             }
         };
         let shadow = candidate.filter(|_| mode == policy::cedar::Mode::Shadow).map(|(sha, file)| {
@@ -195,6 +197,16 @@ impl Daemon {
         {
             warnings.push("no origin remote found: rules using ${repo_remote} grant nothing in this session".into());
         }
-        Ok(Assembled { profile, user_policy, egress, shadow, grants, warnings, identity: None, labels_session })
+        Ok(Assembled {
+            profile,
+            user_policy,
+            egress,
+            shadow,
+            grants,
+            warnings,
+            identity: None,
+            labels_session,
+            labels_attribution,
+        })
     }
 }

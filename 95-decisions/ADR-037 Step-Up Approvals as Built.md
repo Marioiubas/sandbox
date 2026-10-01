@@ -7,7 +7,7 @@ tags: [sandbox/decisions, decision, topic/approval, topic/policy, boundary/tb1, 
 status: built
 confidence: medium
 created: 2026-09-26
-updated: 2026-09-26
+updated: 2026-10-01
 summary: "A request denied only for want of a human approval (`needs_approval`, `rule_of_two`, `public_sink_after_untrusted_input`) leaves a pending approval naming the exact actions (the authority diff); `broker approvals` shows it with the provenance of the session's labels from the audit log, and `broker approve <id>` grants it once (or `--for-session`) through the control socket, which no sandbox can reach. Approved actions see `context.session.approved` only for themselves; single-use approvals are consumed by the allowed request; everything is logged (`approval.requested`, `approval.granted`, `approvals_used`)."
 related: ["[[Fatigue-Resistant Approval Interfaces]]", "[[Broker CLI and Daemon]]", "[[Trifecta Session Labels]]", "[[ADR-010 Session-Level Trifecta Labels in the MVP]]", "[[ADR-033 Public-Sink Rule as Built]]", "[[ADR-036 Git Fetch Visibility by Anonymous Probe]]", "[[I8 No Flag Disables Isolation]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[MOC Decisions]]"]
 sources: []
@@ -20,7 +20,7 @@ superseded_by:
 
 ## Status
 
-built (2026-09-26, M3). The MCP tool path (`rule-of-two-mcp`) is not covered yet.
+built (2026-09-26, M3); the MCP tool path (`rule-of-two-mcp`) since 2026-10-01.
 
 ## Context
 
@@ -48,7 +48,7 @@ The default policy's approval-conditional forbids (`publish-needs-approval`, `ru
 
 - Approval-gated decisions are recoverable: the user reviews and approves; the agent retries.
 - `--yes` skips only the confirmation of one reviewed approval; it cannot approve anything unnamed, and no flag disables the check ([[I8 No Flag Disables Isolation]]).
-- **Not built**: approvals for MCP tool calls (`rule-of-two-mcp`), notifications (Slack/Teams, phase 2), approval telemetry for the fatigue study, and `grant.request` on the control API.
+- **Not built**: notifications (Slack/Teams, phase 2), approval telemetry for the fatigue study, and `grant.request` on the control API.
 
 ## Invariants affected
 
@@ -63,3 +63,8 @@ Upholds I8 and I9; the control socket's unreachability from the sandbox is what 
 - decided-by:: M3 build
 - implements:: [[Fatigue-Resistant Approval Interfaces]]
 - extends:: [[ADR-010 Session-Level Trifecta Labels in the MVP]]
+
+## Build log
+
+- 2026-10-01: **MCP tool calls.** A `tools/call` held by `rule-of-two-mcp` now leaves a pending approval whose key names the exact call, `mcp.call_tool <server> <tool> args=<sha256 of the arguments>`, so an approval never covers other arguments; the pending approval carries the arguments themselves (up to 64 KiB; a larger call is denied without one, since the user would approve bytes they cannot see), and `broker approvals` / `broker approve` show them (`approvals --json` in full). The JSON-RPC error tells the agent to ask the user to run `broker approve <id>`. `EgressPolicy::authorize_mcp` decides with `approved` for that key only and returns the approval an allowed call relied on; the relay's allow row lists it in `approvals_used` and a single-use approval is consumed once that row is written. **Two gates, two approvals:** an approved write tool still reaches the server's own egress, which is judged with the agent's labels ([[ADR-038 MCP Server Sessions Share Agent Labels]]) and may be held again (for example `issue.comment` under `rule-of-two-verbs`); the broker cannot tie a server's HTTP request to the tool call that caused it, so it does not carry one approval over to the other. Tests: `policy::cedar::github_tests::mcp_calls_decide` (exact key, once, other arguments held, an approval never lifts a non-approval rule), `brokerd::approvals::tests::*`, `m3_label_gaps_mcp::an_mcp_write_can_be_approved_once_on_the_host` (held with the arguments shown; approved once on the host; the same call passes the relay once, other arguments and the next call are held; one allow row names the approval; the comment does not reach the API without the second approval; every row attributed; chain verifies).
+

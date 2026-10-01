@@ -261,6 +261,13 @@ The review shows exactly which action would be allowed (for example
 which requests set the labels, from the broker's own records. The agent
 then retries. An agent cannot approve its own requests.
 
+A write tool of a pinned MCP server (`tools.write`) held by the Rule of
+Two is approved the same way, for exactly that call: the review shows the
+tool and the arguments the agent sent, and the approval covers those
+arguments only. The server's own request (for example the comment it then
+posts) is a separate action and may be held again, so a write through an
+MCP server can need two approvals.
+
 For a stricter rule, your own or your org's policy can deny writes to
 public destinations as soon as a session has read untrusted input, even if
 it has read nothing sensitive:
