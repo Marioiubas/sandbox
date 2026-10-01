@@ -304,18 +304,20 @@ jobs:
           sh code/packaging/check-static.sh --ldd "$@"
           "$d/broker" --version
           "$d/brokerd" --version
-      - name: The gate is on and refuses bwrap a user namespace before the install
+      - name: The gate is on and bwrap cannot build a sandbox before the install
         run: |
           [ -e "$GATE" ] || { echo "::error::this kernel has no AppArmor userns gate; the smoke test cannot prove the profile"; exit 1; }
           # Only ever tightened here: turned on if the image left it off.
           [ "$(cat "$GATE")" = 1 ] || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
           sudo apt-get update -q
           sudo apt-get install -y -q bubblewrap
+          # Under the gate an unconfined program's new namespaces get no
+          # capabilities, so bwrap fails (on Ubuntu 24.04 at loopback setup).
           if bwrap --unshare-user --unshare-net --ro-bind / / /bin/true; then
-            echo "::error::bwrap made a user namespace without the broker profile; the gate is not in effect"
+            echo "::error::bwrap built a sandbox without the broker profile; the gate is not in effect"
             exit 1
           fi
-          echo "refused, as expected"
+          echo "bwrap failed under the gate, as expected"
       - name: Install the .deb
         run: |
           deb=$(ls dist/broker_*.deb)
@@ -329,6 +331,9 @@ jobs:
             echo "::error::the AppArmor profile must not be a conffile"; exit 1
           fi
           sudo grep '^broker-bwrap ' /sys/kernel/security/apparmor/profiles
+          # The same bwrap command now succeeds, as the runner user: the
+          # package's profile is what allows it.
+          bwrap --unshare-user --unshare-net --ro-bind / / /bin/true
           test "$(cat "$GATE")" = 1
       - name: broker --version, broker doctor and a session, as the runner user
         run: |
@@ -342,7 +347,7 @@ jobs:
           broker audit verify
           broker daemon stop || true
           test "$(cat "$GATE")" = 1
-      - name: Removal unloads and deletes the profile; bwrap is refused again
+      - name: Removal unloads and deletes the profile; bwrap fails again
         run: |
           sudo apt-get remove -y broker
           test ! -e /etc/apparmor.d/broker-bwrap
@@ -350,7 +355,7 @@ jobs:
             echo "::error::broker-bwrap is still loaded after removal"; exit 1
           fi
           if bwrap --unshare-user --unshare-net --ro-bind / / /bin/true; then
-            echo "::error::bwrap still makes user namespaces after removal"; exit 1
+            echo "::error::bwrap still builds a sandbox after removal"; exit 1
           fi
           test "$(cat "$GATE")" = 1
       - name: The .rpm installs on Fedora (dnf pulls bubblewrap; no AppArmor there)

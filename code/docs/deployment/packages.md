@@ -62,10 +62,11 @@ nothing else.
   a conffile), so `bwrap` loses the exception with the package. Put local
   additions in `/etc/apparmor.d/local/broker-bwrap`.
 
-CI proves this on Ubuntu 24.04 (x86_64 and arm64) with the gate on: `bwrap`
-is refused a user namespace before the install, `broker doctor` and a
-`broker run` session succeed as an ordinary user after it, and `bwrap` is
-refused again after removal.
+CI proves this on Ubuntu 24.04 (x86_64 and arm64) with the gate on: before
+the install `bwrap` cannot build a sandbox (the gate leaves its new
+namespaces without capabilities); after it the same `bwrap` command,
+`broker doctor` and a `broker run` session succeed as an ordinary user; after
+removal `bwrap` fails again.
 
 ## Fedora, RHEL and openSUSE
 
