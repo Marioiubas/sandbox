@@ -252,4 +252,18 @@ mod tests {
         assert!(verify(&v, &mut layers).is_err());
         assert!(std::fs::read_dir(d.path()).unwrap().count() == 1, "probe file removed");
     }
+
+    proptest::proptest! {
+        /// Decoding is total, and what decodes re-encodes to the same spec.
+        #[test]
+        fn spec_decoding_is_total(s in "\\PC{0,300}", args in proptest::collection::vec("\\PC{0,20}", 0..5)) {
+            if let Ok(spec) = ShimSpec::decode(&s) {
+                proptest::prop_assert_eq!(ShimSpec::decode(&spec.encode()).unwrap(), spec);
+            }
+            let args: Vec<OsString> = args.into_iter().map(OsString::from).collect();
+            if let Ok((_, argv)) = parse_args(&args) {
+                proptest::prop_assert!(!argv.is_empty());
+            }
+        }
+    }
 }

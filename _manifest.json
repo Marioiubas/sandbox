@@ -4618,6 +4618,7 @@
       "Audit Recorder and Event Schema",
       "Conformance Probe Matrix",
       "ADR-028 M2 Plan Items Built Differently or Deferred",
+      "ADR-023 OCSF and OTLP Export as Built",
       "MOC Decisions"
     ],
     "source_hints": "Written during the M4 build (2026-09-30) from the kernel-denial collector and its tests.",

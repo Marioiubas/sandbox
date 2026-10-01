@@ -7,12 +7,12 @@ tags: [sandbox/architecture, concept, invariant/i9, topic/audit, control/audit, 
 status: built
 confidence: high
 created: 2026-09-24
-updated: 2026-09-30
+updated: 2026-10-01
 summary: "Every decision is logged outside the sandbox, hash-chained, and attributed to user, agent, task and session; the model's self-reports are never evidence."
-related: ["[[Audit Recorder and Event Schema]]", "[[Replit Production Database Deletion]]", "[[Mythos Preview Evaluation Escape]]", "[[Core Trait Contracts]]", "[[M2 Policy Audit and Learn]]", "[[Control Plane and Policy Bundles]]", "[[Broker CLI and Daemon]]", "[[I1 No Secrets in the Sandbox]]", "[[Adversary Classes]]", "[[Policy Learning Loop]]", "[[GTG-1002 AI-Orchestrated Espionage]]"]
+related: ["[[Audit Recorder and Event Schema]]", "[[Replit Production Database Deletion]]", "[[Mythos Preview Evaluation Escape]]", "[[Core Trait Contracts]]", "[[M2 Policy Audit and Learn]]", "[[Control Plane and Policy Bundles]]", "[[Broker CLI and Daemon]]", "[[I1 No Secrets in the Sandbox]]", "[[Adversary Classes]]", "[[Policy Learning Loop]]", "[[GTG-1002 AI-Orchestrated Espionage]]", "[[ADR-041 Kernel Denials on the Audit Record]]"]
 sources: ["https://incidentdatabase.ai/cite/1152/", "https://fortune.com/2025/07/23/ai-coding-tool-replit-wiped-database-called-it-a-catastrophic-failure/", "https://www.lesswrong.com/posts/xtnSzhA3TvExN4ZhG/claude-mythos-preview-system-card", "https://metr.org/blog/2026-05-19-frontier-risk-report/", "https://www-cdn.anthropic.com/d7dd50dd1185f59be051b307150d877f2b82bd2c.pdf"]
 milestone: M2
-code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/store", "code/tests/conformance/tests/invariants.rs"]
+code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/store", "code/tests/conformance/tests/invariants.rs", "code/crates/brokerd/src/kernel_denials.rs", "code/tests/conformance/tests/m4_kernel_denials.rs"]
 ---
 
 # I9 Hash-Chained Audit Outside the Sandbox
@@ -69,6 +69,7 @@ code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/store", "code/te
 - depends-on:: [[Control Plane and Policy Bundles]]
 - depends-on:: [[Broker CLI and Daemon]]
 - delivered-by:: [[M2 Policy Audit and Learn]]
+- decided-by:: [[ADR-041 Kernel Denials on the Audit Record]]
 
 ## Implications for the build
 
@@ -90,7 +91,13 @@ code: ["code/crates/audit/src/store.rs", "code/crates/audit/src/store", "code/te
 - https://www-cdn.anthropic.com/d7dd50dd1185f59be051b307150d877f2b82bd2c.pdf
 - Report: invariant I9, assets paragraph, `Recorder` trait, audit event list; research notes 04b Q4 and 03 Q5.
 
+## Implementation notes
+
+- 2026-10-01: **"filesystem denial reported by the backend" as built** ([[ADR-041 Kernel Denials on the Audit Record]]). On macOS the kernel's own reports of Seatbelt denials (file reads and writes, direct network connects, Mach service lookups) reach the session's chain as `kernel.denied` rows with reason `sandbox_denied`. These rows are a record after the fact, not write-ahead: the kernel has already refused the operation before the broker learns of it, so point 1 does not apply to them, and a failed append is reported on brokerd's stderr (there is no decision left to turn into a deny). Points 2, 3 and 5 hold as for every row; point 4 holds as for request rows (session, end user and groups, agent, sandbox; the task ID and agent binary hash are on the session's `session.start` row). The record is best effort: the kernel rate-limits and coalesces its reports, rows are deduplicated per process name, operation and target and capped at 500 per session (then one `suppressed` row), and a collector that cannot start records nothing without failing the launch. The absence of a row therefore proves nothing; the kernel enforces the denial either way.
+- 2026-10-01: **Linux residual.** Landlock, seccomp and mount denials are enforced by the kernel but not recorded: there is no collector on Linux. Whether an unprivileged daemon can read Landlock or seccomp denial records is open ([[Open Questions and Unverified Claims]]).
+
 ## Build log
 
 - 2026-09-24: minimal M0 tests: chain tamper tests in `code/crates/audit/src/store.rs` (`tamper_one_byte_fails_at_that_row`, `delete_row_fails`, `swap_rows_fails`, `rehashed_edit_breaks_next_link`, `any_single_body_mutation_is_detected`), `audit_failure_denies_before_connecting`, `i9_every_decision_is_chained_and_explainable` (`broker why`, `broker audit verify`, the sandbox can neither read nor write the log). `session.start` is written ahead of the launch.
 - 2026-09-30: status `built`: the minimum tests pass on macOS 15/26 and Ubuntu 22.04/24.04 in every CI run since 35999705456 (vault audit).
+- 2026-10-01: macOS kernel-enforced denials are on the session's record as attributed `kernel.denied` rows, after the fact rather than write-ahead (built 2026-09-30, [[ADR-041 Kernel Denials on the Audit Record]]; `code/crates/brokerd/src/kernel_denials.rs`). Tests: `brokerd::kernel_denials::tests::*` (parse, attribution, dedupe, cap, kernel-only reports, `parse` total) and `m4_kernel_denials::kernel_denials_are_on_the_sessions_record` (a hook write and a direct connect become rows attributed to the denied session; the chain verifies). Linux kernel denials remain unrecorded (residual, Implementation notes).

@@ -57,7 +57,7 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
 | Filesystem | secret stores unreadable; writes only in the repository and session temp; git hooks, git config, the `.git` entry, agent settings, `.mcp.json`, `.envrc` read-only | same, plus Landlock allowlist |
 | Kernel attack surface | Apple Events, Launch Services, trustd, DNS service unreachable | seccomp: no new Unix sockets, raw or packet sockets, ptrace, bpf, keyctl, mount, namespaces, io_uring |
 | Fail closed | launch refused if any layer, the proxy or the audit log is unavailable; the in-sandbox shim verifies every layer before the agent starts | same |
-| Audit | hash-chained SQLite log outside every sandbox; `broker why`, `broker audit verify` | same |
+| Audit | hash-chained SQLite log outside every sandbox; `broker why`, `broker audit verify`; operations the sandbox refuses (files, connections, system services) are recorded after the fact from the kernel's own reports (`kernel.denied`, reason `sandbox_denied`) | same, except that operations the sandbox refuses (Landlock, seccomp, mounts) are not recorded |
 | Credentials (M1) | the sandbox holds only per-session sentinels; the broker attaches real credentials after authorization, only on the credential's hosts; foreign credentials and cookies are rejected; injected secrets are cut from responses; agents' own login stores (keychain, token files) are unreadable | same |
 | L7 rules (M1) | terminated hosts: Host = SNI = CONNECT, method/path rules deny by default, git pushes authorized per repository, ref and force | same |
 | Policy engine (M2) | every decision is a Cedar authorization; repository policy is approved by content hash and can only narrow; `broker policy check` runs formal gates on a change (narrowing, org ceiling, credential confinement), as CI does | same |
@@ -91,6 +91,10 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
 - **macOS per-user temp directory is writable** (`DARWIN_USER_TEMP_DIR`),
   because Apple's toolchain shims reset `TMPDIR` to it (ADR-016). A
   sandboxed agent could tamper with other programs' temporary files there.
+- **The record of sandbox refusals is incomplete.** On macOS the kernel's
+  reports are recorded after the fact; the kernel rate-limits them and a
+  session records at most 500, so a missing row proves nothing. On Linux
+  they are not recorded at all. The kernel enforces every refusal either way.
 - **Tools that ignore proxy variables fail** on macOS: nothing else is
   reachable, which fails closed.
 - **Go programs cannot use HTTPS in a macOS session**: they verify only

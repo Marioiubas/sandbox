@@ -181,4 +181,23 @@ mod tests {
         assert_eq!(s.find_any(body.as_bytes()), Some("a"));
         assert_eq!(s.find_any(b"nothing here"), None);
     }
+
+    proptest::proptest! {
+        /// Splicing the sentinel between arbitrary fragments: every
+        /// occurrence is counted and none survives the swap; arbitrary
+        /// bytes are never the sentinel.
+        #[test]
+        fn swap_counts_every_occurrence_and_leaves_none(frags in proptest::collection::vec(proptest::collection::vec(proptest::num::u8::ANY, 0..40), 1..6)) {
+            let s = Sentinels::issue(&[cred("a", "api.example.com", "A")]);
+            let dest = canon_host(b"api.example.com").unwrap();
+            let v = s.value_for("a").unwrap().as_bytes().to_vec();
+            let body = frags.join(&v[..]);
+            let (out, n) = s.swap_in_body(&body, "a", b"SECRET");
+            proptest::prop_assert_eq!(n, frags.len() - 1);
+            proptest::prop_assert!(s.find_any(&out).is_none());
+            for f in &frags {
+                proptest::prop_assert_eq!(s.check(f, &dest), SentinelCheck::NotSentinel);
+            }
+        }
+    }
 }

@@ -7,9 +7,9 @@ tags: [sandbox/decisions, decision, topic/policy, topic/learning, topic/audit, m
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-30
+updated: 2026-10-01
 summary: "Where M2 as built differs from its task list: grants compile to policy text (not entities) so the formal gates can prove them; a differential property test replaces compile/decompile round-trips; per-file-operation would-be decisions, per-request process ancestry, OpenAPI operation mapping (G1), rate limits (P4), newly-registered-domain and object-storage ceilings, `[profile.*]` tables, `broker init` and LLM diff explanations are deferred."
-related: ["[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[M2 Policy Audit and Learn]]", "[[Policy Engine and Entity Builder]]", "[[broker.toml Human Policy Layer]]", "[[Policy Miner Safeguards]]", "[[Policy Learning Loop]]", "[[Audit Recorder and Event Schema]]", "[[ADR-022 Cedar Schema and Engine as Built]]", "[[ADR-024 Formal Gates as Built]]", "[[MOC Decisions]]"]
+related: ["[[ADR-008 Grant Representation as Entities and Txn-Token JWT]]", "[[M2 Policy Audit and Learn]]", "[[Policy Engine and Entity Builder]]", "[[broker.toml Human Policy Layer]]", "[[Policy Miner Safeguards]]", "[[Policy Learning Loop]]", "[[Audit Recorder and Event Schema]]", "[[ADR-022 Cedar Schema and Engine as Built]]", "[[ADR-024 Formal Gates as Built]]", "[[MOC Decisions]]", "[[ADR-041 Kernel Denials on the Audit Record]]"]
 sources: []
 superseded_by: 
 ---
@@ -53,6 +53,10 @@ built (2026-09-24).
 
 None weakened.
 
+## Implementation notes
+
+- 2026-10-01: **correction to item 3.** "Kernel denials already surface as `fs.denied` where the platform reports them" was not true when written: the `fs.denied` event kind is defined in `code/crates/audit/src/event.rs`, but no code path has ever emitted it, and no platform's kernel denials reached the audit log. Since [[ADR-041 Kernel Denials on the Audit Record]] (built 2026-09-30), macOS Seatbelt denials are recorded as `kernel.denied` rows (reason `sandbox_denied`) from the kernel's own reports; Linux Landlock, seccomp and mount denials are still unrecorded. The deferral itself stands: these rows are after-the-fact records, not per-operation would-be decisions, and learn mode reads only `request.decision` rows, so record mode still learns nothing about file access.
+
 ## Relationships
 
 - decided-by:: M2 build
@@ -61,4 +65,5 @@ None weakened.
 ## Build log
 
 - 2026-09-24: created while reconciling the M2 task list.
+- 2026-10-01: item 3 corrected in Implementation notes (`fs.denied` was never emitted; [[ADR-041 Kernel Denials on the Audit Record]]).
 - supersedes:: [[ADR-008 Grant Representation as Entities and Txn-Token JWT]] (in part: grants as entities)

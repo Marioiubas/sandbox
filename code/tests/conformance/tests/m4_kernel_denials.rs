@@ -40,6 +40,13 @@ fn kernel_denials_are_on_the_sessions_record() {
         assert_eq!(e.session.as_ref(), Some(&session), "attributed to the session that was denied");
         assert!(e.enduser.is_some() && e.agent.is_some() && e.sandbox.is_some(), "{e:?}");
     }
+    // The shim's checks are the first thing a session does: their rows
+    // prove the stream was live before the agent started.
+    let checks = wait_for(Duration::from_secs(10), || {
+        let n = h.events().iter().filter(|e| e.detail.get("launch_check").is_some()).count();
+        (n > 0).then_some(n)
+    });
+    assert!(checks.is_some(), "the shim's launch checks are on the record");
     assert!(!h.repo_path().join(".git/hooks/pre-commit").exists(), "and the kernel refused it");
     h.verify_audit().unwrap();
 }

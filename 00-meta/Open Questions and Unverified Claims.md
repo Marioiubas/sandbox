@@ -7,9 +7,9 @@ tags: [sandbox/meta, meta, evidence/unverified]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-09-30
+updated: 2026-10-01
 summary: "Every gap, source conflict and unverified claim from the report and research notes, each linked to the note that must carry the caveat."
-related: ["[[Landlock]]", "[[Filesystem Control and Rollback]]", "[[Audit Recorder and Event Schema]]", "[[EchoLeak M365 Copilot Exfiltration]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]", "[[Mythos Preview Evaluation Escape]]", "[[Broker Cedar Schema]]", "[[Tech Stack]]", "[[Netguard Ingress]]", "[[Measurement Gaps]]", "[[Macaroons and Biscuit]]", "[[July 2026 Artifactory Egress Incident]]"]
+related: ["[[Landlock]]", "[[Filesystem Control and Rollback]]", "[[Audit Recorder and Event Schema]]", "[[EchoLeak M365 Copilot Exfiltration]]", "[[sandbox-runtime SOCKS NUL-Byte Bypass]]", "[[Mythos Preview Evaluation Escape]]", "[[Broker Cedar Schema]]", "[[Tech Stack]]", "[[Netguard Ingress]]", "[[Measurement Gaps]]", "[[Macaroons and Biscuit]]", "[[July 2026 Artifactory Egress Incident]]", "[[ADR-041 Kernel Denials on the Audit Record]]"]
 sources: []
 ---
 
@@ -46,6 +46,7 @@ Source keys: **R** = the report; **N01-N05** = research notes (01 isolation, 02 
 - [x] ⚙ GitHub GraphQL: does `Repository.issue(number:)` (or `pullRequest`, `issueOrPullRequest`) return an issue that was transferred to another repository? REST answers with a redirect the broker does not follow; if GraphQL follows the transfer, a confined read of the old number returns the new (possibly private) repository's content under the old repository's label. Verify with two throwaway repositories before relying on confined reads for `sensitive_read`. → [[ADR-035 GitHub GraphQL and Host-Wide Read Labels as Built]], [[GitHub API Adapter]] (2026-09-25, M3 build) — **Resolved: no.** verified 2026-09-26 with the owner's token and the CI test token: `Marioiubas/sandboxpublictest#2` was transferred to `Marioiubas/sandboxprivatetest#1`; GraphQL `repository(sandboxpublictest) { issue(number: 2) }` and `issueOrPullRequest(number: 2)` return `null` with `NOT_FOUND`, even for a token that can read the private repository, while REST `GET /repos/Marioiubas/sandboxpublictest/issues/2` answers `301` to the new location (which the broker does not follow). The CI job `real-mcp` re-checks both answers on every run (`code/tests/e2e/mcp_github_real/transfer_check.sh`).
 
 - [ ] ⚙ macOS: how Go programs (which verify TLS only through the system trust service and ignore `SSL_CERT_FILE`) can work in a Seatbelt session without adding the session CA to a trust store or reaching `trustd` — 2026-09-25: open; seen with github-mcp-server 1.12.2 and `gh` → [[M3 CI Identity and MCP]], [[Risk Register]]
+- [ ] ⚙ Linux: can an unprivileged per-user daemon record Landlock and seccomp denials? Landlock is understood to report denials through the kernel audit subsystem from Linux 6.15 (Landlock ABI 7, with `landlock_restrict_self()` flags that turn logging on or off), and seccomp has logging actions of its own; the exact flags, their defaults, whether records are produced without audit rules or a running `auditd`, and whether any unprivileged process can read them (reading audit records normally needs root or `CAP_AUDIT_READ`) are all unverified. Until this is answered, Linux kernel denials are enforced but not recorded (residual). → [[ADR-041 Kernel Denials on the Audit Record]], [[I9 Hash-Chained Audit Outside the Sandbox]], [[Landlock]], [[seccomp-bpf]] (2026-10-01, M4 build) — open; verify from kernel documentation and on a 6.15+ kernel before any code depends on it.
 
 ## Source conflicts
 

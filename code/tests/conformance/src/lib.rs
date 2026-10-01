@@ -13,7 +13,7 @@ pub mod m1;
 
 pub use fs_fixture::{CanaryHome, FileState, assert_denied_or, assert_fs_denied, assert_read_denied, host_tmp};
 
-use audit::{AuditEvent, DecisionResult, Reason, SqliteRecorder};
+use audit::{AuditEvent, DecisionResult, EventKind, Reason, SqliteRecorder};
 use std::io::{Read, Write};
 use std::net::{TcpListener, UdpSocket};
 use std::path::{Path, PathBuf};
@@ -245,6 +245,10 @@ impl Harness {
     pub fn deny_reasons(&self) -> Vec<Reason> {
         self.events()
             .into_iter()
+            // The broker's decisions: kernel-enforced denials are recorded
+            // after the fact (ADR-041), several per session including the
+            // shim's launch checks, and are asserted by m4_kernel_denials.
+            .filter(|e| e.kind != EventKind::KernelDenied)
             .filter(|e| matches!(&e.decision, Some(d) if d.result == DecisionResult::Deny))
             .filter_map(|e| e.reason)
             .collect()

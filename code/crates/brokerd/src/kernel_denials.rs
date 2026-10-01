@@ -149,7 +149,10 @@ pub struct Collector {
 impl Collector {
     /// Start streaming the session's reports into `recorder`. Never fails a
     /// launch: without a collector the kernel still enforces every rule.
-    pub fn start(base: AuditEvent, recorder: Arc<dyn Recorder>) -> Collector {
+    /// Returns once `log stream` has printed its header (at most 2 s), so
+    /// the agent's first denials are not lost to a stream not yet live.
+    pub async fn start(base: AuditEvent, recorder: Arc<dyn Recorder>) -> Collector {
+        use tokio::io::AsyncBufReadExt;
         let inert = Collector { child: None, reader: None };
         if !cfg!(target_os = "macos") {
             return inert;
@@ -165,16 +168,25 @@ impl Collector {
             .spawn();
         let Ok(mut child) = spawned else { return inert };
         let Some(out) = child.stdout.take() else { return inert };
+        let mut lines = tokio::io::BufReader::new(out).lines();
+        let first = match tokio::time::timeout(std::time::Duration::from_secs(2), lines.next_line()).await {
+            Ok(Ok(Some(l))) => Some(l),
+            _ => None,
+        };
         let reader = tokio::spawn(async move {
-            use tokio::io::AsyncBufReadExt;
-            let mut lines = tokio::io::BufReader::new(out).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let Some(msg) = kernel_message(&line) else { continue };
+            let mut take = |line: &str| {
+                let Some(msg) = kernel_message(line) else { return };
                 if let Some(ev) = rec.row(&msg)
                     && let Err(e) = recorder.append(&ev)
                 {
                     eprintln!("brokerd: audit append failed for a kernel denial: {e:#}");
                 }
+            };
+            if let Some(l) = first {
+                take(&l);
+            }
+            while let Ok(Some(line)) = lines.next_line().await {
+                take(&line);
             }
         });
         Collector { child: Some(child), reader: Some(reader) }

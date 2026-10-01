@@ -7,7 +7,7 @@ tags: [sandbox/meta, meta, topic/build]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-09-30
+updated: 2026-10-01
 summary: "Chronological, append-only log Claude Code writes while building: date, milestone, what changed, notes updated, ADRs created, test status."
 related: ["[[CLAUDE]]", "[[MVP Plan]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[M4 Harden and Ship]]", "[[Dashboard]]"]
 sources: []
@@ -354,9 +354,18 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **CI:** `real-github` passed on `dee6270` and `1d35fb6`; the failure diagnostics stay in place.
 - **MCP relay tested directly:** `brokerd::mcp::relay::tests` (4 unit tests and a property test over arbitrary frames), closing the coverage audit's gap that the relay had none; no defect found.
 
-## 2026-09-30: kernel denials on the audit record (M4)
+### 2026-09-30: kernel denials on the audit record (M4)
 
 - **Built:** [[ADR-041 Kernel Denials on the Audit Record]]: Seatbelt deny rules tagged per session; brokerd streams the kernel's reports and writes attributed `kernel.denied` rows (`code/crates/brokerd/src/kernel_denials.rs`). Tests: `brokerd::kernel_denials::tests::*`, `m4_kernel_denials`.
 - **Found:** a user process named `Sandbox` could forge reports under a `sender == "Sandbox"` predicate; only pid-0 Sandbox.kext reports are taken now. Skipping rows by the shim's process name was forgeable too; shim checks are now recorded and flagged.
 - **Correction:** ADR-028 said kernel denials surface as `fs.denied`; that kind was never emitted.
-- **Open:** Linux kernel denials unrecorded; vault notes I9, Sandbox Launcher, Conformance Probe Matrix and Open Questions not yet updated for ADR-041.
+- **Open:** Linux kernel denials unrecorded (open question added to [[Open Questions and Unverified Claims]]).
+- **Vault updated (2026-10-01):** [[I9 Hash-Chained Audit Outside the Sandbox]] (macOS records kernel denials after the fact, not write-ahead; Linux residual), [[Sandbox Launcher]] (SBPL tagging, `seatbelt_session_tag`, shim checks recorded), [[Audit Recorder and Event Schema]] (`kernel.denied`, `sandbox_denied`, the never-emitted `fs.denied`), [[Conformance Probe Matrix]] (probe rule 3 met by mechanism on macOS, not Linux; harness deny counts exclude `kernel.denied`), [[ADR-028 M2 Plan Items Built Differently or Deferred]] (item 3 corrected), [[Open Questions and Unverified Claims]] and [[M4 Harden and Ship]]; `code/docs/threat-model.md` (audit row and residual).
+
+### 2026-10-01: kernel-denial follow-ups; last two fuzz targets
+
+- **CI found:** the first ADR-041 run (36713218963) failed `invariants::i6_bypass_corpus_end_to_end` on macOS 15 and 26 with 833 deny rows for 70 probes: each short probe session now also records the shim's launch checks and routine refusals (`mach-lookup com.apple.diagnosticd`). The harness's `deny_reasons` now counts broker decisions only; `kernel.denied` rows are asserted by `m4_kernel_denials`. Learn mode, shadow mode and the OCSF export already read request decisions only.
+- **Fixed (race):** the launch now waits (at most 2 s, about 10 ms measured) until `log stream` is live, so a fast agent's first denials are not missed; `m4_kernel_denials` requires the shim's launch checks to be on the record.
+- **Added:** fuzz targets `sentinel` (only the exact sentinel is honoured; a body swap counts every occurrence and leaves none) and `shim_spec` (the shim's command line), with property tests `creds::sentinel::tests::swap_counts_every_occurrence_and_leaves_none` and `launcher::shim::tests::spec_decoding_is_total`; CI smoke and nightly now cover 26 targets. With the MCP relay tests this closes the coverage audit's list of parsers without a target.
+- **Checked:** client URL parsers cannot change a decision: the broker decides on the bytes on the wire, and the one URL it parses from the host (`remote.origin.url`, which grants the session repository) sits in `.git/config`, which no sandbox can write (`fs_compile` mandatory deny-write list); a client that resolves a different repository is denied at push time (fail closed).
+- **Tests:** full suite 365 passed, 0 failed (macOS 26).

@@ -242,7 +242,7 @@ impl Daemon {
         base.enduser_groups = groups.clone();
         base.agent = Some(params.argv[0].clone());
         base.sandbox = Some(self.backend.name().to_string());
-        let collector = crate::kernel_denials::Collector::start(base, self.recorder.clone() as Arc<dyn Recorder>);
+        let collector = crate::kernel_denials::Collector::start(base, self.recorder.clone() as Arc<dyn Recorder>).await;
         let launched = tokio::task::spawn_blocking(move || backend.launch(spec)).await;
         let handle = match launched {
             Ok(Ok(h)) => h,

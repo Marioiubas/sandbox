@@ -9,7 +9,7 @@ confidence: medium
 created: 2026-09-30
 updated: 2026-09-30
 summary: "On macOS every Seatbelt deny rule carries the tag `broker:<session>`; brokerd streams the kernel's own reports (pid 0, Sandbox.kext) from the unified log and writes one attributed `kernel.denied` row (reason `sandbox_denied`) per process, operation and target, capped at 500 per session; the shim's launch checks are recorded and flagged. A record, not a control. Linux Landlock and seccomp denials remain unrecorded (residual)."
-related: ["[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Sandbox Launcher]]", "[[Audit Recorder and Event Schema]]", "[[Conformance Probe Matrix]]", "[[ADR-028 M2 Plan Items Built Differently or Deferred]]", "[[MOC Decisions]]"]
+related: ["[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Sandbox Launcher]]", "[[Audit Recorder and Event Schema]]", "[[Conformance Probe Matrix]]", "[[ADR-028 M2 Plan Items Built Differently or Deferred]]", "[[ADR-023 OCSF and OTLP Export as Built]]", "[[MOC Decisions]]"]
 sources: []
 superseded_by: 
 code: ["code/crates/brokerd/src/kernel_denials.rs", "code/crates/launcher/src/backends/seatbelt/sbpl.rs", "code/tests/conformance/tests/m4_kernel_denials.rs"]
@@ -32,7 +32,7 @@ built (2026-09-30, M4), macOS only.
 1. Every deny rule in the generated SBPL carries `(with message "broker:<session>")`; the kernel appends the tag to its report (verified empirically on macOS 26 / Darwin 25.5).
 2. At launch brokerd starts `/usr/bin/log stream --style ndjson` with a predicate for `processID == 0`, `processImagePath == "/kernel"`, `senderImagePath` = the Sandbox.kext binary and the session tag, and checks the same fields again per line. **Found while building:** a user process whose binary is named `Sandbox` logs with `sender == "Sandbox"`, so the first predicate accepted forged reports; the kernel-only check rejects them (unit test `only_the_kernels_reports_are_taken`).
 3. Each new (process name, operation, target) becomes one `kernel.denied` row, reason `sandbox_denied`, attributed like every row (session, end user, groups, agent, sandbox); at most 500 per session, then one `suppressed` row. The shim's launch checks are recorded too and flagged `launch_check` (advisory: a process can take any name), deduplicated per pid so they never hide the agent's own attempt.
-4. Rows are after the fact, not write-ahead: the kernel already refused. A collector that cannot start records nothing and never fails a launch; the collector stops 2 s after teardown.
+4. Rows are after the fact, not write-ahead: the kernel already refused. The launch waits (at most 2 s, about 10 ms measured) for `log stream` to print its header, so the agent's first denials are not lost to a stream that is not yet live; the test requires the shim's checks, the first thing a session does, to be on the record. A collector that cannot start records nothing and never fails a launch; the collector stops 2 s after teardown.
 
 ## Alternatives considered
 
@@ -46,6 +46,7 @@ built (2026-09-30, M4), macOS only.
 
 - macOS sessions now have a row for kernel-refused reads, writes and connects, including routine noise (for example `mach-lookup com.apple.diagnosticd`), filterable by `detail.operation`.
 - The kernel rate-limits and coalesces reports ("N duplicate reports"), and a flood of distinct denials can reach the cap; absence of rows proves nothing.
+- `kernel.denied` rows are not exported to OCSF ([[ADR-023 OCSF and OTLP Export as Built]] maps request decisions only); a File System Activity mapping is not built. Learn mode, shadow mode and the conformance harness's broker-deny counts read request decisions only, so these rows never become policy or count as broker denials.
 - **Residual:** Linux Landlock, seccomp and mount denials are enforced but not recorded.
 
 ## Invariants affected
@@ -54,7 +55,7 @@ Strengthens I9. Weakens none.
 
 ## Tests
 
-`brokerd::kernel_denials::tests::*` (parse, attribution, dedupe, cap, kernel-only, property test that `parse` is total) and `m4_kernel_denials::kernel_denials_are_on_the_sessions_record` (a hook write and a direct `nc` connect inside a session become attributed agent rows; the hook file does not exist; the chain verifies).
+`brokerd::kernel_denials::tests::*` (parse, attribution, dedupe, cap, kernel-only, property test that `parse` is total) and `m4_kernel_denials::kernel_denials_are_on_the_sessions_record` (a hook write and a direct `nc` connect inside a session become attributed agent rows separate from the shim's flagged checks, which are also present; the hook file does not exist; the chain verifies). The conformance harness's `deny_reasons` counts broker decisions only: the first CI run (36713218963, macOS 15 and 26) failed `i6_bypass_corpus_end_to_end` with 833 deny rows for 70 probes, the kernel rows of 70 short sessions.
 
 ## Relationships
 
