@@ -7,7 +7,7 @@ tags: [sandbox/decisions, decision, topic/egress, topic/credentials, control/egr
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-01
 summary: "M1's L7 path: per-session CA only (no per-user keychain CA), HTTP/1.1 via hyper with ALPN http/1.1 (h2 deferred), no broker-followed redirects, cookies rejected and Set-Cookie stripped on terminated hosts, credentials attached by rule, receive-pack bodies buffered up to 256 MiB, 'not provably fast-forward' counts as force, explicit 64 KiB head limit, parser refusals logged."
 related: ["[[TLS Termination and Per-Session CA]]", "[[Credential Injector and Issuers]]", "[[Git Smart-HTTP Adapter]]", "[[Registry and LLM API Adapters]]", "[[ADR-006 Deny Unmatched L7 Requests]]", "[[I1 No Secrets in the Sandbox]]", "[[I6 Single Canonicaliser]]", "[[I7 Reject Foreign Credentials]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Conformance Probe Matrix]]", "[[M1 Secrets Outside]]", "[[Risk Register]]", "[[MOC Decisions]]"]
 sources: []
@@ -72,3 +72,5 @@ Built (2026-09-24) with [[M1 Secrets Outside]].
 ## Build log
 
 - 2026-09-24: created and built with M1. Tests listed in the [[M1 Secrets Outside]] build log.
+- 2026-10-01: **hold-back narrowed for identity bodies** (Risk R20). The fixed window of (longest needle - 1) bytes delayed every small streamed event (SSE from a model API whose credential the broker attaches) until the next one arrived. Identity bodies now hold back only the longest tail that is a proper prefix of a needle (`l7::filter::Scanner::minimal`); compressed bodies keep the fixed window, because the client decodes their raw bytes. I1 is not weakened, and the property tested is now stronger than before: in both modes nothing at or after a needle's first occurrence is ever released (`filter::tests::nothing_of_a_secret_is_released`, over a two-letter alphabet so partial matches abound; fuzz target `filter` checks both modes); `streamed_events_are_not_held_back` shows events pass through as they arrive. The consequence line above ("delayed by at most the hold-back window per chunk") now applies to compressed bodies only.
+

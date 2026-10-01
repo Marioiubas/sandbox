@@ -90,7 +90,8 @@ inside the sandbox. They never change the sandbox, the proxy or the audit.
   not reach the old tip inside the pushed pack (ADR-021); `broker why` says so.
 - **macOS per-user temp directory is writable** (`DARWIN_USER_TEMP_DIR`),
   because Apple's toolchain shims reset `TMPDIR` to it (ADR-016). A
-  sandboxed agent could tamper with other programs' temporary files there.
+  sandboxed agent could tamper with other programs' temporary files there,
+  though not with another broker session's scratch directory in it.
 - **The record of sandbox refusals is incomplete.** On macOS the kernel's
   reports are recorded after the fact; the kernel rate-limits them and a
   session records at most 500, so a missing row proves nothing. On Linux

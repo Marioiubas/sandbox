@@ -153,6 +153,7 @@ mod tests {
             ],
             deny_entry: vec!["/home/dev/src/web/.git".into()],
             missing_protected: vec!["/home/dev/src/web/.claude".into()],
+            shared_scratch: vec![],
         };
         let dirs: BTreeSet<&str> = [
             "/home/dev/.ssh",

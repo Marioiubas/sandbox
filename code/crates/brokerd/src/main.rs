@@ -33,6 +33,8 @@ fn main() {
 }
 
 fn run(idle: Duration) -> anyhow::Result<()> {
+    // Before any secret is loaded: no core dumps, not dumpable (Linux).
+    brokerd::harden::process().map_err(|e| anyhow::anyhow!("cannot harden the daemon process: {e}"))?;
     let dirs = BrokerDirs::from_env()?;
     dirs.ensure()?;
     // I9: without a verifiable audit chain the daemon does not start.

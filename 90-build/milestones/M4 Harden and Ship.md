@@ -42,7 +42,7 @@ The hardening emphasis follows the record: the sandbox-runtime NUL-byte parser d
 
 **Fuzzing and differential testing**
 
-- [ ] Run each `tests/fuzz/fuzz_targets/*` for ≥24 h (continuous nightly jobs accumulate toward this); triage and fix every crash; add each crashing input to the corpus. — started: `.github/workflows/fuzz-nightly.yml` runs all 16 targets for 2 h each per night with the corpus cached between runs and crash inputs uploaded.
+- [ ] Run each `tests/fuzz/fuzz_targets/*` for ≥24 h (continuous nightly jobs accumulate toward this); triage and fix every crash; add each crashing input to the corpus. — started: `.github/workflows/fuzz-nightly.yml` runs every target (27 as of 2026-10-01) for 2 h each per night with the corpus cached between runs and crash inputs uploaded.
 - [ ] HTTP Garden-style differential fuzzing of URL and HTTP parsing against curl, requests/httpx and undici ([arXiv 2405.17737](https://arxiv.org/abs/2405.17737)); acceptance is 0 decision-changing discrepancies ([[L1 Conformance Suite]]). — started: `m4_differential` (broker path decision vs server normalisations) found and closed two canonicaliser bypasses; generated inputs and client-parser comparisons remain.
 - [ ] Complete all 12 categories of the [[Conformance Probe Matrix]], including category 11 (covert channels: bandwidth measured and reported, not claimed zero) and category 12 (boundary escape). — 1-10 automated (M0-M3); 11 measured by `m4_covert` (query strings ≈81 KB/s, path choice ≈93 B/s, timing ≈0.9 B/s on one laptop); 12 not started (needs nested VMs).
 

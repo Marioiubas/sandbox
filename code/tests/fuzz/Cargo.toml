@@ -13,6 +13,7 @@ libfuzzer-sys = "0.4"
 netguard = { path = "../../crates/netguard" }
 tls = { path = "../../crates/tls" }
 brokerd = { path = "../../crates/brokerd" }
+audit = { path = "../../crates/audit" }
 creds = { path = "../../crates/creds" }
 l7 = { path = "../../crates/l7" }
 policy = { path = "../../crates/policy" }
@@ -197,6 +198,13 @@ bench = false
 [[bin]]
 name = "shim_spec"
 path = "fuzz_targets/shim_spec.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "kernel_report"
+path = "fuzz_targets/kernel_report.rs"
 test = false
 doc = false
 bench = false

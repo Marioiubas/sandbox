@@ -55,6 +55,16 @@ pub fn quote(p: &Path) -> Option<String> {
     Some(format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")))
 }
 
+/// A path as the start of an SBPL regex: only characters a temp dir path
+/// uses, with `.` escaped; anything else is refused (the launch fails).
+fn regex_prefix(p: &Path) -> Option<String> {
+    let s = p.to_str()?;
+    if !s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'-' | b'.')) {
+        return None;
+    }
+    Some(format!("^{}", s.replace('.', "\\.")))
+}
+
 fn path_rules(kind: &str, paths: &[PathBuf]) -> Result<String, String> {
     let mut out = String::new();
     for p in paths {
@@ -103,6 +113,18 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
     if !i.fs.writable.is_empty() {
         let _ = writeln!(s, "; writable roots\n(allow file-write*{})", path_rules("subpath", &i.fs.writable)?);
     }
+    for prefix in &i.fs.shared_scratch {
+        // Other sessions' scratch in the shared temp dir (R16): denied, then
+        // this session's own roots there allowed again; before the
+        // mandatory deny-write, which still wins.
+        let re = regex_prefix(prefix).ok_or_else(|| format!("unrepresentable path {}", prefix.display()))?;
+        let _ = writeln!(s, "; other sessions' scratch (R16)\n(deny file-write* (regex #\"{re}\"){wm})");
+        let own: Vec<PathBuf> =
+            i.fs.writable.iter().filter(|w| crate::fs_compile::text_prefix(w, prefix)).cloned().collect();
+        if !own.is_empty() {
+            let _ = writeln!(s, "(allow file-write*{})", path_rules("subpath", &own)?);
+        }
+    }
     if !i.fs.deny_write.is_empty() {
         let _ = writeln!(
             s,
@@ -139,7 +161,37 @@ mod tests {
             deny_write: vec!["/Users/dev/src/web/.git/hooks".into()],
             deny_entry: vec!["/Users/dev/src/web/.git".into()],
             missing_protected: vec![],
+            shared_scratch: vec![],
         }
+    }
+
+    /// R16: another session's scratch in the shared temp dir is not
+    /// writable; this session's own is, and the mandatory list still wins.
+    #[test]
+    fn other_sessions_scratch_is_denied() {
+        let mut f = fs();
+        f.writable.push("/private/var/folders/x1/T/broker-S1".into());
+        f.writable.push("/private/var/folders/x1/T/broker-mcp-gh-S1".into());
+        f.shared_scratch = vec!["/private/var/folders/x1/T/broker-".into()];
+        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).unwrap();
+        let deny = p.find("(deny file-write* (regex #\"^/private/var/folders/x1/T/broker-\"))").expect(&p);
+        let own = p
+            .find("(allow file-write* (subpath \"/private/var/folders/x1/T/broker-S1\") (subpath \"/private/var/folders/x1/T/broker-mcp-gh-S1\"))")
+            .expect(&p);
+        let mandatory = p.find("; mandatory deny-write").unwrap();
+        let writable = p.find("; writable roots").unwrap();
+        assert!(writable < deny && deny < own && own < mandatory, "{p}");
+        // A dot is escaped; anything a temp dir does not use is refused.
+        f.shared_scratch = vec!["/private/var/f.x/T/broker-".into()];
+        assert!(
+            generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None })
+                .unwrap()
+                .contains(r#"^/private/var/f\.x/T/broker-"#)
+        );
+        f.shared_scratch = vec!["/private/var/f x/T/broker-".into()];
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).is_err());
+        f.shared_scratch = vec!["/private/var/(x)/T/broker-".into()];
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).is_err());
     }
 
     #[test]

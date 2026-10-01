@@ -367,6 +367,28 @@ fn i8_invalid_user_policy_refuses_launch() {
 
 // ---------------------------------------------------------------- I1 ------
 
+/// Risk R4: the daemon that holds minted credentials writes no core dump and,
+/// on Linux, is not dumpable, so another process of the same user cannot
+/// read its environment or memory through /proc.
+#[cfg(target_os = "linux")]
+#[test]
+fn i1_the_daemon_is_not_dumpable() {
+    let h = Harness::new("version = 1\n");
+    assert!(h.sh("echo ok").stdout.contains("ok"));
+    let pid = std::fs::read_to_string(h.home.path().join("run/brokerd.pid")).unwrap();
+    let pid = pid.trim();
+    let limits = std::fs::read_to_string(format!("/proc/{pid}/limits")).unwrap();
+    let core = limits.lines().find(|l| l.starts_with("Max core file size")).unwrap();
+    assert_eq!(core.split_whitespace().skip(4).take(2).collect::<Vec<_>>(), ["0", "0"], "{core}");
+    let e = std::fs::read(format!("/proc/{pid}/environ")).unwrap_err();
+    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied, "{e}");
+    // And from inside a session: no ptrace at all (seccomp), and the
+    // daemon is not in the session's PID namespace.
+    let r = h.probe(&["ptrace", pid]);
+    assert!(r.denied(), "{r:?}");
+    assert!(!h.probe(&["read", &format!("/proc/{pid}/environ")]).allowed());
+}
+
 #[test]
 fn i1_host_secrets_in_the_client_environment_never_reach_the_sandbox() {
     let h = Harness::new("version = 1\n");

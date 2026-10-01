@@ -210,11 +210,13 @@ dependencies = [
 name = "broker-fuzz"
 version = "0.0.0"
 dependencies = [
+ "audit",
  "brokerd",
  "creds",
  "grant",
  "http",
  "l7",
+ "launcher",
  "libfuzzer-sys",
  "mcpguard",
  "netguard",

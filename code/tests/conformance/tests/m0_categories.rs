@@ -304,3 +304,29 @@ fn cat10_git_commit_still_works() {
     );
     assert_eq!(r.code, 0, "local commit inside the sandbox: {r:?}");
 }
+
+/// R16 (macOS): every session may write the per-user temp dir (ADR-016),
+/// but not another session's `broker-*` scratch in it; its own `TMPDIR`
+/// stays writable.
+#[cfg(target_os = "macos")]
+#[test]
+fn cat10_other_sessions_scratch_is_not_writable() {
+    let out = std::process::Command::new("/usr/bin/getconf").arg("DARWIN_USER_TEMP_DIR").output().unwrap();
+    let shared = std::path::PathBuf::from(String::from_utf8(out.stdout).unwrap().trim()).canonicalize().unwrap();
+    let other = tempfile::Builder::new().prefix("broker-other-").tempdir_in(&shared).unwrap();
+    let victim = other.path().join("script.sh");
+    std::fs::write(&victim, "echo original\n").unwrap();
+    let h = Harness::new("version = 1\n");
+    let s = |p: &std::path::Path| p.display().to_string();
+    assert_fs_denied(&h.probe(&["write", &s(&victim)]), "append to another session's scratch file");
+    assert_fs_denied(&h.probe(&["write-new", &s(&other.path().join("planted"))]), "plant a file there");
+    assert_fs_denied(&h.probe(&["mkdir", &s(&shared.join("broker-new-by-agent"))]), "create a broker-* dir");
+    assert_eq!(std::fs::read_to_string(&victim).unwrap(), "echo original\n");
+    assert!(!other.path().join("planted").exists());
+    // Controls: its own TMPDIR, and the rest of the shared dir (ADR-016).
+    let r = h.sh("echo x > \"$TMPDIR/own\" && echo OWN");
+    assert!(r.stdout.contains("OWN"), "{r:?}");
+    let name = format!("xcrun-like-{}", std::process::id());
+    assert!(h.probe(&["write-new", &s(&shared.join(&name))]).allowed(), "ADR-016 residual");
+    let _ = std::fs::remove_file(shared.join(&name));
+}

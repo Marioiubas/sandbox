@@ -1,8 +1,12 @@
 //! Response filter (pipeline step 8, I1): an injected secret, in any of its
 //! registered encodings, never flows back to the sandbox. Bodies are
-//! scanned as they stream with a hold-back window of (longest needle - 1)
-//! bytes, so a secret split across chunks is caught before any of it is
-//! released. On a match the body errors out and the connection is cut.
+//! scanned as they stream and the tail that could begin a secret is held
+//! back, so a secret split across chunks is caught before any of it is
+//! released. For identity bodies that is only the longest tail that is a
+//! prefix of a needle (streamed events are not delayed); for compressed
+//! bodies, whose raw bytes the client decodes, a fixed window of (longest
+//! needle - 1) raw bytes. On a match the body errors out and the
+//! connection is cut.
 //! gzip and deflate bodies are scanned through a parallel decoder; other
 //! encodings cannot be scanned and are refused before headers are sent.
 
@@ -34,12 +38,32 @@ pub struct Scanner {
     needles: Arc<Vec<Vec<u8>>>,
     keep: usize,
     tail: Vec<u8>,
+    /// Hold back only a tail that could begin a needle, not a fixed window.
+    minimal: bool,
 }
 
 impl Scanner {
+    /// Holds back a fixed window of (longest needle - 1) bytes.
     pub fn new(needles: Arc<Vec<Vec<u8>>>) -> Scanner {
         let keep = needles.iter().map(|n| n.len()).max().unwrap_or(1).saturating_sub(1);
-        Scanner { needles, keep, tail: Vec::new() }
+        Scanner { needles, keep, tail: Vec::new(), minimal: false }
+    }
+
+    /// Holds back only the longest tail that is a proper prefix of a needle.
+    /// Safe for bytes the client sees as they are: a needle that is not
+    /// wholly inside the scanned bytes and starts before that tail would
+    /// make a longer tail a prefix of it.
+    pub fn minimal(needles: Arc<Vec<Vec<u8>>>) -> Scanner {
+        Scanner { minimal: true, ..Scanner::new(needles) }
+    }
+
+    /// Length of the longest suffix of `buf` that is a proper prefix of a needle.
+    fn partial(&self, buf: &[u8]) -> usize {
+        let longest = |n: &Vec<u8>| {
+            let max = n.len().saturating_sub(1).min(buf.len());
+            (1..=max).rev().find(|&l| buf.ends_with(&n[..l])).unwrap_or(0)
+        };
+        self.needles.iter().map(longest).max().unwrap_or(0)
     }
 
     /// Feed a chunk; returns the bytes that are now safe to release.
@@ -49,7 +73,7 @@ impl Scanner {
         if self.needles.iter().any(|n| contains(&buf, n)) {
             return Err(Found);
         }
-        let cut = buf.len().saturating_sub(self.keep);
+        let cut = if self.minimal { buf.len() - self.partial(&buf) } else { buf.len().saturating_sub(self.keep) };
         self.tail = buf.split_off(cut);
         Ok(buf)
     }
@@ -120,7 +144,10 @@ impl<B> FilteredBody<B> {
         };
         FilteredBody {
             inner,
-            raw: Scanner::new(needles.clone()),
+            raw: match coding {
+                Coding::Identity => Scanner::minimal(needles.clone()),
+                Coding::Gzip | Coding::Deflate => Scanner::new(needles.clone()),
+            },
             decoded,
             trailer_needles: needles,
             pending_trailers: None,
@@ -336,5 +363,56 @@ mod tests {
             prop_assert!(!contains(&released, secret.as_bytes()));
             if !with_secret { prop_assert_eq!(released, bytes.to_vec()); }
         }
+
+        /// Over a two-letter alphabet (so partial matches abound), in both
+        /// modes and however the body is chunked: nothing at or after the
+        /// first occurrence of a needle is ever released, a clean body is
+        /// released unchanged, and the minimal mode never releases less.
+        #[test]
+        fn nothing_of_a_secret_is_released(body in "[ab]{0,40}", needle in "[ab]{2,7}", cuts in proptest::collection::vec(0usize..64, 0..8)) {
+            let bytes = body.as_bytes();
+            let first = bytes.windows(needle.len()).position(|w| w == needle.as_bytes());
+            let mut idx: Vec<usize> = cuts.iter().map(|c| c % (bytes.len() + 1)).collect();
+            idx.sort();
+            idx.dedup();
+            let mut fixed = Scanner::new(needles(&[&needle]));
+            let mut minimal = Scanner::minimal(needles(&[&needle]));
+            let (mut out_f, mut out_m, mut last) = (Vec::new(), Vec::new(), 0);
+            let mut found = false;
+            for &i in idx.iter().chain(std::iter::once(&bytes.len())) {
+                match (fixed.feed(&bytes[last..i]), minimal.feed(&bytes[last..i])) {
+                    (Ok(f), Ok(m)) => { out_f.extend(f); out_m.extend(m); }
+                    (Err(Found), Err(Found)) => { found = true; break; }
+                    _ => prop_assert!(false, "modes disagree"),
+                }
+                prop_assert!(out_m.len() >= out_f.len());
+                last = i;
+            }
+            prop_assert_eq!(found, first.is_some());
+            if let Some(s) = first {
+                prop_assert!(out_m.len() <= s && out_f.len() <= s, "released {} / {} past {s}", out_m.len(), out_f.len());
+            } else {
+                out_f.extend(fixed.finish());
+                out_m.extend(minimal.finish());
+                prop_assert_eq!(&out_f, &bytes.to_vec());
+                prop_assert_eq!(&out_m, &bytes.to_vec());
+            }
+        }
+    }
+
+    /// Streamed events (SSE) through an identity body are released as they
+    /// arrive: none of them is a prefix of the secret.
+    #[test]
+    fn streamed_events_are_not_held_back() {
+        let mut s = Scanner::minimal(needles(&["sk-ant-oat01-SECRET0123456789"]));
+        for ev in ["data: {\"t\":\"Hel\"}\n\n", "data: {\"t\":\"lo\"}\n\n", "data: s"] {
+            let out = s.feed(ev.as_bytes()).unwrap();
+            if ev == "data: s" {
+                assert_eq!(out, b"data: ", "an `s` could begin the secret");
+            } else {
+                assert_eq!(out, ev.as_bytes());
+            }
+        }
+        assert_eq!(s.finish(), b"s");
     }
 }

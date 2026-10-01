@@ -43,7 +43,7 @@ Copy this block for each session:
 | [[M1 Secrets Outside]] | built | 2026-09-25 | B2/B3 against a real GitHub App (CI job `real-github`, every push); B1-B8 green in CI on macOS 15/26 and Ubuntu 22.04/24.04 |
 | [[M2 Policy Audit and Learn]] | in progress: implemented; C1 (learn mode over 3 repos × 3 real agents) outstanding |  | M2 build log |
 | [[M3 CI Identity and MCP]] | in progress: implemented; D2 against Okta/Entra dev tenants, D6 against a real AWS account, and the Internal Grant JWT outstanding; D3 passes against the real GitHub MCP server (CI job `real-mcp`) |  | M3 build log |
-| [[M4 Harden and Ship]] | in progress: E3 met; E1 accumulating nightly (18 targets); E2, E4-E9 outstanding |  | M4 build log |
+| [[M4 Harden and Ship]] | in progress: E3 met; E1 accumulating nightly (27 targets as of 2026-10-01); E2, E4-E9 outstanding |  | M4 build log |
 
 ## Proposed vocabulary additions
 
@@ -373,3 +373,6 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Linux, host audit record:** from Landlock ABI 7 the launcher sets `LOG_NEW_EXEC_ON`, so on hosts with audit enabled the agent's Landlock denials reach the host's audit log (brokerd still cannot read it unprivileged; primary-source research recorded in [[Open Questions and Unverified Claims]]). CI test `landlock_denials_reach_the_host_audit_log` on ubuntu-24.04 with auditd.
 - **Risk Register walked** (review agent, all 20 rows; [[Risk Register]]): R8 (TLS breakage), R15 (schedule) likelihood up, R12 impact up; R3, R8 and R11 triggers had fired (29 enforcement or record defects found by our own tests and reviews since 2026-09-24; Go TLS on macOS; path-rule and GraphQL adapter defects).
 - **Tests:** full suite 367 passed, 0 failed (macOS 26); launcher linted for the Linux target.
+- **Risk follow-ups (same day):** R4 brokerd hardened (no core dumps, non-dumpable on Linux, refuses to start otherwise; `invariants::i1_the_daemon_is_not_dumpable` also runs the probe's `ptrace` mode from a session for the first time); R14 `supply-chain` CI job (`cargo deny`: advisories, licenses, sources, bans); R16 another session's `broker-*` scratch in the shared macOS temp dir is no longer writable (`m0_categories::cat10_other_sessions_scratch_is_not_writable`); R3 fuzz target `kernel_report` (27 targets).
+- **R20, response filter:** identity bodies now hold back only the longest tail that could begin a secret instead of a fixed window, so streamed events (SSE from a credentialed model API) are not delayed by one event each; compressed bodies keep the fixed window. Stronger property tested in both modes: nothing at or after a secret's first occurrence is released ([[ADR-021 L7 Path Choices for M1]] build log).
+- **Tests:** full suite 371 passed, 0 failed (macOS 26), plus `l7` (60) and `m1_secrets`/`m1_redirect_fronting` after the filter change.

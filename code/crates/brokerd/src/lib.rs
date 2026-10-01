@@ -8,6 +8,7 @@ pub mod approvals;
 pub mod audit_query;
 pub mod dirs;
 pub mod fetch;
+pub mod harden;
 pub mod identity;
 pub mod kernel_denials;
 pub mod l7_pipeline;

@@ -7,7 +7,7 @@ tags: [sandbox/decisions, decision, topic/isolation, topic/credentials, platform
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-01
 summary: "On macOS in M0, keep the per-user temp dir writable (Apple toolchain shims reset TMPDIR to it) and let only profiles that declare it (claude-code) read the login keychain so agents keep their own credentials until M1; both are announced, audited and time-boxed."
 related: ["[[Seatbelt]]", "[[Sandbox Launcher]]", "[[Filesystem Control and Rollback]]", "[[I1 No Secrets in the Sandbox]]", "[[I5 Config Outside Writable Mounts]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[Sentinel Swap Pattern]]", "[[Risk Register]]", "[[MOC Decisions]]", "[[Build Log]]"]
 sources: []
@@ -70,3 +70,4 @@ Measured on macOS 26.5 (build log of [[Seatbelt]]):
 
 - 2026-09-24: created and built with M0; evidence and measurements in [[Build Log]] and the [[Seatbelt]] build log.
 - 2026-09-24: keychain exception removed by [[ADR-020 Brokered Agent Credentials End the Keychain Exception]]; `macos_keychain` no longer exists in profiles, the launcher or the SBPL generator.
+- 2026-10-01: the per-user temp dir exception is narrowed: other broker sessions' `broker-*` scratch and MCP working directories inside it are not writable from a session (Risk R16; see [[Sandbox Launcher]] build log). The rest of the directory stays writable for Apple's toolchain shims.

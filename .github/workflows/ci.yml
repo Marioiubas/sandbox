@@ -25,6 +25,16 @@ jobs:
       - name: clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+  supply-chain:
+    # Risk R14: RustSec advisories, licenses, sources and bans on every push.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: code/Cargo.toml
+          command: check advisories licenses sources bans
+
   test:
     # M0 matrix from the milestone note: macOS 15/26, Ubuntu 22.04/24.04.
     strategy:
@@ -275,6 +285,6 @@ jobs:
           cargo +nightly install cargo-fuzz --locked
       - name: Fuzz each parser for 60 s
         run: |
-          for t in canon connect socks5 sni jsonrpc pktline pack delta filter remote_url foreign github_route mcp_frame jwt s3_route device_flow path_differential graphql http_head fetch_url repo_policy sts_xml app_token git_route sentinel shim_spec; do
+          for t in canon connect socks5 sni jsonrpc pktline pack delta filter remote_url foreign github_route mcp_frame jwt s3_route device_flow path_differential graphql http_head fetch_url repo_policy sts_xml app_token git_route sentinel shim_spec kernel_report; do
             cargo +nightly fuzz run --fuzz-dir tests/fuzz "$t" -- -max_total_time=60 -rss_limit_mb=2048
           done
