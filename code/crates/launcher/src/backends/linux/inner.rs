@@ -423,10 +423,16 @@ pub mod seccomp {
             libc::SYS_clone,
             ns.iter().map(|f| SeccompRule::new(vec![bits(0, *f as u64)])).collect::<Result<_, _>>()?,
         );
-        // Terminal input injection into the user's shell.
+        // Terminal input injection into the user's shell. libc types the
+        // request numbers `c_ulong` on glibc and `c_int` on musl; the kernel
+        // reads an `unsigned int` and `eq` compares 32 bits, so both go
+        // through `u32` unchanged.
         rules.insert(
             libc::SYS_ioctl,
-            vec![SeccompRule::new(vec![eq(1, libc::TIOCSTI)])?, SeccompRule::new(vec![eq(1, libc::TIOCLINUX)])?],
+            vec![
+                SeccompRule::new(vec![eq(1, u64::from(libc::TIOCSTI as u32))])?,
+                SeccompRule::new(vec![eq(1, u64::from(libc::TIOCLINUX as u32))])?,
+            ],
         );
         let eperm: BpfProgram =
             SeccompFilter::new(rules, SeccompAction::Allow, SeccompAction::Errno(libc::EPERM as u32), arch()?)?

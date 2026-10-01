@@ -33,6 +33,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   ZIG_VERSION: 0.16.0
+  ZIG_SHA256: 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00 # x86_64-linux, ziglang.org/download/index.json
   CARGO_ZIGBUILD_VERSION: 0.23.4
   CARGO_ZIGBUILD_SHA256: 6b69963040818ca1ef573d8135a95aa902e17cf7f873c32c6426642dadfe7f59 # x86_64-unknown-linux-gnu
   CARGO_CYCLONEDX_VERSION: 0.5.9
@@ -109,14 +110,13 @@ jobs:
           rustup toolchain install "$channel" --profile minimal --target "$TARGET"
           rustc --version
           echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: ${{ env.ZIG_VERSION }}
-          use-cache: false
-      - name: Install cargo-zigbuild, cargo-cyclonedx and nfpm (pinned, checksum-verified)
+      - name: Install zig, cargo-zigbuild, cargo-cyclonedx and nfpm (pinned, checksum-verified)
         run: |
           bin="$RUNNER_TEMP/bin"; mkdir -p "$bin"; cd "$RUNNER_TEMP"
           fetch() { curl -fsSL --retry 3 -o "$2" "$1" && echo "$3  $2" | sha256sum -c -; }
+          fetch "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" zig.tar.xz "$ZIG_SHA256"
+          tar -xJf zig.tar.xz
+          echo "$RUNNER_TEMP/zig-x86_64-linux-$ZIG_VERSION" >> "$GITHUB_PATH"
           fetch "https://github.com/rust-cross/cargo-zigbuild/releases/download/v$CARGO_ZIGBUILD_VERSION/cargo-zigbuild-x86_64-unknown-linux-gnu.tar.xz" zb.tar.xz "$CARGO_ZIGBUILD_SHA256"
           tar -xJf zb.tar.xz -C "$bin" --strip-components=1 cargo-zigbuild-x86_64-unknown-linux-gnu/cargo-zigbuild
           fetch "https://github.com/CycloneDX/cyclonedx-rust-cargo/releases/download/cargo-cyclonedx-$CARGO_CYCLONEDX_VERSION/cargo-cyclonedx-x86_64-unknown-linux-gnu.tar.xz" cdx.tar.xz "$CARGO_CYCLONEDX_SHA256_LINUX"
@@ -124,7 +124,7 @@ jobs:
           fetch "https://github.com/goreleaser/nfpm/releases/download/v$NFPM_VERSION/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" nfpm.tar.gz "$NFPM_SHA256"
           tar -xzf nfpm.tar.gz -C "$bin" nfpm
           echo "$bin" >> "$GITHUB_PATH"
-          "$bin/nfpm" --version | head -3; zig version
+          "$bin/nfpm" --version | head -3; "$RUNNER_TEMP/zig-x86_64-linux-$ZIG_VERSION/zig" version
       - name: Build (release, static musl)
         run: cargo zigbuild --release --locked --target "$TARGET" -p broker-cli -p brokerd -p launcher --bins
       - name: Stage and check the programs are static
