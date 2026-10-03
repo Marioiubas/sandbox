@@ -169,15 +169,19 @@ fn notify_filter_differs_from_the_eperm_filter_only_in_its_match_action() {
 #[test]
 fn no_syscall_becomes_allowed_with_or_without_brokerd() {
     let s = sets();
+    let fixed = [fixed_filter().unwrap()];
     for nr in 0..=470 {
         for args in arg_grid() {
             let old = outcome(verdict(&s.old, nr, &args), true);
             let served = outcome(verdict(&s.notify, nr, &args), true);
             let unserved = outcome(verdict(&s.notify, nr, &args), false);
             let fallback = outcome(verdict(&s.fallback, nr, &args), true);
+            // ADR-045's refusals are ERRNO, never notified: EPERM either way.
+            let always = outcome(verdict(&fixed, nr, &args), false) == Outcome::Errno(libc::EPERM);
             assert_eq!(served, old, "nr {nr} {args:?}");
             assert_eq!(fallback, old, "nr {nr} {args:?}");
             match old {
+                Outcome::Errno(libc::EPERM) if always => assert_eq!(unserved, Outcome::Errno(libc::EPERM), "nr {nr}"),
                 Outcome::Errno(libc::EPERM) => assert_eq!(unserved, Outcome::Errno(libc::ENOSYS), "nr {nr}"),
                 other => assert_eq!(unserved, other, "nr {nr} {args:?}"),
             }
