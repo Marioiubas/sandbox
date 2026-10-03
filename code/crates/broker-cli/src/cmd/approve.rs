@@ -144,3 +144,57 @@ pub fn approve(id: &str, for_session: bool, yes: bool) -> i32 {
         EXIT_BROKER
     })
 }
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+
+    fn pending_with_args(args: Value) -> Value {
+        json!({
+            "id": "apr-test", "session": "S1", "labels_session": "S1", "request_id": "req-1",
+            "reason": "rule_of_two", "why": "held for a human", "expires_in_secs": 600,
+            "authority_diff": ["+ mcp.call_tool gh post args=sha256:00"],
+            "subject": { "tool_arguments": args },
+            "provenance": [],
+        })
+    }
+
+    /// ADR-037: a call too large to show is denied without an approval,
+    /// "since the user would approve bytes they cannot see". The view that
+    /// ends in the "Approve?" prompt must therefore show every argument (or
+    /// the command must refuse); here an agent pads an early key so the one
+    /// that matters sorts after the cut.
+    #[test]
+    fn review_approve_view_never_hides_arguments_it_asks_to_approve() {
+        let args = json!({ "a_padding": "x".repeat(SHOW_ARGS + 100), "repo": "attacker/evil" });
+        let shown = render(&pending_with_args(args));
+        assert!(
+            shown.contains("attacker/evil"),
+            "the approve view hides the `repo` argument it asks the user to approve:\n{}",
+            shown.lines().filter(|l| !l.contains("xxxx")).collect::<Vec<_>>().join("\n")
+        );
+    }
+
+    /// Tool arguments are the agent's bytes. C1 controls (U+0080..U+009F,
+    /// e.g. U+009B CSI) and bidi overrides/isolates (U+202A..U+202E,
+    /// U+2066..U+2069) can rewrite or reorder what the user's terminal
+    /// shows, so the approvals view must never print them raw (in keys or
+    /// values).
+    #[test]
+    fn review_approvals_view_does_not_print_c1_or_bidi_controls_raw() {
+        let mut v = serde_json::Map::new();
+        let mut k = serde_json::Map::new();
+        for c in (0x80u32..=0x9f).chain(0x202a..=0x202e).chain(0x2066..=0x2069) {
+            let ch = char::from_u32(c).unwrap();
+            v.insert(format!("v{c:04x}"), json!(format!("ok{ch}31mevil")));
+            k.insert(format!("k{ch}{c:04x}"), json!("x"));
+        }
+        let shown = render(&pending_with_args(json!({ "values": v, "keys": k })));
+        let raw: Vec<String> = shown
+            .chars()
+            .filter(|c| matches!(*c as u32, 0x80..=0x9f | 0x202a..=0x202e | 0x2066..=0x2069))
+            .map(|c| format!("U+{:04X}", c as u32))
+            .collect();
+        assert!(raw.is_empty(), "printed raw to the terminal: {}", raw.join(" "));
+    }
+}

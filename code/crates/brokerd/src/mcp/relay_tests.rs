@@ -240,3 +240,123 @@ proptest! {
         }
     }
 }
+
+/// Review test (ADR-037): a single-use approval lifts exactly one call.
+/// Each agent connection to a pinned server has its own relay, but they
+/// share the session's policy and approvals. The relay checks the approval
+/// (`authorize_mcp`), writes the allow row, and only then consumes it; a
+/// second connection deciding the same call in between is allowed too, so
+/// one "once" approval runs the held write twice. The recorder below runs
+/// that second connection's call while the first one's allow row is being
+/// written, which makes the interleaving deterministic.
+#[test]
+fn review_once_approval_lifts_one_call_even_across_concurrent_connections() {
+    type Hook = Box<dyn FnOnce() + Send>;
+    #[derive(Default)]
+    struct Hooked {
+        events: Mutex<Vec<AuditEvent>>,
+        hook: Mutex<Option<Hook>>,
+    }
+    impl Recorder for Hooked {
+        fn append(&self, ev: &AuditEvent) -> anyhow::Result<ChainHash> {
+            self.events.lock().unwrap().push(ev.clone());
+            let allowed_post = ev.kind == EventKind::RequestDecision
+                && ev.decision.as_ref().is_some_and(|d| d.result == DecisionResult::Allow)
+                && ev.detail.get("tool").and_then(|t| t.as_str()) == Some("post");
+            if allowed_post {
+                let h = self.hook.lock().unwrap().take();
+                if let Some(h) = h {
+                    h();
+                }
+            }
+            Ok(ChainHash([0; 32]))
+        }
+    }
+    struct Shared {
+        ctx: Arc<PipelineCtx>,
+        cfg: McpServerConfig,
+        rec: Arc<Hooked>,
+    }
+
+    let p = policy::config::parse_policy_str(POLICY).unwrap();
+    let policy = EgressPolicy::compile([("user", p.egress.as_slice())]).unwrap().with_mcp(&p.mcp).unwrap();
+    let rec = Arc::new(Hooked::default());
+    let session = SessionId::new();
+    let ctx = Arc::new(PipelineCtx {
+        labels_session: session.clone(),
+        labels_attribution: None,
+        session,
+        enduser: "local:test".into(),
+        groups: vec![],
+        agent: "probe".into(),
+        agent_sha256: None,
+        task: None,
+        sandbox: "test".into(),
+        policy: Arc::new(policy),
+        resolver: Arc::new(StaticResolver::default()),
+        recorder: rec.clone(),
+        auth: ChannelAuth::Implicit,
+        stats: Arc::new(Stats::default()),
+        connect_timeout: Duration::from_secs(1),
+        sni_timeout: Duration::from_secs(1),
+        l7: None,
+        shadow: None,
+        mcp: None,
+        approvals: Default::default(),
+    });
+    let f: &'static Shared = Box::leak(Box::new(Shared { ctx, cfg: p.mcp["gh"].clone(), rec }));
+    let connection = move || Relay {
+        ctx: &f.ctx,
+        name: "gh",
+        cfg: &f.cfg,
+        dest: Dest::default(),
+        server_session: "server".into(),
+        pin: Pin::Pinned(manifest()),
+        init: json!({}),
+        pending: HashSet::new(),
+        relist: None,
+        relists: 0,
+    };
+    let post = |id: i64| {
+        frame(json!({"jsonrpc": "2.0", "id": id, "method": "tools/call",
+                     "params": {"name": "post", "arguments": {"body": "hello"}}}))
+    };
+
+    // The Rule of Two holds the write; the user approves it once.
+    f.ctx.policy.labels().raise(Label::UntrustedInput);
+    f.ctx.policy.labels().raise(Label::SensitiveRead);
+    let mut a = connection();
+    let (held, fwd) = a.on_agent(&post(1));
+    assert!(fwd.is_none());
+    assert_eq!(reason(&held).as_deref(), Some("rule_of_two"));
+    let id = held.unwrap()["error"]["data"]["approval"].as_str().expect("a pending approval").to_string();
+    f.ctx.approvals.register(f.ctx.session.as_str(), f.ctx.policy.clone(), AuditEvent::new(EventKind::SessionStart));
+    f.ctx.approvals.grant(&id, policy::approvals::Scope::Once).unwrap();
+
+    // A second connection sends the same call while the first is being allowed.
+    type Decided = Option<(Option<Value>, Option<Value>)>;
+    let second: Arc<Mutex<Decided>> = Arc::default();
+    let slot = second.clone();
+    *f.rec.hook.lock().unwrap() = Some(Box::new(move || {
+        let mut b = connection();
+        *slot.lock().unwrap() = Some(b.on_agent(&post(2)));
+    }));
+    let (_, first_fwd) = a.on_agent(&post(3));
+    let (second_reply, second_fwd) = second.lock().unwrap().take().expect("the second connection's call was decided");
+
+    assert!(first_fwd.is_some(), "the approved call runs once");
+    let used = f
+        .rec
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|e| e.kind == EventKind::RequestDecision && e.detail.contains_key("approvals_used"))
+        .count();
+    assert!(
+        second_fwd.is_none(),
+        "one single-use approval let a second identical write reach the server \
+         ({used} allow rows name it); second reply: {second_reply:?}"
+    );
+    assert_eq!(reason(&second_reply).as_deref(), Some("rule_of_two"), "the second call is held again");
+}
