@@ -7,7 +7,7 @@ tags: [sandbox/build, milestone, milestone/m3, topic/identity, topic/mcp, topic/
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-30
+updated: 2026-10-03
 summary: "Weeks 7-8: GitHub Action with runner OIDC, OIDC device login to Okta/Entra dev tenants, MCP guard with manifest pinning, AWS STS minting with session policy and SigV4, trifecta context; done when an untrusted-issue CI fixture exposes no long-lived secret and the GitHub MCP toxic flow replay is stopped at the public write."
 related: ["[[MCP Guard]]", "[[AWS STS Session Policies]]", "[[Okta Cross App Access]]", "[[Entra Agent ID]]", "[[Trifecta Session Labels]]", "[[GitHub MCP Toxic Flow]]", "[[Internal Grant JWT]]", "[[Architecture Overview]]", "[[Nx s1ngularity Supply-Chain Attack]]", "[[M4 Harden and Ship]]", "[[Amazon Q Extension Compromise]]"]
 sources: ["https://invariantlabs.ai/blog/mcp-github-vulnerability", "https://aws.amazon.com/security/security-bulletins/AWS-2025-015/", "https://www.wiz.io/blog/s1ngularity-supply-chain-attack", "https://modelcontextprotocol.io/specification/latest/basic/authorization", "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks", "https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html"]
@@ -52,7 +52,7 @@ The motivating incidents: a public issue drove an agent to read private repos wi
 
 - [x] `integrations/github-action/action.yml`: install the broker, start `brokerd` outside the sandbox in the runner, request the runner's OIDC JWT, and run `broker run -- <agent>`. (built: requests the runner token and runs `broker run`; the binaries are installed by the workflow, outside the workspace: [[ADR-031 CI Identity as Built]])
 - [x] `crates/brokerd/src/session.rs`: accept a runner OIDC JWT as the identity source for CI sessions; map claims to `User`/`Group`/`Task` entities. (built with `brokerd::identity` and `grant::oidc`)
-- [ ] `crates/grant/src/txn_token.rs` and `dpop.rs`: the Txn-Token-shaped grant JWT, sender-constrained with DPoP, used when the sandbox and broker are separated ([[Internal Grant JWT]], [[DPoP and mTLS-Bound Tokens]]). — not built: only needed when sandbox and broker run on separate hosts ([[ADR-031 CI Identity as Built]]).
+- [ ] `crates/grant/src/txn_token.rs` and `dpop.rs`: the Txn-Token-shaped grant JWT, sender-constrained with DPoP, used when the sandbox and broker are separated ([[Internal Grant JWT]], [[DPoP and mTLS-Bound Tokens]]). — deferred by [[ADR-044 Grant JWT Deferred Until a Remote Mode Exists]] until a mode separates them; not built: only needed when sandbox and broker run on separate hosts ([[ADR-031 CI Identity as Built]]).
 - [x] `tests/e2e/ci_untrusted_issue/`: a workflow fixture whose trigger text is an attacker-authored issue; assert no long-lived secret is visible in the agent tree (reuse the M1 scanner). (runs in the `ci-mode` CI job)
 
 **Identity**

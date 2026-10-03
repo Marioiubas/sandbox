@@ -398,3 +398,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Deviation from the brief:** the channel is an inherited socketpair rather than a listening socket in the session directory: no name exists anywhere a sandboxed process could reach (ADR-043, alternatives).
 - **CI:** run 36912922849 (draft PR #1): every new test passed on ubuntu-22.04 (6.8) and ubuntu-24.04 (6.17) on the first run, including `inner::notify::tests` on the real kernel and `m4_kernel_denials::{seccomp_denials_are_on_the_sessions_record, an_unserved_seccomp_listener_refuses_the_launch}`; `lint` failed on one clippy lint in the new conformance test (an explicit deref), fixed.
 - **Vault updated:** [[ADR-041 Kernel Denials on the Audit Record]] (seccomp part of the residual closed), [[seccomp-bpf]] (implementation note on user notification, build log), [[Sandbox Launcher]], [[I9 Hash-Chained Audit Outside the Sandbox]] (residual narrowed to Landlock and mount denials), [[Audit Recorder and Event Schema]] (`kernel.denied` detail for `layer: seccomp`), [[Open Questions and Unverified Claims]], [[MOC Decisions]], `_manifest.json`; `code/docs/threat-model.md` (audit row and residual).
+
+### 2026-10-03: integration; grant JWT deferred
+
+- **Merged:** `packaging` ([[ADR-042 Release Packaging as Built]], CI runs 36910376549, 36912092416, 36913776650) and `seccomp-notify` ([[ADR-043 Seccomp Denials Recorded via User Notification]], CI run 36915716968, PR #1) into main; main's musl `TIOCSTI` fix carried into the moved seccomp module.
+- **Decided:** [[ADR-044 Grant JWT Deferred Until a Remote Mode Exists]]: no shipped mode runs sandbox and broker on different hosts, so the Txn-Token grant JWT waits for the first one. M3 now waits only on D2 (Okta and Entra tenants) and D6 against a real AWS account.
+- **Fixed (test race):** `m3_approvals` read the log between the approval row and the deny row (ubuntu-22.04, run 36912544104).

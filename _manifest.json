@@ -4679,5 +4679,26 @@
       "https://docs.kernel.org/userspace-api/seccomp_filter.html",
       "https://github.com/torvalds/linux/blob/master/kernel/seccomp.c"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-044 Grant JWT Deferred Until a Remote Mode Exists.md",
+    "title": "ADR-044 Grant JWT Deferred Until a Remote Mode Exists",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "The Txn-Token-shaped, DPoP-bound grant JWT is not built in M3: every shipped mode, CI included, runs sandbox and broker on one host; it is built with the first mode that separates them, whose ingress verifies it.",
+    "links_to": [
+      "Internal Grant JWT",
+      "ADR-008 Grant Representation as Entities and Txn-Token JWT",
+      "ADR-031 CI Identity as Built",
+      "M3 CI Identity and MCP",
+      "DPoP and mTLS-Bound Tokens",
+      "Netguard Ingress",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M3 review (2026-10-03) from ADR-008, ADR-031 and the M3 checklist.",
+    "aliases": [
+      "ADR-044"
+    ],
+    "sources": []
   }
 ]

@@ -7,9 +7,9 @@ tags: [sandbox/decisions, decision, topic/credentials, topic/identity, topic/pol
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-30
+updated: 2026-10-03
 summary: "Represent grants as Cedar entities inside the broker and as a Txn-Token-shaped DPoP-bound JWT across hosts, with Biscuit later for sub-agents; reject Macaroons or Biscuit from day one and opaque handles only."
-related: ["[[Internal Grant JWT]]", "[[Broker Cedar Schema]]", "[[Macaroons and Biscuit]]", "[[Transaction Tokens and Agent Auth Drafts]]", "[[DPoP and mTLS-Bound Tokens]]", "[[Revocable Sub-Agent Delegation]]", "[[Open Questions and Unverified Claims]]", "[[RFC 8693 Token Exchange]]", "[[RFC 9396 Rich Authorization Requests]]", "[[Object Capabilities]]", "[[Policy Engine and Entity Builder]]", "[[Netguard Ingress]]", "[[Cloud Sandbox Runtimes]]", "[[MVP Plan]]", "[[I1 No Secrets in the Sandbox]]", "[[I7 Reject Foreign Credentials]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[ADR-005 Mint Credentials Per Task]]", "[[ADR-007 Cedar with a TOML Front-End]]", "[[M3 CI Identity and MCP]]", "[[Architecture Overview]]", "[[ADR-028 M2 Plan Items Built Differently or Deferred]]"]
+related: ["[[Internal Grant JWT]]", "[[Broker Cedar Schema]]", "[[Macaroons and Biscuit]]", "[[Transaction Tokens and Agent Auth Drafts]]", "[[DPoP and mTLS-Bound Tokens]]", "[[Revocable Sub-Agent Delegation]]", "[[Open Questions and Unverified Claims]]", "[[RFC 8693 Token Exchange]]", "[[RFC 9396 Rich Authorization Requests]]", "[[Object Capabilities]]", "[[Policy Engine and Entity Builder]]", "[[Netguard Ingress]]", "[[Cloud Sandbox Runtimes]]", "[[MVP Plan]]", "[[I1 No Secrets in the Sandbox]]", "[[I7 Reject Foreign Credentials]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[ADR-005 Mint Credentials Per Task]]", "[[ADR-007 Cedar with a TOML Front-End]]", "[[M3 CI Identity and MCP]]", "[[Architecture Overview]]", "[[ADR-028 M2 Plan Items Built Differently or Deferred]]", "[[ADR-044 Grant JWT Deferred Until a Remote Mode Exists]]"]
 sources: ["https://datatracker.ietf.org/doc/html/draft-ietf-oauth-transaction-tokens-08", "https://www.rfc-editor.org/rfc/rfc8693", "https://www.rfc-editor.org/rfc/rfc9449", "https://www.rfc-editor.org/rfc/rfc8705", "https://www.rfc-editor.org/rfc/rfc9396", "https://docs.runloop.ai/docs/devboxes/agent-gateways", "https://github.com/runloopai/api-client-ts/issues/839", "https://doc.biscuitsec.org/getting-started/introduction.html", "https://research.google.com/pubs/archive/41892.pdf", "https://datatracker.ietf.org/doc/draft-klrc-aiagent-auth/", "https://datatracker.ietf.org/doc/html/draft-hardt-oauth-aauth-protocol", "http://www.erights.org/talks/thesis/"]
 superseded_by: "[[ADR-028 M2 Plan Items Built Differently or Deferred]] (in part: grants as entities)"
 ---
@@ -155,3 +155,7 @@ Testable form:
 - https://datatracker.ietf.org/doc/html/draft-hardt-oauth-aauth-protocol
 - http://www.erights.org/talks/thesis/
 - Report: "The internal grant", schema sketch, interfaces (macOS sentinel `Proxy-Authorization`), deployment modes, later phases, decision table row "Grant representation". Research note 03 Q1 inferences, research note 02 Q1.
+
+## Build log
+
+- 2026-10-03: the cross-host JWT is deferred by [[ADR-044 Grant JWT Deferred Until a Remote Mode Exists]] until a mode runs the sandbox and the broker on different hosts (CI as built runs both on the runner).
