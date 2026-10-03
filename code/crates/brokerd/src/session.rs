@@ -99,7 +99,8 @@ pub struct Running {
     recorder: Arc<SqliteRecorder>,
     /// The session's attribution, copied onto its stop row (I9).
     attribution: AuditEvent,
-    /// The session's kernel-denial collector (ADR-041; macOS).
+    /// The session's kernel-denial collector (ADR-041 on macOS; ADR-043,
+    /// seccomp, on Linux).
     collector: Option<crate::kernel_denials::Collector>,
 }
 

@@ -1529,7 +1529,8 @@
       "Sandbox Launcher",
       "Topology-Forced Egress",
       "Broker CLI and Daemon",
-      "Tech Stack"
+      "Tech Stack",
+      "ADR-043 Seccomp Denials Recorded via User Notification"
     ],
     "source_hints": "R Linux laptop row (seccomp list) and interfaces paragraph (seccomp blocks new AF_UNIX so the sandbox cannot reach ctl.sock); tech-stack row (seccompiler/libseccomp). N01 Q3 (srt static apply-seccomp x64/arm64 only; Codex in-process seccomp after TCP-UDS-TCP bridge; BPF_PROG_TYPE_CGROUP_SOCK_ADDR can rewrite destinations).",
     "aliases": [
@@ -2240,7 +2241,8 @@
       "I2 Fail-Closed Launch",
       "Two-Tier Isolation Design",
       "M0 Contained Run",
-      "Apple Virtualization Framework"
+      "Apple Virtualization Framework",
+      "ADR-043 Seccomp Denials Recorded via User Notification"
     ],
     "source_hints": "R component diagram (Launcher: SandboxBackend {macos-seatbelt | linux-native | container | vm}), SandboxBackend trait and SandboxSpec, request-life step 2, macOS and Linux platform rows, repository layout launcher/backends. N05 section 3.2 launcher backends and FS guard (Cedar File resources compile to Seatbelt and Landlock; default deny-read and deny-write lists).",
     "aliases": [
@@ -4612,7 +4614,7 @@
     "title": "ADR-041 Kernel Denials on the Audit Record",
     "type": "decision",
     "section": "decisions",
-    "summary": "On macOS every Seatbelt deny rule carries the tag `broker:<session>`; brokerd streams the kernel's own reports (pid 0, Sandbox.kext) from the unified log and writes one attributed `kernel.denied` row (reason `sandbox_denied`) per process, operation and target, capped at 500 per session; the shim's launch checks are recorded and flagged. A record, not a control. Linux Landlock and seccomp denials remain unrecorded (residual).",
+    "summary": "On macOS every Seatbelt deny rule carries the tag `broker:<session>`; brokerd streams the kernel's own reports (pid 0, Sandbox.kext) from the unified log and writes one attributed `kernel.denied` row (reason `sandbox_denied`) per process, operation and target, capped at 500 per session; the shim's launch checks are recorded and flagged. A record, not a control. Linux Landlock denials remain unrecorded (residual); Linux seccomp denials are recorded since ADR-043.",
     "links_to": [
       "I9 Hash-Chained Audit Outside the Sandbox",
       "Sandbox Launcher",
@@ -4620,7 +4622,8 @@
       "Conformance Probe Matrix",
       "ADR-028 M2 Plan Items Built Differently or Deferred",
       "ADR-023 OCSF and OTLP Export as Built",
-      "MOC Decisions"
+      "MOC Decisions",
+      "ADR-043 Seccomp Denials Recorded via User Notification"
     ],
     "source_hints": "Written during the M4 build (2026-09-30) from the kernel-denial collector and its tests.",
     "aliases": [
@@ -4648,5 +4651,33 @@
       "ADR-042"
     ],
     "sources": []
+  },
+  {
+    "file": "95-decisions/ADR-043 Seccomp Denials Recorded via User Notification.md",
+    "title": "ADR-043 Seccomp Denials Recorded via User Notification",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "On Linux the seccomp deny filter of ADR-018 returns SECCOMP_RET_USER_NOTIF (the same program, only the match return patched); the shim hands the listener to brokerd over an inherited socketpair end and closes both before exec; brokerd answers every notification -EPERM, never CONTINUE, and writes an attributed `kernel.denied` row (layer `seccomp`, syscall, plain register arguments). With the listener closed the kernel answers ENOSYS, so the shim's check fails and the launch is refused. Old kernels keep the EPERM filter, unrecorded.",
+    "links_to": [
+      "ADR-041 Kernel Denials on the Audit Record",
+      "ADR-018 seccomp Filter Shape for M0",
+      "seccomp-bpf",
+      "Sandbox Launcher",
+      "I2 Fail-Closed Launch",
+      "I9 Hash-Chained Audit Outside the Sandbox",
+      "Audit Recorder and Event Schema",
+      "Open Questions and Unverified Claims",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-10-01) from the seccomp user-notification recorder, its tests, seccomp_unotify(2), seccomp(2), the kernel's seccomp_filter documentation and kernel/seccomp.c.",
+    "aliases": [
+      "ADR-043"
+    ],
+    "sources": [
+      "https://man7.org/linux/man-pages/man2/seccomp_unotify.2.html",
+      "https://man7.org/linux/man-pages/man2/seccomp.2.html",
+      "https://docs.kernel.org/userspace-api/seccomp_filter.html",
+      "https://github.com/torvalds/linux/blob/master/kernel/seccomp.c"
+    ]
   }
 ]

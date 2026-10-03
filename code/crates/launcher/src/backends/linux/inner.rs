@@ -107,6 +107,12 @@ pub fn probe(b: &LinuxBackend) -> BackendReport {
         Ok(d) => layers.push(layer("seccomp", true, true, d)),
         Err(e) => layers.push(layer("seccomp", true, false, e)),
     }
+    // A record, not a control (ADR-043): without it the same syscalls fail
+    // with EPERM in the kernel and are not recorded.
+    match notify::available() {
+        Ok(d) => layers.push(layer("seccomp_notify", false, true, d)),
+        Err(e) => layers.push(layer("seccomp_notify", false, false, e)),
+    }
     layers.push(layer("no_new_privs", true, true, "prctl(PR_SET_NO_NEW_PRIVS)"));
     layers.push(layer(
         "landlock_fs",
@@ -185,9 +191,18 @@ pub fn launch(b: &LinuxBackend, spec: SandboxSpec) -> anyhow::Result<SandboxHand
             data_sock: data_sock.clone(),
             writable: spec.fs.writable.clone(),
             deny_read: spec.fs.deny_read.clone(),
+            seccomp_notify: true,
         }),
         faults: crate::injected_faults(),
     };
+    // The seccomp notify channel (ADR-043): one end becomes the shim's fd 4,
+    // the other is served before the shim runs, because the shim's own
+    // seccomp check already waits for brokerd's answer. Fault
+    // `seccomp_notify`: brokerd does not take the listener (the launch must
+    // then be refused).
+    let (ours, theirs) = notify::channel()?;
+    let take = !shim_spec.faults.iter().any(|f| f == "seccomp_notify");
+    let feed = notify::spawn_feed(ours, Duration::from_secs(20), take);
     let encoded = shim_spec.encode();
     let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
     let argv = args(&BwrapInputs {
@@ -202,13 +217,14 @@ pub fn launch(b: &LinuxBackend, spec: SandboxSpec) -> anyhow::Result<SandboxHand
     });
     let mut cmd = Command::new(&bwrap);
     cmd.args(&argv).env_clear().envs(&spec.env).current_dir("/");
-    match spawn_with_status(cmd, spec.stdio, Duration::from_secs(15)) {
+    match spawn_with_status(cmd, spec.stdio, Some(theirs), Duration::from_secs(15)) {
         Ok((child, status)) => {
             let mut verified = report.layers;
             verified.extend(status.layers);
-            Ok(SandboxHandle { pid: child.id(), child, verified, placeholders })
+            Ok(SandboxHandle { pid: child.id(), child, verified, placeholders, seccomp: Some(feed) })
         }
         Err(e) => {
+            drop(feed);
             for p in &placeholders {
                 let _ = std::fs::remove_dir(p);
             }
@@ -221,7 +237,9 @@ pub fn launch(b: &LinuxBackend, spec: SandboxSpec) -> anyhow::Result<SandboxHand
 // Inside the sandbox (called by the shim)
 // ---------------------------------------------------------------------------
 
-pub fn apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Result<()> {
+/// Returns the descriptors that must be closed when the agent is exec'd
+/// (the seccomp listener and its channel), for the shim's last check.
+pub fn apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Result<Vec<i32>> {
     // 1. No new privileges: setuid binaries cannot regain what we drop.
     // SAFETY: plain prctl.
     if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
@@ -239,7 +257,9 @@ pub fn apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Result<()>
     landlock_apply(l, layers)?;
 
     // 4. seccomp, last: after it, no new AF_UNIX sockets, no ptrace, no bpf...
-    seccomp::apply()?;
+    //    The deny filter is installed last of the filters and, when the
+    //    kernel can, with a listener (ADR-043).
+    let installed = seccomp::apply(l.seccomp_notify)?;
     layers.push(layer(
         "seccomp",
         true,
@@ -247,7 +267,13 @@ pub fn apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Result<()>
         "AF_UNIX/raw/packet sockets, ptrace, bpf, keyctl, mount, namespaces, io_uring denied",
     ));
 
-    // 5. Verify the seccomp layer from inside.
+    // 5. Hand the listener to brokerd before any notified syscall (the shim
+    //    would otherwise wait on itself), then close it and the channel.
+    let closed = notify::hand_over(installed, l.seccomp_notify, layers)?;
+
+    // 6. Verify the seccomp layer from inside. With a listener this is a
+    //    round trip through brokerd, which answers EPERM; ENOSYS means
+    //    brokerd did not take the listener, and the launch is refused.
     // SAFETY: socket(2) with constant arguments.
     let fd = unsafe { libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0) };
     if fd >= 0 {
@@ -257,11 +283,16 @@ pub fn apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Result<()>
     }
     let errno = std::io::Error::last_os_error().raw_os_error();
     if errno != Some(libc::EPERM) {
-        layers.push(layer("verify_seccomp", true, false, format!("socket(AF_UNIX) errno {errno:?}")));
+        let detail = if errno == Some(libc::ENOSYS) {
+            "socket(AF_UNIX) = ENOSYS: brokerd did not answer the seccomp listener".to_string()
+        } else {
+            format!("socket(AF_UNIX) errno {errno:?}")
+        };
+        layers.push(layer("verify_seccomp", true, false, detail));
         anyhow::bail!("socket(AF_UNIX) failed with an unexpected errno");
     }
     layers.push(layer("verify_seccomp", true, true, "socket(AF_UNIX) = EPERM"));
-    Ok(())
+    Ok(closed)
 }
 
 fn landlock_apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Result<()> {
@@ -342,146 +373,6 @@ fn landlock_apply(l: &LinuxShim, layers: &mut Vec<LayerStatus>) -> anyhow::Resul
 }
 
 mod bridge;
-
-pub mod seccomp {
-    //! The seccomp filters (see the seccomp-bpf note and ADR-016).
-    use seccompiler::{
-        BpfProgram, SeccompAction, SeccompCmpArgLen as Len, SeccompCmpOp as Op, SeccompCondition as Cond,
-        SeccompFilter, SeccompRule, TargetArch,
-    };
-    use std::collections::BTreeMap;
-
-    fn arch() -> anyhow::Result<TargetArch> {
-        Ok(std::env::consts::ARCH.try_into()?)
-    }
-
-    fn eq(arg: u8, v: u64) -> Cond {
-        Cond::new(arg, Len::Dword, Op::Eq, v).expect("valid condition")
-    }
-
-    fn bits(arg: u8, mask: u64) -> Cond {
-        Cond::new(arg, Len::Qword, Op::MaskedEq(mask), mask).expect("valid condition")
-    }
-
-    /// Syscalls denied outright with EPERM.
-    pub fn denied_syscalls() -> Vec<i64> {
-        vec![
-            libc::SYS_ptrace,
-            libc::SYS_process_vm_readv,
-            libc::SYS_process_vm_writev,
-            libc::SYS_bpf,
-            libc::SYS_perf_event_open,
-            libc::SYS_keyctl,
-            libc::SYS_add_key,
-            libc::SYS_request_key,
-            libc::SYS_mount,
-            libc::SYS_umount2,
-            libc::SYS_pivot_root,
-            libc::SYS_unshare,
-            libc::SYS_setns,
-            libc::SYS_io_uring_setup,
-            libc::SYS_io_uring_enter,
-            libc::SYS_io_uring_register,
-            libc::SYS_open_by_handle_at,
-            libc::SYS_kexec_load,
-            libc::SYS_init_module,
-            libc::SYS_finit_module,
-            libc::SYS_delete_module,
-            libc::SYS_userfaultfd,
-            libc::SYS_fanotify_init,
-        ]
-    }
-
-    pub fn build() -> anyhow::Result<Vec<BpfProgram>> {
-        let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
-        for s in denied_syscalls() {
-            rules.insert(s, vec![]);
-        }
-        // socket(): no new AF_UNIX (ctl.sock, docker.sock and every other
-        // host socket stay unreachable), no packet sockets, no raw sockets.
-        // socketpair(AF_UNIX) stays allowed: an anonymous pair cannot reach
-        // a named socket, and Node's child_process needs it (ADR-016).
-        let sock_type_mask = 0xf;
-        rules.insert(
-            libc::SYS_socket,
-            vec![
-                SeccompRule::new(vec![eq(0, libc::AF_UNIX as u64)])?,
-                SeccompRule::new(vec![eq(0, libc::AF_PACKET as u64)])?,
-                SeccompRule::new(vec![
-                    eq(0, libc::AF_INET as u64),
-                    Cond::new(1, Len::Dword, Op::MaskedEq(sock_type_mask), libc::SOCK_RAW as u64)?,
-                ])?,
-                SeccompRule::new(vec![
-                    eq(0, libc::AF_INET6 as u64),
-                    Cond::new(1, Len::Dword, Op::MaskedEq(sock_type_mask), libc::SOCK_RAW as u64)?,
-                ])?,
-            ],
-        );
-        // No new namespaces via clone flags.
-        let ns = [
-            libc::CLONE_NEWUSER,
-            libc::CLONE_NEWNS,
-            libc::CLONE_NEWNET,
-            libc::CLONE_NEWPID,
-            libc::CLONE_NEWIPC,
-            libc::CLONE_NEWUTS,
-            libc::CLONE_NEWCGROUP,
-        ];
-        rules.insert(
-            libc::SYS_clone,
-            ns.iter().map(|f| SeccompRule::new(vec![bits(0, *f as u64)])).collect::<Result<_, _>>()?,
-        );
-        // Terminal input injection into the user's shell. libc types the
-        // request numbers `c_ulong` on glibc and `c_int` on musl; the kernel
-        // reads an `unsigned int` and `eq` compares 32 bits, so both go
-        // through `u32` unchanged.
-        rules.insert(
-            libc::SYS_ioctl,
-            vec![
-                SeccompRule::new(vec![eq(1, u64::from(libc::TIOCSTI as u32))])?,
-                SeccompRule::new(vec![eq(1, u64::from(libc::TIOCLINUX as u32))])?,
-            ],
-        );
-        let eperm: BpfProgram =
-            SeccompFilter::new(rules, SeccompAction::Allow, SeccompAction::Errno(libc::EPERM as u32), arch()?)?
-                .try_into()?;
-        // clone3 passes flags in memory the filter cannot read: ENOSYS makes
-        // libc fall back to clone(), which the filter above can inspect.
-        let mut c3: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
-        c3.insert(libc::SYS_clone3, vec![]);
-        let enosys: BpfProgram =
-            SeccompFilter::new(c3, SeccompAction::Allow, SeccompAction::Errno(libc::ENOSYS as u32), arch()?)?
-                .try_into()?;
-        #[allow(unused_mut)]
-        let mut progs = vec![eperm, enosys];
-        #[cfg(target_arch = "x86_64")]
-        progs.push(x32_filter());
-        Ok(progs)
-    }
-
-    /// x86_64 only: refuse the x32 ABI (syscall numbers with bit 30 set),
-    /// which would otherwise bypass rules keyed on x86_64 numbers.
-    #[cfg(target_arch = "x86_64")]
-    fn x32_filter() -> BpfProgram {
-        use seccompiler::sock_filter;
-        const BPF_LD_W_ABS: u16 = 0x20;
-        const BPF_JGE_K: u16 = 0x35;
-        const BPF_RET_K: u16 = 0x06;
-        const X32_BIT: u32 = 0x4000_0000;
-        const RET_ALLOW: u32 = 0x7fff_0000;
-        let ret_errno = 0x0005_0000 | libc::ENOSYS as u32;
-        vec![
-            sock_filter { code: BPF_LD_W_ABS, jt: 0, jf: 0, k: 0 }, // seccomp_data.nr
-            sock_filter { code: BPF_JGE_K, jt: 0, jf: 1, k: X32_BIT },
-            sock_filter { code: BPF_RET_K, jt: 0, jf: 0, k: ret_errno },
-            sock_filter { code: BPF_RET_K, jt: 0, jf: 0, k: RET_ALLOW },
-        ]
-    }
-
-    pub fn apply() -> anyhow::Result<()> {
-        for p in build()? {
-            seccompiler::apply_filter(&p)?;
-        }
-        Ok(())
-    }
-}
+mod notify;
+pub mod seccomp;
+mod syscalls;

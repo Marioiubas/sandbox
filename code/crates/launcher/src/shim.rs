@@ -9,6 +9,11 @@
 //!
 //! The spec travels as base64url JSON in argv. It contains paths and ports
 //! only, never a secret (I1).
+//!
+//! Linux (ADR-043): the seccomp deny filter returns `USER_NOTIF`; the shim
+//! sends its listener to brokerd over [`NOTIFY_FD`] (a socket connected
+//! before seccomp exists), closes both, and refuses to exec the agent unless
+//! both are verifiably closed. The agent never holds the listener.
 
 use crate::LayerStatus;
 use base64::Engine;
@@ -21,6 +26,8 @@ use std::path::PathBuf;
 pub const SHIM_EXIT_REFUSED: i32 = 125;
 /// The status pipe's fd number inside the sandbox.
 pub const STATUS_FD: i32 = 3;
+/// Linux: the shim's end of the seccomp notify channel to brokerd (ADR-043).
+pub const NOTIFY_FD: i32 = 4;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Verify {
@@ -38,6 +45,9 @@ pub struct LinuxShim {
     pub data_sock: PathBuf,
     pub writable: Vec<PathBuf>,
     pub deny_read: Vec<PathBuf>,
+    /// [`NOTIFY_FD`] is open: hand the seccomp listener to brokerd (ADR-043).
+    #[serde(default)]
+    pub seccomp_notify: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -142,11 +152,16 @@ pub fn main_with_args(args: Vec<OsString>) -> ! {
         }
     }
 
+    // Descriptors that must be closed before the agent runs (Linux: the
+    // seccomp listener and the channel it went to brokerd over).
+    #[allow(unused_mut)]
+    let mut closed: Vec<i32> = Vec::new();
     #[cfg(target_os = "linux")]
-    if let Some(l) = &spec.linux
-        && let Err(e) = crate::backends::linux::inner::apply(l, &mut layers)
-    {
-        refuse(layers, format!("{e:#}"));
+    if let Some(l) = &spec.linux {
+        match crate::backends::linux::inner::apply(l, &mut layers) {
+            Ok(c) => closed = c,
+            Err(e) => refuse(layers, format!("{e:#}")),
+        }
     }
     #[cfg(not(target_os = "linux"))]
     if spec.linux.is_some() {
@@ -156,8 +171,20 @@ pub fn main_with_args(args: Vec<OsString>) -> ! {
     if let Err(e) = verify(&spec.verify, &mut layers) {
         refuse(layers, format!("{e:#}"));
     }
+    // Checked again last, after every check above has opened and closed its
+    // own descriptors: the agent inherits whatever is open at exec.
+    if let Some(fd) = closed.iter().find(|fd| !fd_closed(**fd)) {
+        refuse(layers, format!("fd {fd} (the seccomp listener or its channel) is still open before exec"));
+    }
     write_status(&ShimStatus { ok: true, layers, error: None });
     exec(&argv)
+}
+
+/// `fd` is not open in this process: `fcntl(F_GETFD)` fails with EBADF.
+pub fn fd_closed(fd: i32) -> bool {
+    // SAFETY: F_GETFD only reads the descriptor's flags.
+    let r = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    r == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EBADF)
 }
 
 fn exec(argv: &[OsString]) -> ! {
@@ -251,6 +278,31 @@ mod tests {
         let v = Verify { deny_create_in: vec![d.path().to_path_buf()], ..Default::default() };
         assert!(verify(&v, &mut layers).is_err());
         assert!(std::fs::read_dir(d.path()).unwrap().count() == 1, "probe file removed");
+    }
+
+    #[test]
+    fn fd_closed_tells_open_from_closed() {
+        use std::os::fd::AsRawFd;
+        let f = tempfile::tempfile().unwrap();
+        // Far above what other test threads open meanwhile (they get the
+        // lowest free numbers), so the closed number is not reused at once.
+        // SAFETY: duplicating a descriptor we own.
+        let raw = unsafe { libc::fcntl(f.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 700) };
+        assert!(raw >= 700, "{}", std::io::Error::last_os_error());
+        assert!(!fd_closed(raw), "an open descriptor");
+        // SAFETY: we own raw.
+        unsafe { libc::close(raw) };
+        assert!(fd_closed(raw), "a closed descriptor");
+        assert!(fd_closed(-1));
+    }
+
+    #[test]
+    fn older_specs_decode_without_the_notify_flag() {
+        let json = br#"{"v":1,"verify":{"deny_read":[],"deny_create_in":[],"forbidden_connect":[]},
+            "linux":{"bridge_port":3128,"data_sock":"/s","writable":[],"deny_read":[]}}"#;
+        let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(json);
+        let spec = ShimSpec::decode(&b64).unwrap();
+        assert!(!spec.linux.unwrap().seccomp_notify, "no channel unless the launcher opened one");
     }
 
     proptest::proptest! {

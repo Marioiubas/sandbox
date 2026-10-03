@@ -98,9 +98,10 @@ pub mod unsupported {
 
 pub(crate) mod spawn {
     //! Spawn a sandbox command with the agent's stdio, a fresh session, only
-    //! fds 0-3 open, and wait for the shim's status line on fd 3.
+    //! fds 0-3 open (0-4 with a seccomp notify channel), and wait for the
+    //! shim's status line on fd 3.
 
-    use crate::shim::{STATUS_FD, ShimStatus};
+    use crate::shim::{NOTIFY_FD, STATUS_FD, ShimStatus};
     use std::io::Read;
     use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
     use std::os::unix::process::CommandExt;
@@ -137,13 +138,31 @@ pub(crate) mod spawn {
         n.min(65_536) as libc::c_int
     }
 
+    /// Move a descriptor above the stdio/status/notify range (fd >= 10), so
+    /// the dup2 onto fds 3 and 4 in the child never clobbers it.
+    pub fn fd_high(fd: OwnedFd) -> std::io::Result<OwnedFd> {
+        // SAFETY: fd is a valid descriptor we own.
+        let hi = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 10) };
+        if hi < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: hi is a fresh descriptor we own.
+        Ok(unsafe { OwnedFd::from_raw_fd(hi) })
+    }
+
+    /// `notify`: the sandbox's end of the seccomp notify channel (ADR-043),
+    /// placed at [`NOTIFY_FD`]; the shim sends its listener over it and
+    /// closes it before the agent runs.
     pub fn spawn_with_status(
         mut cmd: Command,
         stdio: [OwnedFd; 3],
+        notify: Option<OwnedFd>,
         timeout: Duration,
     ) -> anyhow::Result<(Child, ShimStatus)> {
         let (r, w) = pipe_high()?;
         let wfd = w.as_raw_fd();
+        let notify = notify.map(fd_high).transpose()?;
+        let nfd = notify.as_ref().map(|n| n.as_raw_fd());
         let limit = max_fd();
         let [i, o, e] = stdio;
         cmd.stdin(Stdio::from(i)).stdout(Stdio::from(o)).stderr(Stdio::from(e));
@@ -156,8 +175,15 @@ pub(crate) mod spawn {
                 if libc::dup2(wfd, STATUS_FD) < 0 {
                     return Err(std::io::Error::last_os_error());
                 }
+                let mut first_closed = STATUS_FD + 1;
+                if let Some(n) = nfd {
+                    if libc::dup2(n, NOTIFY_FD) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    first_closed = NOTIFY_FD + 1;
+                }
                 // Nothing of brokerd's (sockets, audit DB) crosses into the sandbox.
-                for fd in (STATUS_FD + 1)..limit {
+                for fd in first_closed..limit {
                     libc::close(fd);
                 }
                 Ok(())
@@ -165,6 +191,9 @@ pub(crate) mod spawn {
         }
         let mut child = cmd.spawn()?;
         drop(w);
+        // Only the sandbox holds its end now: when the shim closes it,
+        // brokerd's end sees EOF.
+        drop(notify);
         let status = read_status(r, timeout);
         match status {
             Some(st) if st.ok => Ok((child, st)),
