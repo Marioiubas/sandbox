@@ -4700,5 +4700,29 @@
       "ADR-044"
     ],
     "sources": []
+  },
+  {
+    "file": "95-decisions/ADR-045 No Seccomp Listeners or Datagram Socket Pairs in the Sandbox.md",
+    "title": "ADR-045 No Seccomp Listeners or Datagram Socket Pairs in the Sandbox",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Inside a Linux session seccomp(SET_MODE_FILTER) with NEW_LISTENER and socketpair(AF_UNIX, SOCK_DGRAM) are refused with ERRNO by a filter installed after the shim's own listener: no agent filter can take over the deny filter's notifications, and no datagram reaches named host sockets.",
+    "links_to": [
+      "ADR-043 Seccomp Denials Recorded via User Notification",
+      "ADR-018 seccomp Filter Shape for M0",
+      "seccomp-bpf",
+      "Sandbox Launcher",
+      "I2 Fail-Closed Launch",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-10-03) from an adversarial review of ADR-043, seccomp(2), seccomp_unotify(2) and unix(7).",
+    "aliases": [
+      "ADR-045"
+    ],
+    "sources": [
+      "https://man7.org/linux/man-pages/man2/seccomp.2.html",
+      "https://man7.org/linux/man-pages/man2/seccomp_unotify.2.html",
+      "https://man7.org/linux/man-pages/man7/unix.7.html"
+    ]
   }
 ]

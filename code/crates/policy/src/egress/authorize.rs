@@ -100,15 +100,6 @@ impl EgressPolicy {
         self.authorize_l7_approving(adm, actions, &keys).result.is_ok().then_some(keys)
     }
 
-    /// The approval keys of `actions` that this session holds.
-    pub fn approvals_used(&self, adm: &Admission, actions: &[Action]) -> Vec<String> {
-        actions
-            .iter()
-            .map(|a| crate::approvals::approval_key(&adm.host, adm.port, a))
-            .filter(|k| self.approvals().is_approved(k))
-            .collect()
-    }
-
     /// As [`authorize_l7`](Self::authorize_l7), also treating `extra` keys
     /// as approved (the "would approval help" check).
     fn authorize_l7_approving(&self, adm: &Admission, actions: &[Action], extra: &[String]) -> L7Decision {
@@ -121,10 +112,16 @@ impl EgressPolicy {
         let mut would: Option<Reason> = None;
         let mut full: Option<BTreeSet<usize>> = None;
         let mut determining = Vec::new();
+        // Approvals held by the session that this decision relied on.
+        let mut relied = Vec::new();
         let adapted = actions.iter().any(|a| matches!(a, Action::GitHub { .. } | Action::S3 { .. }));
         for (k, a) in actions.iter().enumerate() {
             let key = crate::approvals::approval_key(&adm.host, adm.port, a);
-            let approved = extra.contains(&key) || self.approvals().is_approved(&key);
+            let held = self.approvals().is_approved(&key);
+            let approved = extra.contains(&key) || held;
+            if held {
+                relied.push(key.clone());
+            }
             let (name, res, ents, ctx) = self.action_request(adm, a, adapted, approved);
             let (v, shadow) = self.eval(&name, &res, ents, ctx);
             let explain = || explained.actions.get(k).and_then(|(_, r)| r.err()).unwrap_or(Reason::PolicyDenied);
@@ -149,7 +146,14 @@ impl EgressPolicy {
         determining.dedup();
         if let Err(reason) = overall {
             let ids = if determining.is_empty() { explained.policy_ids } else { determining };
-            return L7Decision { result: Err(reason), policy_ids: ids, binding: None, actions: per, would_deny: would };
+            return L7Decision {
+                result: Err(reason),
+                policy_ids: ids,
+                binding: None,
+                actions: per,
+                would_deny: would,
+                approvals: vec![],
+            };
         }
         // The credential of the grant(s) that allowed every action.
         let mut creds: Vec<(usize, Arc<CredentialDef>)> = full
@@ -171,6 +175,7 @@ impl EgressPolicy {
                         binding: None,
                         actions: per,
                         would_deny: would,
+                        approvals: vec![],
                     };
                 }
             },
@@ -181,10 +186,20 @@ impl EgressPolicy {
                     binding: None,
                     actions: per,
                     would_deny: would,
+                    approvals: vec![],
                 };
             }
         };
-        L7Decision { result: Ok(()), policy_ids: determining, binding, actions: per, would_deny: would }
+        relied.sort();
+        relied.dedup();
+        L7Decision {
+            result: Ok(()),
+            policy_ids: determining,
+            binding,
+            actions: per,
+            would_deny: would,
+            approvals: relied,
+        }
     }
 
     /// The `credential.use` request (base set only; the ceiling forbid

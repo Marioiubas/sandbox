@@ -168,10 +168,44 @@ pub fn enosys_filters() -> anyhow::Result<Vec<BpfProgram>> {
     Ok(progs)
 }
 
-/// ADR-018's filter set (the deny filter with EPERM, clone3, x32).
+/// Refusals that must win over every other filter, ours or the agent's,
+/// so they are `ERRNO(EPERM)` and never left to a listener (ERRNO outranks
+/// USER_NOTIF; ADR-045):
+/// - `seccomp(SECCOMP_SET_MODE_FILTER)` with `NEW_LISTENER`: no process in
+///   the sandbox creates a listener. Between filters of equal action the
+///   newest wins, so an agent's own USER_NOTIF filter with a listener would
+///   take the deny filter's notifications (and could answer CONTINUE) once
+///   brokerd's listener is gone; the kernel's one-listener rule holds only
+///   while that listener is open.
+/// - `socketpair(AF_UNIX, SOCK_DGRAM)`: a datagram socket from a pair can
+///   still `sendto()` any named socket the read-only root shows (journald's,
+///   syslog's). Stream pairs stay allowed (ADR-018).
+pub fn fixed_filter() -> anyhow::Result<BpfProgram> {
+    let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
+    rules.insert(
+        libc::SYS_seccomp,
+        vec![SeccompRule::new(vec![
+            eq(0, u64::from(libc::SECCOMP_SET_MODE_FILTER)),
+            bits(1, u64::from(libc::SECCOMP_FILTER_FLAG_NEW_LISTENER as u32)),
+        ])?],
+    );
+    rules.insert(
+        libc::SYS_socketpair,
+        vec![SeccompRule::new(vec![
+            eq(0, libc::AF_UNIX as u64),
+            Cond::new(1, Len::Dword, Op::MaskedEq(0xf), libc::SOCK_DGRAM as u64)?,
+        ])?],
+    );
+    Ok(SeccompFilter::new(rules, SeccompAction::Allow, SeccompAction::Errno(libc::EPERM as u32), arch()?)?
+        .try_into()?)
+}
+
+/// The filter set without a listener: ADR-018's (the deny filter with
+/// EPERM, clone3, x32) and the fixed refusals of ADR-045.
 pub fn build() -> anyhow::Result<Vec<BpfProgram>> {
     let mut progs = vec![eperm_filter()?];
     progs.extend(enosys_filters()?);
+    progs.push(fixed_filter()?);
     Ok(progs)
 }
 
@@ -208,21 +242,27 @@ pub enum Installed {
 pub fn apply(notify: bool) -> anyhow::Result<Installed> {
     let enosys = enosys_filters()?;
     let deny_notify = if notify { Some(notify_filter()?) } else { None };
-    Ok(install(&enosys, deny_notify.as_ref(), &eperm_filter()?)?)
+    Ok(install(&enosys, deny_notify.as_ref(), &eperm_filter()?, &fixed_filter()?)?)
 }
 
-/// Install `enosys`, then the deny filter last: `notify` with a listener
-/// if given and the kernel agrees, else `eperm`. Order matters for the shim
-/// only, not for any verdict (the kernel takes the most restrictive action
-/// whatever the order): once the deny filter has a listener, a notified
-/// syscall by the shim would wait for an answer that only comes after the
-/// shim has handed the listener over, so nothing is installed after it and
-/// the shim's next calls are `sendmsg` and `close`. If the kernel refuses a
+/// Install `enosys`, then the deny filter: `notify` with a listener if
+/// given and the kernel agrees, else `eperm`; then `fixed`, which refuses
+/// any further listener and so must come after ours. Order matters for the
+/// shim only, not for any verdict (the kernel takes the most restrictive
+/// action whatever the order): once the deny filter has a listener, a
+/// notified syscall by the shim would wait for an answer that only comes
+/// after the shim has handed the listener over, so the shim's next calls
+/// are the `fixed` install (not a notified syscall), `sendmsg` and `close`. If the kernel refuses a
 /// listener (Linux < 5.0, or another listener already on this filter chain:
 /// EBUSY), the same deny filter goes in with EPERM instead: no gap, no
 /// record, and the layer says so. No allocation on success (tests run it
 /// between fork and exit).
-pub fn install(enosys: &[BpfProgram], notify: Option<&BpfProgram>, eperm: &BpfProgram) -> io::Result<Installed> {
+pub fn install(
+    enosys: &[BpfProgram],
+    notify: Option<&BpfProgram>,
+    eperm: &BpfProgram,
+    fixed: &BpfProgram,
+) -> io::Result<Installed> {
     let to_io = |e: seccompiler::Error| match e {
         seccompiler::Error::Seccomp(e) | seccompiler::Error::Prctl(e) => e,
         other => io::Error::other(other),
@@ -232,12 +272,16 @@ pub fn install(enosys: &[BpfProgram], notify: Option<&BpfProgram>, eperm: &BpfPr
     }
     let why = match notify {
         Some(n) => match super::notify::install_listener(n) {
-            Ok(fd) => return Ok(Installed::Notify(fd)),
+            Ok(fd) => {
+                seccompiler::apply_filter(fixed).map_err(to_io)?;
+                return Ok(Installed::Notify(fd));
+            }
             Err(e) => Some(e),
         },
         None => None,
     };
     seccompiler::apply_filter(eperm).map_err(to_io)?;
+    seccompiler::apply_filter(fixed).map_err(to_io)?;
     Ok(Installed::Errno(why))
 }
 

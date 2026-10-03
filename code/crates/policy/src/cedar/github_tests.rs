@@ -296,12 +296,16 @@ fn a_human_approval_lifts_exactly_one_action_once() {
     assert_eq!(p.approvable(&adm, &evil, &dec), None);
     // Approved once: this action passes, another does not, and it is used up.
     p.approvals().grant(keys[0].clone(), Scope::Once);
-    assert_eq!(p.authorize_l7(&adm, &pr(public)).result, Ok(()));
+    let first = p.authorize_l7(&adm, &pr(public));
+    assert_eq!(first.result, Ok(()));
+    assert_eq!(first.approvals, keys, "the decision names the approval it relied on");
     let other = pr("github.com/acme-public/other");
     assert_eq!(p.authorize_l7(&adm, &other).result, Err(Reason::RuleOfTwo));
-    let used = p.approvals_used(&adm, &pr(public));
-    assert_eq!(used, keys);
-    p.approvals().consume(&used);
+    // Two requests decided before either was sent: only one claim succeeds.
+    let second = p.authorize_l7(&adm, &pr(public));
+    assert_eq!(second.result, Ok(()));
+    assert!(p.approvals().claim(&first.approvals));
+    assert!(!p.approvals().claim(&second.approvals), "a single-use approval allows one request");
     assert_eq!(p.authorize_l7(&adm, &pr(public)).result, Err(Reason::RuleOfTwo));
     // For the session: it stays.
     p.approvals().grant(keys[0].clone(), Scope::Session);

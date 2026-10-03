@@ -404,3 +404,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Merged:** `packaging` ([[ADR-042 Release Packaging as Built]], CI runs 36910376549, 36912092416, 36913776650) and `seccomp-notify` ([[ADR-043 Seccomp Denials Recorded via User Notification]], CI run 36915716968, PR #1) into main; main's musl `TIOCSTI` fix carried into the moved seccomp module.
 - **Decided:** [[ADR-044 Grant JWT Deferred Until a Remote Mode Exists]]: no shipped mode runs sandbox and broker on different hosts, so the Txn-Token grant JWT waits for the first one. M3 now waits only on D2 (Okta and Entra tenants) and D6 against a real AWS account.
 - **Fixed (test race):** `m3_approvals` read the log between the approval row and the deny row (ubuntu-22.04, run 36912544104).
+
+### 2026-10-03: adversarial review of the week's enforcement changes
+
+- **Reviewed** by two agents: seccomp user notification (ADR-043), and the response filter hold-back, MCP approvals and macOS scratch isolation. Sound as claimed: the notify filter matches exactly what the EPERM filter matched; brokerd only answers -EPERM; the listener never reaches the agent; the minimal hold-back never releases a byte of a secret for any needle set; MCP argument binding; scratch isolation against case folding, symlinks, hard links and `/var` aliases (probed with Seatbelt).
+- **Fixed (I1):** an upstream's reason phrase reached the sandbox unscanned (hyper preserves it); now scanned and dropped.
+- **Fixed (I2):** with the deny filter at `USER_NOTIF`, an agent's own listener could take over its notifications once brokerd's closed; agents can no longer create listeners, and datagram socket pairs (which could reach journald under the read-only root) are refused ([[ADR-045 No Seccomp Listeners or Datagram Socket Pairs in the Sandbox]]).
+- **Fixed (approvals):** a single-use approval could allow several concurrent requests; now claimed atomically before the allow row (`approval_used`). `broker approve` shows every argument; terminal controls in agent text are escaped.
+- **Tests:** the reviewers' four failing tests now pass; new claim and precedence tests.
+- **Tests:** full suite 384 passed, 0 failed (macOS 26); launcher linted for Linux. CI on the merges (runs 37121233421, 37121339010, 37121396028): every test job passed on all four runners; `real-mcp` failed with GitHub's `401 Bad credentials`: the `BROKER_GH_MCP_TOKEN` secret has expired (owner action: a new fine-grained token).

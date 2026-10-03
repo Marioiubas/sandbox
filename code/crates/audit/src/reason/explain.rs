@@ -93,6 +93,9 @@ impl Reason {
             }
             McpUnpinned => "the MCP server's tool manifest changed and it is no longer pinned",
             NeedsApproval => "this action needs an out-of-band approval",
+            ApprovalUsed => {
+                "the single-use approval this request relied on was already used by another request; the user must approve again"
+            }
             CeilingPasteSite => "paste sites are outside the org ceiling",
             CeilingTunnel => "tunnel services are outside the org ceiling",
             UpstreamConnectFailed => "the broker could not connect to the resolved address",

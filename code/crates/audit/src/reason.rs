@@ -165,6 +165,9 @@ pub enum Reason {
     McpUnpinned,
     /// The action needs an out-of-band approval (publish, merge).
     NeedsApproval,
+    /// A single-use approval the request relied on was used by another
+    /// request first (ADR-037): approved once means allowed once.
+    ApprovalUsed,
     /// The org ceiling forbids paste sites.
     CeilingPasteSite,
     /// The org ceiling forbids tunnel services.
@@ -264,6 +267,7 @@ impl Reason {
         Reason::PublicSinkAfterUntrustedInput,
         Reason::McpUnpinned,
         Reason::NeedsApproval,
+        Reason::ApprovalUsed,
         Reason::CeilingPasteSite,
         Reason::CeilingTunnel,
         Reason::UpstreamConnectFailed,
@@ -349,6 +353,7 @@ impl Reason {
             Reason::PublicSinkAfterUntrustedInput => "public_sink_after_untrusted_input",
             Reason::McpUnpinned => "mcp_unpinned",
             Reason::NeedsApproval => "needs_approval",
+            Reason::ApprovalUsed => "approval_used",
             Reason::CeilingPasteSite => "ceiling_paste_site",
             Reason::CeilingTunnel => "ceiling_tunnel",
             Reason::UpstreamConnectFailed => "upstream_connect_failed",
@@ -414,6 +419,7 @@ impl Reason {
             | PublicSinkAfterUntrustedInput
             | McpUnpinned
             | NeedsApproval
+            | ApprovalUsed
             | CeilingPasteSite
             | CeilingTunnel => "policy",
             UpstreamConnectFailed | UpstreamTls => "upstream",

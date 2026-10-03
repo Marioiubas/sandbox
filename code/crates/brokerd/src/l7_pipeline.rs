@@ -362,16 +362,18 @@ impl Conn {
         if let Some(p) = push.as_ref().and_then(|p| p.pack_note.clone()) {
             ev = ev.detail("pack", p);
         }
-        // Human approvals this request relies on (ADR-037); single-use ones
-        // are used up once the allow is on record.
-        let approved = self.ctx.policy.approvals_used(&self.adm, &actions);
-        if !approved.is_empty() {
-            ev = ev.detail("approvals_used", approved.clone());
+        // Human approvals the decision relied on (ADR-037), claimed at once:
+        // a single-use approval allows one request, not every request that
+        // was decided before it was used up.
+        if !self.ctx.policy.approvals().claim(&dec.approvals) {
+            return self.deny(&rid, Reason::ApprovalUsed, dec.policy_ids, &verbs, None, push.as_ref());
+        }
+        if !dec.approvals.is_empty() {
+            ev = ev.detail("approvals_used", dec.approvals.clone());
         }
         if self.ctx.recorder.append(&ev).is_err() {
             return self.deny(&rid, Reason::AuditUnavailable, dec.policy_ids, &verbs, None, push.as_ref());
         }
-        self.ctx.policy.approvals().consume(&approved);
         let logged_us = us(t0);
         self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
         let git_visibility = self.resolve_git_visibility(&actions, path.path()).await;
@@ -438,7 +440,7 @@ impl Conn {
         rparts.headers.remove("set-cookie2");
         rparts.headers.remove(http::header::ALT_SVC);
         let needles = Arc::new(needles);
-        if !needles.is_empty() && l7::filter::headers_contain(&rparts.headers, &needles) {
+        if respond::head_reflects(&mut rparts, &needles) {
             return self.cut_response(&rid, &verbs, status);
         }
         let coding = match l7::filter::coding(&rparts.headers) {

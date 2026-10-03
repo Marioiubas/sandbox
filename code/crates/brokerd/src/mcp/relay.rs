@@ -325,6 +325,11 @@ impl Relay<'_> {
             }
             Err((reason, _)) => (self.deny(Some(id), reason, verb, extra()), None),
             Ok((ids, used)) => {
+                // The approval this call relied on, claimed at once (a
+                // single-use approval allows one call).
+                if !self.ctx.policy.approvals().claim(used.as_slice()) {
+                    return (self.deny(Some(id), Reason::ApprovalUsed, verb, extra()), None);
+                }
                 // Write-ahead (I9): no row, no call.
                 let rid = RequestId::new();
                 let mut ev = self.event(&rid, verb.clone()).allow(ids);
@@ -336,9 +341,6 @@ impl Relay<'_> {
                 }
                 if self.ctx.recorder.append(&ev).is_err() {
                     return (self.deny(Some(id), Reason::AuditUnavailable, verb, vec![]), None);
-                }
-                if let Some(k) = used {
-                    self.ctx.policy.approvals().consume(&[k]);
                 }
                 self.ctx.stats.allowed.fetch_add(1, Ordering::Relaxed);
                 // What the server itself reads or writes raises these same

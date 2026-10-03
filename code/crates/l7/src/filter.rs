@@ -84,6 +84,11 @@ impl Scanner {
     }
 }
 
+/// Whether any needle appears in `hay`.
+pub fn bytes_contain(hay: &[u8], needles: &[Vec<u8>]) -> bool {
+    needles.iter().any(|n| contains(hay, n))
+}
+
 /// Whether any needle appears in any header value.
 pub fn headers_contain(h: &HeaderMap, needles: &[Vec<u8>]) -> bool {
     h.values().any(|v| needles.iter().any(|n| contains(v.as_bytes(), n)))

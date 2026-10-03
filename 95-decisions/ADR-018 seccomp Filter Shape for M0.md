@@ -7,9 +7,9 @@ tags: [sandbox/decisions, decision, topic/isolation, platform/linux, control/iso
 status: built
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-03
 summary: "Deny new AF_UNIX, packet and raw sockets, ptrace, bpf, keyctl, mount and namespace calls as proposed, and additionally io_uring, clone3 (ENOSYS), x32 syscalls and TIOCSTI; allow socketpair(AF_UNIX) and AF_NETLINK, which cannot reach anything outside an empty network namespace."
-related: ["[[seccomp-bpf]]", "[[Sandbox Launcher]]", "[[Broker CLI and Daemon]]", "[[I2 Fail-Closed Launch]]", "[[Topology-Forced Egress]]", "[[MOC Decisions]]"]
+related: ["[[seccomp-bpf]]", "[[Sandbox Launcher]]", "[[Broker CLI and Daemon]]", "[[I2 Fail-Closed Launch]]", "[[Topology-Forced Egress]]", "[[MOC Decisions]]", "[[ADR-045 No Seccomp Listeners or Datagram Socket Pairs in the Sandbox]]"]
 sources: []
 superseded_by:
 code: ["code/crates/launcher/src/backends/linux/inner.rs"]
@@ -60,3 +60,4 @@ Upholds [[I2 Fail-Closed Launch]] (seccomp is required and verified) and the TB3
 ## Build log
 
 - 2026-09-24: created and built; verified from inside the sandbox on Linux 6.12 (aarch64): `Seccomp: 2`, `socket(AF_UNIX)` = `EPERM`.
+- 2026-10-03: narrowed by [[ADR-045 No Seccomp Listeners or Datagram Socket Pairs in the Sandbox]]: `socketpair(AF_UNIX, SOCK_DGRAM)` and new seccomp listeners are refused (a datagram pair can `sendto()` named host sockets under the read-only root).

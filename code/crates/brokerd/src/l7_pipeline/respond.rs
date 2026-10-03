@@ -220,6 +220,18 @@ impl Drop for OutcomeBody {
     }
 }
 
+/// Whether the response head carries a needle: a header value, or a
+/// reason phrase hyper kept from the upstream (it would write it back out).
+/// Every extension is dropped either way, so nothing but status, headers and
+/// body reaches the sandbox (I1).
+pub(super) fn head_reflects(parts: &mut http::response::Parts, needles: &[Vec<u8>]) -> bool {
+    let reason = parts.extensions.remove::<hyper::ext::ReasonPhrase>();
+    parts.extensions = http::Extensions::new();
+    !needles.is_empty()
+        && (l7::filter::headers_contain(&parts.headers, needles)
+            || reason.is_some_and(|r| l7::filter::bytes_contain(r.as_bytes(), needles)))
+}
+
 #[cfg(test)]
 mod decode_tests {
     use super::*;

@@ -27,6 +27,9 @@ pub struct L7Decision {
     pub actions: Vec<(String, Result<(), Reason>)>,
     /// Record mode: the enforce-mode decision would have denied, and why.
     pub would_deny: Option<Reason>,
+    /// The session's approvals (keys) this decision treated as given; the
+    /// caller must claim them before acting on an allow (ADR-037).
+    pub approvals: Vec<String>,
 }
 
 /// The reference evaluation (M1 semantics) of `actions` against the grants
@@ -46,6 +49,7 @@ pub fn explain<'a>(grants: impl IntoIterator<Item = (&'a str, Option<&'a L7Rules
             binding: None,
             actions: vec![],
             would_deny: None,
+            approvals: vec![],
         };
     }
     let mut per_action = Vec::new();
@@ -81,6 +85,7 @@ pub fn explain<'a>(grants: impl IntoIterator<Item = (&'a str, Option<&'a L7Rules
             binding: None,
             actions: per_action,
             would_deny: None,
+            approvals: vec![],
         };
     }
     // Grants that allowed every action.
@@ -93,13 +98,21 @@ pub fn explain<'a>(grants: impl IntoIterator<Item = (&'a str, Option<&'a L7Rules
     creds.dedup_by(|a, b| a.1.id == b.1.id);
     let policy_ids: Vec<String> = allowing.iter().map(|s| s.to_string()).collect();
     match creds.len() {
-        0 => L7Decision { result: Ok(()), policy_ids, binding: None, actions: per_action, would_deny: None },
+        0 => L7Decision {
+            result: Ok(()),
+            policy_ids,
+            binding: None,
+            actions: per_action,
+            would_deny: None,
+            approvals: vec![],
+        },
         1 => L7Decision {
             result: Ok(()),
             policy_ids,
             binding: Some(AllowedBinding::new(creds[0].1.clone(), creds[0].0)),
             actions: per_action,
             would_deny: None,
+            approvals: vec![],
         },
         _ => L7Decision {
             result: Err(Reason::AmbiguousCredential),
@@ -107,6 +120,7 @@ pub fn explain<'a>(grants: impl IntoIterator<Item = (&'a str, Option<&'a L7Rules
             binding: None,
             actions: per_action,
             would_deny: None,
+            approvals: vec![],
         },
     }
 }

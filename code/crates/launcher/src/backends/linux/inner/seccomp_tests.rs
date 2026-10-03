@@ -93,8 +93,10 @@ struct Sets {
 fn sets() -> Sets {
     let mut notify = enosys_filters().unwrap();
     notify.push(notify_filter().unwrap());
+    notify.push(fixed_filter().unwrap());
     let mut fallback = enosys_filters().unwrap();
     fallback.push(eperm_filter().unwrap());
+    fallback.push(fixed_filter().unwrap());
     Sets { old: build().unwrap(), notify, fallback }
 }
 
@@ -225,6 +227,32 @@ fn controls_keep_their_action() {
         (libc::SYS_seccomp, [0; 6]),
     ];
     for (nr, args) in allowed {
+        for set in [&s.old, &s.notify, &s.fallback] {
+            assert_eq!(outcome(verdict(set, nr, &args), false), Outcome::Allowed, "{nr} {args:?}");
+        }
+    }
+    // ADR-045: no listener of the agent's own, no datagram socket pairs;
+    // refused with ERRNO in every set, so they outrank any USER_NOTIF.
+    let new_listener = u64::from(libc::SECCOMP_FILTER_FLAG_NEW_LISTENER as u32);
+    let filter_mode = u64::from(libc::SECCOMP_SET_MODE_FILTER);
+    let refused: Vec<(i64, [u64; 6])> = vec![
+        (libc::SYS_seccomp, [filter_mode, new_listener, 0, 0, 0, 0]),
+        (libc::SYS_seccomp, [filter_mode, new_listener | 1, 0, 0, 0, 0]),
+        (libc::SYS_seccomp, [filter_mode | (1 << 32), new_listener | (7 << 40), 0, 0, 0, 0]),
+        (libc::SYS_socketpair, [libc::AF_UNIX as u64, libc::SOCK_DGRAM as u64, 0, 0, 0, 0]),
+        (libc::SYS_socketpair, [libc::AF_UNIX as u64, (libc::SOCK_DGRAM | libc::SOCK_CLOEXEC) as u64, 0, 0, 0, 0]),
+    ];
+    for (nr, args) in refused {
+        for set in [&s.old, &s.notify, &s.fallback] {
+            for served in [true, false] {
+                assert_eq!(outcome(verdict(set, nr, &args), served), Outcome::Errno(libc::EPERM), "{nr} {args:?}");
+            }
+        }
+    }
+    for (nr, args) in [
+        (libc::SYS_seccomp, [filter_mode, 0, 0, 0, 0, 0]),
+        (libc::SYS_socketpair, [libc::AF_UNIX as u64, libc::SOCK_SEQPACKET as u64, 0, 0, 0, 0]),
+    ] {
         for set in [&s.old, &s.notify, &s.fallback] {
             assert_eq!(outcome(verdict(set, nr, &args), false), Outcome::Allowed, "{nr} {args:?}");
         }

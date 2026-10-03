@@ -48,6 +48,23 @@ impl Approvals {
         self.granted.lock().unwrap_or_else(|p| p.into_inner()).contains_key(key)
     }
 
+    /// Claim the approvals a decision relied on, atomically: true only if
+    /// every key is still held, and then the single-use ones are used up.
+    /// False, changing nothing, if another request used one first: a
+    /// single-use approval allows exactly one request.
+    pub fn claim(&self, keys: &[String]) -> bool {
+        let mut g = self.granted.lock().unwrap_or_else(|p| p.into_inner());
+        if !keys.iter().all(|k| g.contains_key(k)) {
+            return false;
+        }
+        for k in keys {
+            if g.get(k) == Some(&Scope::Once) {
+                g.remove(k);
+            }
+        }
+        true
+    }
+
     /// Use up single-use approvals among `keys` (called once a request that
     /// relied on them is allowed).
     pub fn consume(&self, keys: &[String]) {
@@ -104,6 +121,30 @@ mod tests {
         let api = canon_host(b"api.github.com").unwrap();
         let post = Action::Http { method: "POST".into(), path: "/x".into() };
         assert_eq!(approval_key(&api, 8443, &post), "http POST api.github.com:8443/x");
+    }
+
+    #[test]
+    fn a_claim_is_all_or_nothing_and_once_is_claimed_once() {
+        let a = Approvals::default();
+        a.grant("once".into(), Scope::Once);
+        a.grant("session".into(), Scope::Session);
+        assert!(a.claim(&[]), "nothing relied on, nothing to claim");
+        assert!(!a.claim(&["once".into(), "missing".into()]), "all or nothing");
+        assert!(a.is_approved("once"), "a failed claim changes nothing");
+        assert!(a.claim(&["once".into(), "session".into()]));
+        assert!(!a.claim(&["once".into()]), "used up");
+        assert!(a.claim(&["session".into()]) && a.claim(&["session".into()]), "kept for the session");
+        // Many threads, one single-use approval: exactly one claim succeeds.
+        a.grant("race".into(), Scope::Once);
+        let a = std::sync::Arc::new(a);
+        let wins: usize = (0..16)
+            .map(|_| {
+                let a = a.clone();
+                std::thread::spawn(move || a.claim(&["race".into()]) as usize)
+            })
+            .map(|h| h.join().unwrap())
+            .sum();
+        assert_eq!(wins, 1);
     }
 
     #[test]

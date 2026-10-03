@@ -8,7 +8,7 @@
 
 use super::*;
 use crate::backends::linux::inner::seccomp::{
-    CLONE_NS_FLAGS, Installed, denied_syscalls, enosys_filters, eperm_filter, install, notify_filter,
+    CLONE_NS_FLAGS, Installed, denied_syscalls, enosys_filters, eperm_filter, fixed_filter, install, notify_filter,
 };
 use std::io::Read;
 
@@ -113,7 +113,7 @@ fn unserved_listener_fails_every_refused_syscall_with_enosys() {
     if pid == 0 {
         drop(r);
         no_new_privs_or_exit();
-        let Ok(Installed::Notify(listener)) = install(&enosys, Some(&notify), &eperm) else {
+        let Ok(Installed::Notify(listener)) = install(&enosys, Some(&notify), &eperm, &fixed_filter().unwrap()) else {
             unsafe { libc::_exit(3) }
         };
         drop(listener); // no one will ever answer
@@ -148,7 +148,7 @@ fn served_listener_answers_eperm_records_each_and_fails_closed_after() {
     if pid == 0 {
         drop((ours, rr, gw));
         no_new_privs_or_exit();
-        let Ok(Installed::Notify(listener)) = install(&enosys, Some(&notify), &eperm) else {
+        let Ok(Installed::Notify(listener)) = install(&enosys, Some(&notify), &eperm, &fixed_filter().unwrap()) else {
             unsafe { libc::_exit(3) }
         };
         if send_fd(theirs.as_raw_fd(), listener.as_raw_fd()).is_err() {
@@ -217,7 +217,9 @@ fn a_second_listener_falls_back_to_eperm_which_outranks_notify() {
         drop(r);
         no_new_privs_or_exit();
         let Ok(first) = install_listener(&notify) else { unsafe { libc::_exit(3) } };
-        let Ok(Installed::Errno(Some(e))) = install(&enosys, Some(&notify), &eperm) else { unsafe { libc::_exit(4) } };
+        let Ok(Installed::Errno(Some(e))) = install(&enosys, Some(&notify), &eperm, &fixed_filter().unwrap()) else {
+            unsafe { libc::_exit(4) }
+        };
         results[0] = e.raw_os_error().unwrap_or(-1);
         run_probes(&probes, &mut results[1..]);
         write_i32s(w.as_raw_fd(), &results);
