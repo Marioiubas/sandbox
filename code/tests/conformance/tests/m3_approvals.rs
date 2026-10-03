@@ -78,11 +78,11 @@ fn a_held_write_is_approved_on_the_host_once_and_never_from_inside() {
     assert_eq!(req.detail.get("reason").and_then(|v| v.as_str()), Some("rule_of_two"));
     assert_eq!(req.detail["authority_diff"], serde_json::json!(["+ github pr.create github.com/acme/public"]));
     // The deny row names the approval; the pending list shows its ground truth.
-    let deny = h
-        .events()
-        .into_iter()
-        .find(|e| e.kind == EventKind::RequestDecision && e.reason == Some(Reason::RuleOfTwo))
-        .expect("the held write");
+    // (The approval row is written just before the deny row: wait for both.)
+    let deny = wait_for(Duration::from_secs(10), || {
+        h.events().into_iter().find(|e| e.kind == EventKind::RequestDecision && e.reason == Some(Reason::RuleOfTwo))
+    })
+    .expect("the held write");
     assert_eq!(deny.detail.get("approval").and_then(|v| v.as_str()), Some(id.as_str()));
     // Wait until the agent's self-approval attempt has run, then review.
     wait_for(Duration::from_secs(30), || {
