@@ -3873,7 +3873,7 @@
     "title": "MOC Decisions",
     "type": "moc",
     "section": "decisions",
-    "summary": "The architecture decision records (ADR-001 to ADR-040) with the alternatives each rejected, and how to add a new one.",
+    "summary": "The architecture decision records (ADR-001 to ADR-042) with the alternatives each rejected, and how to add a new one.",
     "links_to": [
       "ADR-001 Value Lives in the Broker",
       "ADR-002 OS Process Sandbox by Default with VM Hard Tier",
@@ -3890,6 +3890,7 @@
       "ADR-013 Seatbelt for macOS MVP with VZ Hedge",
       "ADR-014 Apache-2.0 Endpoint with Commercial ee",
       "ADR-015 Rust for the Endpoint and Custom Proxy",
+      "ADR-042 Release Packaging as Built",
       "MOC Architecture",
       "Risk Register",
       "CLAUDE"
@@ -4624,6 +4625,27 @@
     "source_hints": "Written during the M4 build (2026-09-30) from the kernel-denial collector and its tests.",
     "aliases": [
       "ADR-041"
+    ],
+    "sources": []
+  },
+  {
+    "file": "95-decisions/ADR-042 Release Packaging as Built.md",
+    "title": "ADR-042 Release Packaging as Built",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "`release.yml` builds static musl binaries for x86_64 and aarch64 with cargo-zigbuild, .deb and .rpm with nfpm (all three programs in /usr/bin; the AppArmor profile is a plain package file loaded only where the userns gate exists and unloaded on removal; never the sysctl, never the trust store), a lipo-merged universal2 macOS build that stays unsigned until the owner's Developer ID exists, per-program CycloneDX SBOMs, SHA256SUMS, GitHub SLSA provenance and keyless cosign bundles (not stored cosign keys); tags make draft releases only.",
+    "links_to": [
+      "Tech Stack",
+      "M4 Harden and Ship",
+      "bubblewrap",
+      "I2 Fail-Closed Launch",
+      "I5 Config Outside Writable Mounts",
+      "Sandbox Launcher",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-10-01) from the release workflow, the nfpm configuration and their CI runs.",
+    "aliases": [
+      "ADR-042"
     ],
     "sources": []
   }

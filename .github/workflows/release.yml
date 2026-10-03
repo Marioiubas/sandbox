@@ -1,0 +1,472 @@
+name: release
+
+# Builds every release artifact, proves it (static checks, and the installed
+# .deb under the Ubuntu AppArmor user-namespace gate), then checksums, attests
+# (SLSA provenance) and signs (keyless cosign) all of it.
+#
+# - push of a `v*` tag: everything above, then a DRAFT GitHub release with all
+#   assets. Nothing here publishes a release; the owner reviews and publishes.
+# - push to `packaging`, or a manual run: everything except the release.
+#   Provenance and signatures are made here too (they need no tag) so the
+#   whole chain is proven before the first tag; their certificates name this
+#   branch, never a `refs/tags/v*` ref, so they cannot pass for a release.
+#
+# Third-party actions are pinned by commit; tools by version and SHA-256.
+# No caches: a release build starts from a clean runner.
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [packaging]
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  ZIG_VERSION: 0.16.0
+  ZIG_SHA256: 70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00 # x86_64-linux, ziglang.org/download/index.json
+  CARGO_ZIGBUILD_VERSION: 0.23.4
+  CARGO_ZIGBUILD_SHA256: 6b69963040818ca1ef573d8135a95aa902e17cf7f873c32c6426642dadfe7f59 # x86_64-unknown-linux-gnu
+  CARGO_CYCLONEDX_VERSION: 0.5.9
+  CARGO_CYCLONEDX_SHA256_LINUX: fb8dbee9f182173e062a64a387b21a0badc6fab8b2abf9294973f012972bf6d8 # x86_64-unknown-linux-gnu
+  CARGO_CYCLONEDX_SHA256_MACOS: 4c53dfa21e70b65bf7f8d2592aadde3bcb02c1a40b6ec63b877e5ca65a29e180 # aarch64-apple-darwin
+  NFPM_VERSION: 2.47.0
+  NFPM_SHA256: 0660ca602b2d2d2ae4781a06c692b3eeb9d437ffea05b831d76e41f4a3188783 # Linux_x86_64
+  COSIGN_VERSION: v3.0.6
+  FEDORA_IMAGE: fedora:43@sha256:a651ddf48ea28a06ed4e1e6519f51c9f47e7a5a138722ade87369b8fbb7e5b42
+  BINS: broker brokerd broker-sandbox-shim
+
+jobs:
+  meta:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: v
+        name: Version (a tag must equal the workspace version)
+        run: |
+          cargo_version=$(awk '/^\[workspace\.package\]/ {s=1; next} /^\[/ {s=0}
+            s && /^version *=/ {gsub(/[" ]/, ""); sub(/^version=/, ""); print; exit}' code/Cargo.toml)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            if [ "$GITHUB_REF_NAME" != "v$cargo_version" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match the workspace version $cargo_version"
+              exit 1
+            fi
+            version=$cargo_version
+          else
+            version="$cargo_version-dev.$GITHUB_RUN_NUMBER"
+          fi
+          if ! printf '%s' "$version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?'; then
+            echo "::error::not a release version: '$version'"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version: $version"
+
+  linux:
+    # Static musl binaries via cargo-zigbuild, a tarball, a .deb and a .rpm per arch.
+    needs: meta
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, target: x86_64-unknown-linux-musl, nfpm_arch: amd64 }
+          - { arch: aarch64, target: aarch64-unknown-linux-musl, nfpm_arch: arm64 }
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      TARGET: ${{ matrix.target }}
+      ARCH: ${{ matrix.arch }}
+      NFPM_ARCH: ${{ matrix.nfpm_arch }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: code
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint the packaging scripts
+        run: shellcheck packaging/*.sh packaging/scripts/*.sh
+      - name: Rust toolchain (rust-toolchain.toml) with the musl target
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --target "$TARGET"
+          rustc --version
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: Install zig, cargo-zigbuild, cargo-cyclonedx and nfpm (pinned, checksum-verified)
+        run: |
+          bin="$RUNNER_TEMP/bin"; mkdir -p "$bin"; cd "$RUNNER_TEMP"
+          fetch() { curl -fsSL --retry 3 -o "$2" "$1" && echo "$3  $2" | sha256sum -c -; }
+          fetch "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" zig.tar.xz "$ZIG_SHA256"
+          tar -xJf zig.tar.xz
+          echo "$RUNNER_TEMP/zig-x86_64-linux-$ZIG_VERSION" >> "$GITHUB_PATH"
+          fetch "https://github.com/rust-cross/cargo-zigbuild/releases/download/v$CARGO_ZIGBUILD_VERSION/cargo-zigbuild-x86_64-unknown-linux-gnu.tar.xz" zb.tar.xz "$CARGO_ZIGBUILD_SHA256"
+          tar -xJf zb.tar.xz -C "$bin" --strip-components=1 cargo-zigbuild-x86_64-unknown-linux-gnu/cargo-zigbuild
+          fetch "https://github.com/CycloneDX/cyclonedx-rust-cargo/releases/download/cargo-cyclonedx-$CARGO_CYCLONEDX_VERSION/cargo-cyclonedx-x86_64-unknown-linux-gnu.tar.xz" cdx.tar.xz "$CARGO_CYCLONEDX_SHA256_LINUX"
+          tar -xJf cdx.tar.xz -C "$bin" --strip-components=1 cargo-cyclonedx-x86_64-unknown-linux-gnu/cargo-cyclonedx
+          fetch "https://github.com/goreleaser/nfpm/releases/download/v$NFPM_VERSION/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" nfpm.tar.gz "$NFPM_SHA256"
+          tar -xzf nfpm.tar.gz -C "$bin" nfpm
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/nfpm" --version | head -3; "$RUNNER_TEMP/zig-x86_64-linux-$ZIG_VERSION/zig" version
+      - name: Build (release, static musl)
+        run: cargo zigbuild --release --locked --target "$TARGET" -p broker-cli -p brokerd -p launcher --bins
+      - name: Stage and check the programs are static
+        run: |
+          stage="$RUNNER_TEMP/broker-$VERSION-$TARGET"
+          mkdir -p "$stage/apparmor" "$stage/sbom"
+          for b in $BINS; do install -m 0755 "target/$TARGET/release/$b" "$stage/$b"; done
+          install -m 0644 LICENSE "$stage/LICENSE"
+          install -m 0644 packaging/README.dist.md "$stage/README.md"
+          install -m 0644 packaging/apparmor/broker-bwrap "$stage/apparmor/broker-bwrap"
+          set --; for b in $BINS; do set -- "$@" "$stage/$b"; done
+          sh packaging/check-static.sh "$@"
+          echo "STAGE=$stage" >> "$GITHUB_ENV"
+      - name: SBOMs (CycloneDX)
+        run: sh packaging/sbom.sh "$TARGET" "$STAGE/sbom"
+      - name: Tarball, .deb and .rpm
+        run: |
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          name=$(basename "$STAGE")
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" \
+            -C "$(dirname "$STAGE")" -cf - "$name" | gzip -9n > "$out/$name.tar.gz"
+          for f in "$STAGE"/sbom/*.cdx.json; do
+            cp "$f" "$out/broker-$VERSION.$(basename "$f")"
+          done
+          export BROKER_VERSION="$VERSION" BROKER_STAGE="$STAGE"
+          # File names without the `~` the package versions use for pre-releases.
+          nfpm package --config packaging/nfpm.yaml --packager deb --target "$out/broker_${VERSION}_$NFPM_ARCH.deb"
+          nfpm package --config packaging/nfpm.yaml --packager rpm --target "$out/broker-$VERSION.$ARCH.rpm"
+          dpkg-deb --info "$out"/*.deb
+          dpkg-deb --contents "$out"/*.deb
+          ls -l "$out"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pkg-linux-${{ matrix.arch }}
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    # Universal2 (arm64 + x86_64) via lipo. UNSIGNED until the owner adds
+    # Developer ID and notary credentials; the two steps that need them skip.
+    needs: meta
+    runs-on: macos-15
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      TARGET: universal2-apple-darwin
+      HAS_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID_P12 != '' && secrets.APPLE_DEVELOPER_ID_P12_PASSWORD != '' && secrets.APPLE_DEVELOPER_ID_IDENTITY != '' }}
+      HAS_NOTARY: ${{ secrets.APPLE_NOTARY_KEY_P8 != '' && secrets.APPLE_NOTARY_KEY_ID != '' && secrets.APPLE_NOTARY_ISSUER_ID != '' }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: code
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust toolchain (rust-toolchain.toml) with both Apple targets
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --target aarch64-apple-darwin --target x86_64-apple-darwin
+          rustc --version
+      - name: Build (release) for arm64 and x86_64
+        run: |
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked --target "$t" -p broker-cli -p brokerd -p launcher --bins
+          done
+      - name: Merge into universal2 binaries and check them
+        run: |
+          stage="$RUNNER_TEMP/broker-$VERSION-$TARGET"
+          mkdir -p "$stage/sbom"
+          for b in $BINS; do
+            lipo -create -output "$stage/$b" "target/aarch64-apple-darwin/release/$b" "target/x86_64-apple-darwin/release/$b"
+            archs=$(lipo -archs "$stage/$b")
+            echo "$b: $archs"
+            case " $archs " in *" x86_64 "*) ;; *) echo "::error::$b lacks x86_64"; exit 1 ;; esac
+            case " $archs " in *" arm64 "*) ;; *) echo "::error::$b lacks arm64"; exit 1 ;; esac
+          done
+          install -m 0644 LICENSE "$stage/LICENSE"
+          install -m 0644 packaging/README.dist.md "$stage/README.md"
+          "$stage/broker" --version
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then arch -x86_64 "$stage/broker" --version; fi
+          "$stage/broker" doctor
+          echo "STAGE=$stage" >> "$GITHUB_ENV"
+      - name: Sign with Developer ID and the hardened runtime (DISABLED until the owner adds secrets)
+        # Needs APPLE_DEVELOPER_ID_P12 (base64 .p12), APPLE_DEVELOPER_ID_P12_PASSWORD and
+        # APPLE_DEVELOPER_ID_IDENTITY ("Developer ID Application: NAME (TEAMID)").
+        if: env.HAS_DEVELOPER_ID == 'true'
+        env:
+          P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          IDENTITY: ${{ secrets.APPLE_DEVELOPER_ID_IDENTITY }}
+        run: |
+          kc="$RUNNER_TEMP/signing.keychain-db"; kc_pass=$(openssl rand -hex 24)
+          security create-keychain -p "$kc_pass" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$kc_pass" "$kc"
+          umask 077; printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/id.p12"
+          security import "$RUNNER_TEMP/id.p12" -k "$kc" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/id.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kc_pass" "$kc" > /dev/null
+          for b in $BINS; do
+            codesign --force --options runtime --timestamp --keychain "$kc" --sign "$IDENTITY" "$STAGE/$b"
+            codesign --verify --strict --verbose=2 "$STAGE/$b"
+          done
+          security delete-keychain "$kc"
+      - name: Notarise with notarytool (DISABLED until the owner adds secrets)
+        # Needs APPLE_NOTARY_KEY_P8 (base64 App Store Connect API key), APPLE_NOTARY_KEY_ID and
+        # APPLE_NOTARY_ISSUER_ID. Bare Mach-O programs cannot be stapled; Gatekeeper looks the
+        # ticket up online.
+        if: env.HAS_DEVELOPER_ID == 'true' && env.HAS_NOTARY == 'true'
+        env:
+          KEY_P8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
+          KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          umask 077; printf '%s' "$KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          ditto -c -k --keepParent "$STAGE" "$RUNNER_TEMP/notarise.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarise.zip" --key "$RUNNER_TEMP/notary.p8" \
+            --key-id "$KEY_ID" --issuer "$ISSUER_ID" --wait --timeout 30m
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/notarise.zip"
+      - name: SBOMs (CycloneDX, both slices)
+        run: |
+          bin="$RUNNER_TEMP/bin"; mkdir -p "$bin"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/cdx.tar.xz" "https://github.com/CycloneDX/cyclonedx-rust-cargo/releases/download/cargo-cyclonedx-$CARGO_CYCLONEDX_VERSION/cargo-cyclonedx-aarch64-apple-darwin.tar.xz"
+          echo "$CARGO_CYCLONEDX_SHA256_MACOS  $RUNNER_TEMP/cdx.tar.xz" | shasum -a 256 -c -
+          tar -xJf "$RUNNER_TEMP/cdx.tar.xz" -C "$bin" --strip-components=1 cargo-cyclonedx-aarch64-apple-darwin/cargo-cyclonedx
+          export PATH="$bin:$PATH"
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do sh packaging/sbom.sh "$t" "$STAGE/sbom"; done
+      - name: Tarball
+        run: |
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          name=$(basename "$STAGE")
+          COPYFILE_DISABLE=1 tar --no-xattrs --uid 0 --gid 0 -C "$(dirname "$STAGE")" -cf - "$name" | gzip -9n > "$out/$name.tar.gz"
+          for f in "$STAGE"/sbom/*.cdx.json; do cp "$f" "$out/broker-$VERSION.$(basename "$f")"; done
+          ls -l "$out"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pkg-macos
+          path: ${{ runner.temp }}/out/
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    # The installed .deb as a normal user, with the AppArmor userns gate ON
+    # (never turned off here), plus the static checks and the .rpm on Fedora.
+    needs: [meta, linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      TARGET: ${{ matrix.arch }}-unknown-linux-musl
+      GATE: /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: code/packaging
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: pkg-linux-${{ matrix.arch }}
+          path: dist
+      - name: The tarball's programs are static (file, readelf, ldd) and run
+        run: |
+          tar -xzf "dist/broker-$VERSION-$TARGET.tar.gz" -C "$RUNNER_TEMP"
+          d="$RUNNER_TEMP/broker-$VERSION-$TARGET"
+          ls -lR "$d"
+          set --; for b in $BINS; do set -- "$@" "$d/$b"; done
+          sh code/packaging/check-static.sh --ldd "$@"
+          "$d/broker" --version
+          "$d/brokerd" --version
+      - name: The gate is on and bwrap cannot build a sandbox before the install
+        run: |
+          [ -e "$GATE" ] || { echo "::error::this kernel has no AppArmor userns gate; the smoke test cannot prove the profile"; exit 1; }
+          # Only ever tightened here: turned on if the image left it off.
+          [ "$(cat "$GATE")" = 1 ] || sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=1
+          sudo apt-get update -q
+          sudo apt-get install -y -q bubblewrap
+          # Under the gate an unconfined program's new namespaces get no
+          # capabilities, so bwrap fails (on Ubuntu 24.04 at loopback setup).
+          if bwrap --unshare-user --unshare-net --ro-bind / / /bin/true; then
+            echo "::error::bwrap built a sandbox without the broker profile; the gate is not in effect"
+            exit 1
+          fi
+          echo "bwrap failed under the gate, as expected"
+      - name: Install the .deb
+        run: |
+          deb=$(ls dist/broker_*.deb)
+          sudo apt-get install -y "./$deb"
+      - name: Package layout and AppArmor state
+        run: |
+          dpkg -L broker
+          for b in $BINS; do test -x "/usr/bin/$b"; done
+          test -f /etc/apparmor.d/broker-bwrap
+          if dpkg-query --control-show broker conffiles 2>/dev/null | grep -q apparmor; then
+            echo "::error::the AppArmor profile must not be a conffile"; exit 1
+          fi
+          sudo grep '^broker-bwrap ' /sys/kernel/security/apparmor/profiles
+          # The same bwrap command now succeeds, as the runner user: the
+          # package's profile is what allows it.
+          bwrap --unshare-user --unshare-net --ro-bind / / /bin/true
+          test "$(cat "$GATE")" = 1
+      - name: broker --version, broker doctor and a session, as the runner user
+        run: |
+          broker --version
+          BROKER_HOME=$(mktemp -d /tmp/bkh.XXXXXX); export BROKER_HOME
+          broker doctor
+          repo=$(mktemp -d /tmp/repo.XXXXXX)
+          git -C "$repo" init -q
+          echo smoke > "$repo/README.md"
+          (cd "$repo" && BROKER_DAEMON_IDLE_SECS=3 broker run -- /bin/true)
+          broker audit verify
+          broker daemon stop || true
+          test "$(cat "$GATE")" = 1
+      - name: Removal unloads and deletes the profile; bwrap fails again
+        run: |
+          sudo apt-get remove -y broker
+          test ! -e /etc/apparmor.d/broker-bwrap
+          if sudo grep -q '^broker-bwrap ' /sys/kernel/security/apparmor/profiles; then
+            echo "::error::broker-bwrap is still loaded after removal"; exit 1
+          fi
+          if bwrap --unshare-user --unshare-net --ro-bind / / /bin/true; then
+            echo "::error::bwrap still builds a sandbox after removal"; exit 1
+          fi
+          test "$(cat "$GATE")" = 1
+      - name: The .rpm installs on Fedora (dnf pulls bubblewrap; no AppArmor there)
+        run: |
+          rpm=$(basename "$(ls dist/broker-*.rpm)")
+          docker run --rm -v "$PWD/dist:/dist:ro" "$FEDORA_IMAGE" sh -euc '
+            dnf -y -q install "/dist/$1"
+            rpm -qi broker; rpm -ql broker; rpm -q --scripts broker
+            rpm -q --requires broker | grep -qx bubblewrap
+            for b in broker brokerd broker-sandbox-shim; do test -x "/usr/bin/$b"; done
+            broker --version
+            dnf -y -q remove broker
+            test ! -e /etc/apparmor.d/broker-bwrap' sh "$rpm"
+
+  supply-chain:
+    # SHA-256 checksums, SLSA provenance and keyless cosign signatures over
+    # every artifact, each verified here before anything is released.
+    needs: [meta, linux, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum -- * > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+      - id: attest
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Sign every artifact (keyless cosign, Sigstore bundle per file)
+        working-directory: dist
+        run: |
+          for f in *; do
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f" > /dev/null
+          done
+      - name: Verify the signatures and the provenance
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVENANCE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          identity="https://github.com/$GITHUB_WORKFLOW_REF"
+          for f in *; do
+            case "$f" in *.sigstore.json) continue ;; esac
+            cosign verify-blob --bundle "$f.sigstore.json" --certificate-identity "$identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$f"
+            gh attestation verify "$f" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref "$GITHUB_REF" > /dev/null
+            echo "verified: $f"
+          done
+          cp "$PROVENANCE" "broker-$VERSION.provenance.sigstore.json"
+          ls -l
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    # Tags only: a DRAFT release. A release that is already published is
+    # never modified; the run fails instead.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [meta, smoke, supply-chain]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-dist
+          path: dist
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          Draft built by \`release.yml\` run $GITHUB_RUN_ID from \`$GITHUB_SHA\`.
+
+          Every asset has a Sigstore bundle (\`.sigstore.json\`, keyless cosign) and SLSA build provenance;
+          \`SHA256SUMS\` lists the digests. How to verify, and the AppArmor note for Ubuntu 23.10+:
+          https://github.com/$GITHUB_REPOSITORY/blob/$TAG/code/docs/deployment/packages.md
+
+          The macOS build is not signed or notarised yet.
+          EOF
+          if draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != true ]; then
+              echo "::error::release $TAG is already published; refusing to change it"
+              exit 1
+            fi
+            gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/* --draft --verify-tag --title "broker $VERSION" \
+              --notes-file "$RUNNER_TEMP/notes.md" --repo "$GITHUB_REPOSITORY"
+          fi

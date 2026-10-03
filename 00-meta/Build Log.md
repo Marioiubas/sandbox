@@ -380,3 +380,12 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **CI found (fuzz-smoke):** the new `sentinel` target failed in 60 s: libFuzzer's comparison tracing learned the per-process sentinel and put it inside an input, so the body held one more occurrence than the target assumed. A harness assumption, not a product defect (the swap counted all 7); the target now counts occurrences itself and accepts the exact sentinel as valid.
 - **Tests:** full suite 374 passed, 0 failed (macOS 26).
 - **L4 / R10:** `broker audit stats` gives per-session prompts (approval requests), grants, denies by reason, kernel denials and labels from the audit log; `broker doctor` says whether kernel denials are recorded on the host.
+
+### 2026-10-01: release packaging and supply chain (M4)
+
+- **Built:** [[ADR-042 Release Packaging as Built]]: `.github/workflows/release.yml` and `code/packaging/` produce static musl tarballs, `.deb` and `.rpm` (nfpm) for x86_64 and aarch64, an unsigned universal2 macOS tarball, per-program CycloneDX SBOMs, `SHA256SUMS`, SLSA provenance and keyless cosign bundles; `v*` tags create draft releases only. User guide: `code/docs/deployment/packages.md`.
+- **Tests:** `release.yml` jobs `linux` (static checks), `macos` (both slices, `broker doctor`), `smoke` (installed `.deb` on Ubuntu 24.04 x86_64 and arm64 with the AppArmor userns gate on; `.rpm` on Fedora 43), `supply-chain` (every cosign bundle and attestation verified). Green on branch `packaging`: runs 36910376549 and 36912092416.
+- **Found:** the launcher's seccomp filter did not compile for musl (`TIOCSTI`/`TIOCLINUX` are `c_int` there); fixed in `launcher/src/backends/linux/inner.rs`.
+- **Invariants touched:** I2 and I5 upheld (the installer never weakens a layer; programs in root-owned `/usr/bin`); the CA never reaches a trust store.
+- **Notes updated:** [[M4 Harden and Ship]] (two packaging items done, the macOS item started), [[Tech Stack]] (release tool pins), [[MOC Decisions]].
+- **Next step (owner):** Apple Developer ID and notary secrets, a Homebrew tap, apt/yum repositories, the package maintainer address; the first tag exercises the draft-release job.

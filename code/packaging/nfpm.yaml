@@ -1,0 +1,91 @@
+# nfpm configuration for the broker .deb and .rpm, built by
+# .github/workflows/release.yml from the static musl binaries.
+#
+# Run from code/ with:
+#   BROKER_VERSION  package version (semver, e.g. 0.1.0 or 0.1.0-dev.12)
+#   NFPM_ARCH       amd64 | arm64 (nfpm maps them to x86_64 | aarch64 for rpm)
+#   BROKER_STAGE    directory holding broker, brokerd, broker-sandbox-shim
+#                   and sbom/*.cdx.json
+#
+# Layout: the three programs sit together in /usr/bin, because `broker`
+# starts `brokerd` from its own directory and `brokerd` runs
+# `broker-sandbox-shim` from its own directory (launcher::default_shim_path).
+# /usr/bin is root-owned, so the binaries stay outside every writable mount
+# (I5).
+#
+# The AppArmor profile is an ordinary package file, not a conffile, so it is
+# deleted with the package and never lingers to grant bwrap user namespaces
+# after removal; local changes belong in /etc/apparmor.d/local/broker-bwrap.
+# The scripts load and unload it; they never change the userns sysctl and
+# never touch the system trust store.
+name: broker
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${BROKER_VERSION}
+version_schema: semver
+release: "1"
+section: admin
+priority: optional
+maintainer: "Marioiubas <Marioiubas@users.noreply.github.com>"
+vendor: Marioiubas
+homepage: https://github.com/Marioiubas/sandbox
+license: Apache-2.0
+description: |-
+  Egress and credential broker plus sandbox for AI coding agents.
+  Runs an agent under bubblewrap with no network interface, seccomp and
+  Landlock; its own proxy is the only way out and authorizes every request
+  against task-scoped grants. It shrinks an agent's authority to the task
+  and makes its use auditable; it does not stop an agent from misusing
+  authority it was granted.
+
+depends:
+  - bubblewrap
+
+contents:
+  - src: ${BROKER_STAGE}/broker
+    dst: /usr/bin/broker
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ${BROKER_STAGE}/brokerd
+    dst: /usr/bin/brokerd
+    expand: true
+    file_info:
+      mode: 0755
+  - src: ${BROKER_STAGE}/broker-sandbox-shim
+    dst: /usr/bin/broker-sandbox-shim
+    expand: true
+    file_info:
+      mode: 0755
+  - src: packaging/apparmor/broker-bwrap
+    dst: /etc/apparmor.d/broker-bwrap
+    file_info:
+      mode: 0644
+  - src: packaging/README.dist.md
+    dst: /usr/share/doc/broker/README.md
+    file_info:
+      mode: 0644
+  - src: ${BROKER_STAGE}/sbom/*.cdx.json
+    dst: /usr/share/doc/broker/sbom/
+    expand: true
+    file_info:
+      mode: 0644
+  - src: LICENSE
+    dst: /usr/share/doc/broker/copyright
+    packager: deb
+    file_info:
+      mode: 0644
+  - src: LICENSE
+    dst: /usr/share/licenses/broker/LICENSE
+    packager: rpm
+    type: license
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+
+rpm:
+  summary: Egress and credential broker plus sandbox for AI coding agents
+  group: System Environment/Base
