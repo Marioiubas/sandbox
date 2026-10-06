@@ -7,9 +7,9 @@ tags: [sandbox/decisions, decision, topic/isolation, control/fs, boundary/tb2, b
 status: built
 confidence: high
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-06
 summary: "Extend the mandatory deny-write list with the .git entry itself (a rename-and-replant escape found while building M0), .mcp.json, .envrc, .gemini, .broker and PATH directories inside writable roots, and give missing protected names read-only placeholders on Linux."
-related: ["[[I5 Config Outside Writable Mounts]]", "[[Filesystem Control and Rollback]]", "[[Sandbox Launcher]]", "[[Seatbelt]]", "[[bubblewrap]]", "[[Conformance Probe Matrix]]", "[[MOC Decisions]]"]
+related: ["[[I5 Config Outside Writable Mounts]]", "[[Filesystem Control and Rollback]]", "[[Sandbox Launcher]]", "[[Seatbelt]]", "[[bubblewrap]]", "[[Conformance Probe Matrix]]", "[[MOC Decisions]]", "[[ADR-046 Git Redirection and Shared Agent State Are Not Writable]]"]
 sources: []
 superseded_by:
 code: ["code/crates/launcher/src/fs_compile.rs", "code/crates/launcher/src/backends/linux/bwrap.rs", "code/crates/launcher/src/backends/seatbelt/sbpl.rs"]
@@ -64,3 +64,4 @@ Strengthens [[I5 Config Outside Writable Mounts]].
 ## Build log
 
 - 2026-09-24: created and built with M0; the rename-and-replant escape is reproduced (and blocked) in `cat10_filesystem`.
+- 2026-10-06: **correction** ([[ADR-046 Git Redirection and Shared Agent State Are Not Writable]]): "`git init` fails in the sandbox" held only at the writable root; nested repositories, `.git/commondir`, `.git/modules` and `.git/worktrees` are now protected too.

@@ -113,6 +113,22 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
     if !i.fs.writable.is_empty() {
         let _ = writeln!(s, "; writable roots\n(allow file-write*{})", path_rules("subpath", &i.fs.writable)?);
     }
+    if !i.fs.create_only.is_empty() {
+        // Files may be added, never changed or removed: other sessions run
+        // what is in these directories (ADR-046).
+        let _ = writeln!(
+            s,
+            "; add-only state shared with other sessions (ADR-046)\n(deny file-write-data file-write-unlink file-write-mode file-write-flags file-write-xattr{}{wm})",
+            path_rules("subpath", &i.fs.create_only)?
+        );
+    }
+    for root in &i.fs.nested_git {
+        // No `.git` below the repository root (ADR-046): a nested repository's
+        // config and hooks would run in the user's next git command there.
+        let re = regex_prefix(root).ok_or_else(|| format!("unrepresentable path {}", root.display()))?;
+        let _ =
+            writeln!(s, "; no nested repositories (ADR-046)\n(deny file-write* (regex #\"{re}/.+/\\.git(/|$)\"){wm})");
+    }
     for prefix in &i.fs.shared_scratch {
         // Other sessions' scratch in the shared temp dir (R16): denied, then
         // this session's own roots there allowed again; before the
@@ -162,7 +178,18 @@ mod tests {
             deny_entry: vec!["/Users/dev/src/web/.git".into()],
             missing_protected: vec![],
             shared_scratch: vec![],
+            nested_git: vec![],
+            create_only: vec![],
         }
+    }
+
+    /// ADR-046: no `.git` may be written below the repository root.
+    #[test]
+    fn nested_repositories_are_denied_by_pattern() {
+        let mut f = fs();
+        f.nested_git = vec!["/Users/dev/src/web".into()];
+        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).unwrap();
+        assert!(p.contains(r#"(deny file-write* (regex #"^/Users/dev/src/web/.+/\.git(/|$)"))"#), "{p}");
     }
 
     /// R16: another session's scratch in the shared temp dir is not

@@ -71,7 +71,15 @@ impl Running {
         // SAFETY: the sandbox leads its own process group (setsid).
         unsafe { libc::kill(-(self.pid as i32), libc::SIGKILL) };
         for p in &self.placeholders {
-            let _ = std::fs::remove_dir(p);
+            launcher::fs_compile::remove_placeholder(p);
+        }
+        // A repository the session created below the root (Linux cannot
+        // refuse it): renamed aside before anyone's git reads it (ADR-046).
+        let id = self.id.as_str();
+        let tag = &id[id.len().saturating_sub(8)..];
+        let quarantined = launcher::fs_compile::quarantine_new_nested_git(&self.nested_git.0, &self.nested_git.1, tag);
+        for g in &quarantined {
+            eprintln!("brokerd: session {id} created a repository at {}: renamed aside (ADR-046)", g.display());
         }
         let _ = std::fs::remove_dir_all(&self.session_dir);
         let _ = std::fs::remove_dir_all(&self.session_tmp);
@@ -87,6 +95,11 @@ impl Running {
             .detail("exit_code", exited.code.map(i64::from))
             .detail("exit_signal", exited.signal.map(i64::from))
             .detail("stats", self.stats.snapshot());
+        let ev = if quarantined.is_empty() {
+            ev
+        } else {
+            ev.detail("quarantined_git", quarantined.iter().map(|p| p.display().to_string()).collect::<Vec<_>>())
+        };
         let _ = self.recorder.append(&ev);
     }
 }

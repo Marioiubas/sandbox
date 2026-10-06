@@ -246,6 +246,48 @@ mod tests {
         assert_ne!(s, new_sentinel());
     }
 
+    /// Review (I5, I4): `${repo_remote}` names the session's task repository
+    /// (push rules, GitHub verbs' default `repos`, GitHub App token repos).
+    /// It is read from the nearest `.git` above the session's directory. A
+    /// session rooted at `web/` can write `web/sub/.git` (the launcher
+    /// protects `.git` only at the writable root; launcher
+    /// `fs_compile::tests::review_nested_repositories_cannot_grow_hooks_or_config`)
+    /// and a gitdir it controls. When the user later starts a session from
+    /// `web/sub` (a package of a monorepo), that file chooses the task
+    /// repository: any repository the user's GitHub App installation covers.
+    #[test]
+    fn review_a_gitdir_planted_below_the_root_does_not_choose_the_task_repository() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        let (home, tmp) = (root.join("home"), root.join("tmp/s1"));
+        let web = home.join("src/web");
+        std::fs::create_dir_all(web.join(".git")).unwrap();
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(web.join(".git/config"), "[remote \"origin\"]\n\turl = https://github.com/acme/web.git\n")
+            .unwrap();
+        // The filesystem policy of an earlier session rooted at `web`.
+        let fs = launcher::fs_compile::compile(&launcher::fs_compile::FsInputs {
+            home: home.clone(),
+            repo: web.clone(),
+            session_tmp: tmp,
+            ..Default::default()
+        })
+        .unwrap();
+        // What that session writes (ordinary files below its root).
+        let planted = [web.join("sub/.git"), web.join("sub/.cache/g/config")];
+        std::fs::create_dir_all(web.join("sub/.cache/g")).unwrap();
+        std::fs::write(&planted[0], "gitdir: .cache/g\n").unwrap();
+        std::fs::write(&planted[1], "[remote \"origin\"]\n\turl = https://github.com/acme/prod-infra.git\n").unwrap();
+        // A later session started from `web/sub`.
+        let task = origin_remote(&repo_root(&web.join("sub")));
+        let writable: Vec<&PathBuf> = planted.iter().filter(|p| fs.is_writable(p)).collect();
+        assert!(
+            !(task == RepoId::parse("github.com/acme/prod-infra") && writable.len() == planted.len()),
+            "the task repository of a session started in web/sub ({task:?}) was chosen by files an earlier session \
+             could write: {writable:?}"
+        );
+    }
+
     #[test]
     fn env_allowlist_has_no_secrets() {
         for k in ENV_ALLOW {

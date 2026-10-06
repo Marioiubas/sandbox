@@ -50,10 +50,11 @@ config_readonly = [
     "~/.claude/output-styles",
 ]
 state_write = [
-    "~/.claude/projects",
+    # This project's transcripts and memory only: another project's
+    # `memory/MEMORY.md` is standing instructions for its sessions.
+    "~/.claude/projects/${cwd_slug}",
     "~/.claude/todos",
     "~/.claude/statsig",
-    "~/.claude/shell-snapshots",
     "~/.claude/session-env",
     "~/.claude/file-history",
     "~/.claude/debug",
@@ -64,6 +65,9 @@ state_write = [
     # which other Claude Code sessions share.
     "/tmp/claude-${uid}/${cwd_slug}",
 ]
+# Every Bash command of every Claude Code session sources its snapshot here,
+# so no session may change another's (ADR-046).
+state_private = ["~/.claude/shell-snapshots"]
 # No keychain access: the credential is brokered (ADR-020 ends the M0
 # keychain exception of ADR-016).
 

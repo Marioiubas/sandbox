@@ -174,3 +174,125 @@ fn other_sessions_scratch_in_the_shared_temp_dir_is_not_writable() {
     assert!(!c.is_writable(&pt.join("broker-new")), "a new one");
     assert!(c.is_writable(&pt.join("xcrun_db")), "the rest of the shared dir (ADR-016)");
 }
+
+// ---- Review (configuration trust, I5): git control files outside the two
+// protected names. Each test names the exact file a session can write and
+// the user's next unsandboxed git command then trusts.
+
+/// Review (I5): `.git/commondir` redirects the main repository's common
+/// directory, which is where git reads `config` and `hooks` from (git's
+/// `get_common_dir_noenv` honours it in any gitdir, not only in linked
+/// worktrees). Verified with Apple Git 2.50.1: in a fresh repository,
+/// writing `.git/commondir` = `x` and `.git/x/{config,objects->../objects,
+/// refs->../refs}` with `core.fsmonitor = "touch PWNED"` makes a plain
+/// `git status` run the command. The session may write `.git/commondir`
+/// and `.git/x/` (only `.git/config`, `.git/hooks` and the `.git` entry are
+/// protected), so `.git/config` and `.git/hooks` protect nothing.
+#[test]
+fn review_git_commondir_cannot_redirect_config_and_hooks() {
+    let f = fixture();
+    let c = compile(&inputs(&f)).unwrap();
+    // `.git/x/...` is harmless while nothing can point git at it: what must
+    // be protected is every file that redirects git's config and hooks
+    // (ADR-046); other new files under `.git` are git's own working state.
+    for p in [".git/commondir", ".git/config.worktree", ".git/modules/x/config", ".git/worktrees/x/commondir"] {
+        assert!(
+            !c.is_writable(&f.repo.join(p)),
+            "{p} is writable: with `.git/commondir` pointing at `.git/x`, git reads the repository's config and \
+             hooks from `.git/x`, so the agent replaces `.git/config` and `.git/hooks` (core.fsmonitor runs on the \
+             user's next `git status`)"
+        );
+    }
+}
+
+/// Review (I5): a submodule's git directory lives in
+/// `.git/modules/<name>/`, inside the writable `.git`. `git status` in the
+/// superproject runs a child git in each populated submodule, which reads
+/// that directory's `config` (verified with Apple Git 2.50.1:
+/// `core.fsmonitor` in `.git/modules/lib/config` ran on the superproject's
+/// `git status`). Its `config` and `hooks` are as authority-bearing as the
+/// superproject's own.
+#[test]
+fn review_submodule_git_directories_are_protected() {
+    let f = fixture();
+    let gd = f.repo.join(".git/modules/lib");
+    std::fs::create_dir_all(gd.join("hooks")).unwrap();
+    std::fs::write(gd.join("config"), "[core]\n").unwrap();
+    std::fs::create_dir_all(f.repo.join("lib")).unwrap();
+    std::fs::write(f.repo.join("lib/.git"), format!("gitdir: {}\n", gd.display())).unwrap();
+    let c = compile(&inputs(&f)).unwrap();
+    for p in [gd.join("config"), gd.join("hooks/post-checkout"), f.repo.join("lib/.git")] {
+        assert!(
+            !c.is_writable(&p),
+            "{} is writable: a submodule's config and hooks run in the user's next git command in the superproject",
+            p.display()
+        );
+    }
+}
+
+/// Review (I5, ADR-019): the protected names are protected only at each
+/// writable root, so the session can create a whole repository below it
+/// (`git init sub`, or a `.git` file naming a gitdir it wrote) with its own
+/// `config` and `hooks`. Verified with Apple Git 2.50.1: after `git init
+/// sub` + `core.fsmonitor` in `sub/.git/config` + `git add sub` (a gitlink,
+/// no `.gitmodules`), the superproject's next git command ran the command.
+/// The same planted `.git` also makes brokerd's `repo_root`/`origin_remote`
+/// read it for a later session started from `sub` (see brokerd
+/// `session_util::tests::review_*`). ADR-019 states `git init` fails in the
+/// sandbox; it fails only at the root.
+#[test]
+fn review_nested_repositories_cannot_grow_hooks_or_config() {
+    let f = fixture();
+    std::fs::create_dir_all(f.repo.join("sub")).unwrap();
+    let c = compile(&inputs(&f)).unwrap();
+    for p in ["sub/.git", "sub/.git/config", "sub/.git/hooks/pre-commit"] {
+        assert!(
+            !c.is_writable(&f.repo.join(p)),
+            "{p} is writable: a nested repository's config and hooks run in the user's next unsandboxed git \
+             command (it becomes a gitlink the superproject's `git status` descends into)"
+        );
+    }
+}
+
+/// Review (I5): the per-root protected names are added unresolved
+/// (`w.join(name)`), while every other list is symlink-resolved and SBPL
+/// matches the real path (module doc; verified with `sandbox-exec` on
+/// macOS 26: `(deny file-write* (subpath "<repo>/.claude"))` with `.claude`
+/// a symlink to `config/claude` does not stop a write to
+/// `<repo>/.claude/settings.json`). A repository that keeps `.claude`
+/// (or `.mcp.json`, `.vscode`, `.git/hooks` ...) as a symlink to another
+/// directory in the checkout leaves the agent's own settings writable.
+#[test]
+fn review_a_symlinked_protected_name_protects_its_target() {
+    let f = fixture();
+    let real = f.repo.join("config/claude");
+    std::fs::create_dir_all(&real).unwrap();
+    std::fs::write(real.join("settings.json"), "{}").unwrap();
+    std::os::unix::fs::symlink("config/claude", f.repo.join(".claude")).unwrap();
+    let c = compile(&inputs(&f)).unwrap();
+    assert!(
+        !c.is_writable(&real.join("settings.json")),
+        "the real path behind the protected `.claude` symlink is writable; deny_write has only {:?}",
+        c.deny_write.iter().filter(|p| p.starts_with(&f.repo)).collect::<Vec<_>>()
+    );
+}
+
+/// ADR-046, Linux residual: a repository created below the root during the
+/// session is renamed aside at teardown; one that existed at launch stays.
+#[test]
+fn new_nested_repositories_are_quarantined_at_teardown() {
+    let f = fixture();
+    std::fs::create_dir_all(f.repo.join("old/.git")).unwrap();
+    let at_launch = nested_git(&f.repo);
+    assert_eq!(at_launch, vec![f.repo.join("old/.git")]);
+    std::fs::create_dir_all(f.repo.join("sub/deep/.git/hooks")).unwrap();
+    std::fs::create_dir_all(f.repo.join("lib")).unwrap();
+    std::fs::write(f.repo.join("lib/.git"), "gitdir: x\n").unwrap();
+    let mut moved = quarantine_new_nested_git(&f.repo, &at_launch, "abcd1234");
+    moved.sort();
+    assert_eq!(moved, vec![f.repo.join("lib/.git"), f.repo.join("sub/deep/.git")]);
+    assert!(f.repo.join("sub/deep/.git.broker-quarantine-abcd1234/hooks").is_dir(), "moved, not deleted");
+    assert!(f.repo.join("lib/.git.broker-quarantine-abcd1234").is_file());
+    assert!(f.repo.join("old/.git").is_dir(), "a repository that was there at launch is left alone");
+    assert!(f.repo.join(".git").exists(), "the root's own .git is never touched");
+}

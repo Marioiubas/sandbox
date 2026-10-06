@@ -30,6 +30,10 @@ pub struct FsInputs {
     pub broker_dirs: Vec<PathBuf>,
     /// Directory holding the broker binaries: never writable.
     pub install_dir: Option<PathBuf>,
+    /// Writable directories shared with other sessions where existing files
+    /// must not change: files may be added, not modified or removed (macOS);
+    /// the session gets a private empty directory there (Linux).
+    pub create_only: Vec<PathBuf>,
     /// Further directories protected exactly like `home`, in addition to it
     /// (canary homes in the conformance suite; see
     /// `launcher::test_protected_homes`). Only ever adds rules.
@@ -59,6 +63,16 @@ pub struct CompiledFsPolicy {
     /// roots, so sessions cannot write into each other's scratch (R16).
     #[serde(default)]
     pub shared_scratch: Vec<PathBuf>,
+    /// Roots below which no `.git` may be written (the repository): a nested
+    /// repository's config and hooks run in the user's next git command in
+    /// the superproject. Enforced by pattern on macOS; on Linux only the
+    /// ones that exist at launch are protected (ADR-046).
+    #[serde(default)]
+    pub nested_git: Vec<PathBuf>,
+    /// Writable directories where existing files must not change (see
+    /// `FsInputs::create_only`).
+    #[serde(default)]
+    pub create_only: Vec<PathBuf>,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -137,6 +151,15 @@ pub const HOME_DENY_WRITE: &[&str] = &[
 pub const ROOT_DENY_WRITE: &[&str] = &[
     ".git/hooks",
     ".git/config",
+    // Files and directories that make git read config and hooks from
+    // elsewhere: `commondir` repoints the common dir (config, hooks),
+    // `config.worktree` adds config, and `modules/`, `worktrees/` hold other
+    // repositories' config and hooks (submodules, linked worktrees) that
+    // the user's git runs in (ADR-046).
+    ".git/commondir",
+    ".git/config.worktree",
+    ".git/modules",
+    ".git/worktrees",
     ".claude",
     ".mcp.json",
     ".codex",
@@ -150,6 +173,73 @@ pub const ROOT_DENY_WRITE: &[&str] = &[
 
 /// Entries protected inside every writable root whose contents stay writable.
 pub const ROOT_DENY_ENTRY: &[&str] = &[".git"];
+
+/// What a Linux placeholder for a missing protected name must contain to be
+/// harmless to git: `commondir` naming the git directory itself (the same as
+/// no `commondir`), an empty `config.worktree`; `None` means a directory.
+pub fn placeholder_file(p: &Path) -> Option<&'static str> {
+    match p.file_name()?.to_str()? {
+        "commondir" if p.parent().is_some_and(|d| d.ends_with(".git")) => Some(".\n"),
+        "config.worktree" if p.parent().is_some_and(|d| d.ends_with(".git")) => Some(""),
+        _ => None,
+    }
+}
+
+/// Teardown (ADR-046): a `.git` below `root` that was not there at launch
+/// was made by the session; Linux cannot refuse its creation, so it is
+/// renamed aside (`.git.broker-quarantine-<tag>`), never deleted, before
+/// the user's git or a later session can read its config or hooks.
+/// Returns the paths quarantined.
+pub fn quarantine_new_nested_git(root: &Path, at_launch: &[PathBuf], tag: &str) -> Vec<PathBuf> {
+    let mut moved = Vec::new();
+    for g in nested_git(root).into_iter().filter(|g| !at_launch.contains(g)) {
+        let to = g.with_file_name(format!(".git.broker-quarantine-{tag}"));
+        if std::fs::symlink_metadata(&to).is_err() && std::fs::rename(&g, &to).is_ok() {
+            moved.push(g);
+        }
+    }
+    moved
+}
+
+/// Remove a placeholder made for `p` (at teardown): an empty directory, or a
+/// file that still holds exactly the placeholder content.
+pub fn remove_placeholder(p: &Path) {
+    match placeholder_file(p) {
+        Some(c) if std::fs::read_to_string(p).is_ok_and(|s| s == c) => {
+            let _ = std::fs::remove_file(p);
+        }
+        Some(_) => {}
+        None => {
+            let _ = std::fs::remove_dir(p);
+        }
+    }
+}
+
+/// Existing `.git` entries below `root` (not `root/.git` itself): nested
+/// repositories and submodule checkouts. Bounded walk, symlinks not followed.
+pub fn nested_git(root: &Path) -> Vec<PathBuf> {
+    const MAX_ENTRIES: usize = 200_000;
+    let (mut found, mut seen, mut stack) = (Vec::new(), 0usize, vec![root.to_path_buf()]);
+    while let Some(dir) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            seen += 1;
+            if seen > MAX_ENTRIES {
+                return found;
+            }
+            let Ok(t) = e.file_type() else { continue };
+            let path = e.path();
+            if e.file_name() == ".git" {
+                if dir != root {
+                    found.push(path);
+                }
+            } else if t.is_dir() {
+                stack.push(path);
+            }
+        }
+    }
+    found
+}
 
 fn check_abs(p: &Path) -> Result<(), FsError> {
     if !p.is_absolute() {
@@ -266,10 +356,20 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         for name in ROOT_DENY_WRITE {
             deny_write.insert(w.join(name));
         }
+        for name in ROOT_DENY_WRITE {
+            // A protected name that is a symlink: its target too (SBPL and
+            // bind mounts act on the resolved path).
+            if std::fs::symlink_metadata(w.join(name)).is_ok_and(|m| m.file_type().is_symlink())
+                && let Ok(t) = resolve(&w.join(name))
+            {
+                deny_write.insert(t);
+            }
+        }
         if let Some(gd) = gitdir_from_file(w, &w.join(".git")) {
             deny_write.insert(w.join(".git"));
-            deny_write.insert(gd.join("hooks"));
-            deny_write.insert(gd.join("config"));
+            for n in ["hooks", "config", "commondir", "config.worktree", "modules", "worktrees"] {
+                deny_write.insert(gd.join(n));
+            }
             if let Ok(common) = std::fs::read_to_string(gd.join("commondir")) {
                 let c = gd.join(common.trim());
                 if let Ok(c) = resolve(&normalise(&c)) {
@@ -288,12 +388,23 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         let p = repo.join(name);
         let wanted = match *name {
             ".git/config" => false,
-            ".git/hooks" => repo.join(".git").is_dir(),
+            ".git/hooks" | ".git/commondir" | ".git/config.worktree" | ".git/modules" | ".git/worktrees" => {
+                repo.join(".git").is_dir()
+            }
             _ => true,
         };
         if wanted && absent(&p) {
             missing.insert(p);
         }
+    }
+    // Nested repositories that exist now (Linux can protect only these).
+    for g in nested_git(&repo) {
+        if let Some(gd) = gitdir_from_file(g.parent().unwrap_or(&repo), &g) {
+            for n in ["hooks", "config", "commondir", "config.worktree"] {
+                deny_write.insert(gd.join(n));
+            }
+        }
+        deny_write.insert(g);
     }
     for c in &i.agent_config_readonly {
         deny_write.insert(resolve(c)?);
@@ -315,6 +426,8 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         deny_entry: deny_entry.into_iter().collect(),
         missing_protected: missing.into_iter().collect(),
         shared_scratch: i.platform_tmp.iter().filter_map(|p| resolve(p).ok()).map(|p| p.join("broker-")).collect(),
+        nested_git: vec![repo],
+        create_only: i.create_only.iter().filter_map(|p| resolve(p).ok()).collect(),
     })
 }
 
@@ -339,6 +452,11 @@ impl CompiledFsPolicy {
             && !self.deny_write.iter().any(|d| p.starts_with(d))
             && !self.deny_entry.iter().any(|d| p == d)
             && !self.deny_read.iter().any(|d| p.starts_with(d))
+            && !self.create_only.iter().any(|c| p.starts_with(c) && p != c)
+            && !self
+                .nested_git
+                .iter()
+                .any(|r| p.strip_prefix(r).is_ok_and(|rel| rel.components().skip(1).any(|c| c.as_os_str() == ".git")))
             && !self
                 .shared_scratch
                 .iter()

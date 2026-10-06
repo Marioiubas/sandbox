@@ -330,3 +330,38 @@ fn cat10_other_sessions_scratch_is_not_writable() {
     assert!(h.probe(&["write-new", &s(&shared.join(&name))]).allowed(), "ADR-016 residual");
     let _ = std::fs::remove_file(shared.join(&name));
 }
+
+/// ADR-046: nothing the session writes can repoint git's config or hooks:
+/// `commondir`, `config.worktree`, submodule and linked-worktree git
+/// directories are refused; a nested repository is refused (macOS) or
+/// quarantined at teardown (Linux); git itself keeps working.
+#[test]
+fn cat10_git_cannot_be_pointed_at_agent_written_config() {
+    let h = Harness::new("version = 1\n");
+    let repo = h.repo_path();
+    let r = |p: &str| repo.join(p).display().to_string();
+    assert_fs_denied(&h.probe(&["write", &r(".git/commondir")]), ".git/commondir");
+    assert_fs_denied(&h.probe(&["write", &r(".git/config.worktree")]), ".git/config.worktree");
+    assert_fs_denied(&h.probe(&["mkdir", &r(".git/modules/lib")]), "a submodule's git directory");
+    assert_fs_denied(&h.probe(&["mkdir", &r(".git/worktrees/x")]), "a linked worktree's git directory");
+    let c = h.sh("git -c user.email=a@b -c user.name=probe -c commit.gpgsign=false commit -q --allow-empty -m x && echo COMMITTED");
+    assert!(c.stdout.contains("COMMITTED"), "git still works in the session: {c:?}");
+    if cfg!(target_os = "macos") {
+        assert_fs_denied(&h.probe(&["mkdir", &r("sub/.git")]), "a nested repository");
+    } else {
+        let n = h.sh("mkdir -p sub && git init -q sub && echo MADE");
+        assert!(n.stdout.contains("MADE"), "{n:?}");
+        assert!(!repo.join("sub/.git").exists(), "the session's nested repository is not left in place");
+        let moved = std::fs::read_dir(repo.join("sub"))
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().starts_with(".git.broker-quarantine-"));
+        assert!(moved, "it is renamed aside, not deleted");
+        let stop = h.events().into_iter().filter(|e| e.kind == audit::EventKind::SessionStop).last().unwrap();
+        assert!(stop.detail.contains_key("quarantined_git"), "{:?}", stop.detail);
+    }
+    // Linux placeholders are gone after the session; nothing was left behind.
+    for p in [".git/commondir", ".git/config.worktree", ".git/modules", ".git/worktrees"] {
+        assert!(!repo.join(p).exists(), "{p} left in the repository");
+    }
+}

@@ -299,6 +299,12 @@ pub struct AgentSection {
     /// transcripts, caches). They may not contain configuration.
     #[serde(default)]
     pub state_write: Vec<String>,
+    /// Agent state directories every session of the agent shares, holding
+    /// files other sessions execute (shell snapshots): the session may add
+    /// files there but never change or remove one that exists (macOS), or
+    /// gets its own empty directory there (Linux).
+    #[serde(default)]
+    pub state_private: Vec<String>,
     /// Extra non-secret environment variables to pass through by name.
     #[serde(default)]
     pub env_passthrough: Vec<String>,

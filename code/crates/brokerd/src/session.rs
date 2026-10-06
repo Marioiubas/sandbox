@@ -102,6 +102,9 @@ pub struct Running {
     /// The session's kernel-denial collector (ADR-041 on macOS; ADR-043,
     /// seccomp, on Linux).
     collector: Option<crate::kernel_denials::Collector>,
+    /// The repository root and the nested `.git` entries it had at launch:
+    /// new ones are quarantined at teardown (ADR-046).
+    nested_git: (PathBuf, Vec<PathBuf>),
 }
 
 impl Daemon {

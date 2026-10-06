@@ -88,6 +88,13 @@ pub fn args(i: &BwrapInputs) -> Vec<OsString> {
             push(&mut a, &[&"--ro-bind", m, m]);
         }
     }
+    // Shared add-only state: on Linux the session gets a private, empty
+    // directory there instead (ADR-046).
+    for c in &i.fs.create_only {
+        if (i.exists)(c) == Some(true) {
+            push(&mut a, &[&"--tmpfs", c]);
+        }
+    }
     // The only way out: brokerd's per-session socket.
     push(&mut a, &[&"--bind", &i.data_sock, &i.data_sock]);
     for r in &remount {
@@ -154,6 +161,8 @@ mod tests {
             deny_entry: vec!["/home/dev/src/web/.git".into()],
             missing_protected: vec!["/home/dev/src/web/.claude".into()],
             shared_scratch: vec![],
+            nested_git: vec![],
+            create_only: vec![],
         };
         let dirs: BTreeSet<&str> = [
             "/home/dev/.ssh",

@@ -4724,5 +4724,29 @@
       "https://man7.org/linux/man-pages/man2/seccomp_unotify.2.html",
       "https://man7.org/linux/man-pages/man7/unix.7.html"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-046 Git Redirection and Shared Agent State Are Not Writable.md",
+    "title": "ADR-046 Git Redirection and Shared Agent State Are Not Writable",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "Git redirection files (commondir, config.worktree, modules, worktrees) and nested .git below the repository are protected, symlinked protected names protect their targets, and Claude Code's shared shell snapshots are add-only (macOS) or private (Linux).",
+    "links_to": [
+      "I5 Config Outside Writable Mounts",
+      "ADR-019 Mandatory Deny-Write List Additions",
+      "ADR-016 macOS M0 Compatibility Exceptions",
+      "Sandbox Launcher",
+      "Filesystem Control and Rollback",
+      "Claude Code and sandbox-runtime",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-10-06) from an adversarial review of the configuration-trust paths and git's repository layout.",
+    "aliases": [
+      "ADR-046"
+    ],
+    "sources": [
+      "https://git-scm.com/docs/gitrepository-layout",
+      "https://git-scm.com/docs/git-config#Documentation/git-config.txt-corefsmonitor"
+    ]
   }
 ]

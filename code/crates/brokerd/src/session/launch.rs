@@ -36,10 +36,21 @@ impl Daemon {
             }
             extra_write.push(p);
         }
+        let mut create_only = Vec::new();
+        for s in &profile.agent.state_private {
+            let p = expand_profile_path(s, home, cwd);
+            if !p.exists() {
+                use std::os::unix::fs::DirBuilderExt;
+                std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&p)?;
+            }
+            extra_write.push(p.clone());
+            create_only.push(p);
+        }
         for w in profile.filesystem.write.iter().chain(&user_policy.filesystem.write) {
             extra_write.push(expand_home(w, home));
         }
         let path_var = params.env.get("PATH").cloned();
+        let nested_git = (repo_root(cwd), launcher::fs_compile::nested_git(&repo_root(cwd)));
         let fs = launcher::fs_compile::compile(&FsInputs {
             home: home.to_path_buf(),
             repo: repo_root(cwd),
@@ -58,6 +69,7 @@ impl Daemon {
             broker_dirs: self.dirs.all(),
             install_dir: self.shim.parent().map(Path::to_path_buf),
             extra_homes: launcher::test_protected_homes(),
+            create_only,
         })?;
 
         let faults = launcher::injected_faults();
@@ -306,6 +318,7 @@ impl Daemon {
             recorder: self.recorder.clone(),
             attribution,
             collector: Some(collector),
+            nested_git,
         })
     }
 }

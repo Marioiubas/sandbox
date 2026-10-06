@@ -157,7 +157,18 @@ pub fn launch(b: &LinuxBackend, spec: SandboxSpec) -> anyhow::Result<SandboxHand
     check_outside_writable(&spec.shim, &spec.fs.writable)?;
     let mut placeholders = Vec::new();
     for p in &spec.fs.missing_protected {
-        if std::fs::create_dir(p).is_ok() {
+        // A directory, or for git's `commondir`/`config.worktree` a file that
+        // git reads as harmless (ADR-046); bound read-only below.
+        let made = match crate::fs_compile::placeholder_file(p) {
+            Some(content) => std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(p)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, content.as_bytes()))
+                .is_ok(),
+            None => std::fs::create_dir(p).is_ok(),
+        };
+        if made {
             placeholders.push(p.clone());
         }
     }
