@@ -414,3 +414,9 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Tests:** the reviewers' four failing tests now pass; new claim and precedence tests.
 - **Tests:** full suite 384 passed, 0 failed (macOS 26); launcher linted for Linux. CI on the merges (runs 37121233421, 37121339010, 37121396028): every test job passed on all four runners; `real-mcp` failed with GitHub's `401 Bad credentials`: the `BROKER_GH_MCP_TOKEN` secret has expired (owner action: a new fine-grained token).
 - **CI found (ubuntu-22.04/24.04, run 37122835976):** the seccomp model test still expected every EPERM refusal to become ENOSYS without brokerd; ADR-045's refusals are ERRNO and stay EPERM. Test fixed; the real-kernel tests (`seccomp_denials_are_on_the_sessions_record`, `an_unserved_seccomp_listener_refuses_the_launch`) had passed with the new filter. Run 37124512471 (b3d02db): every test job green on macOS 15/26 and Ubuntu 22.04/24.04; `real-mcp` still fails on the expired `BROKER_GH_MCP_TOKEN`.
+
+### 2026-10-06: real GitHub MCP run restored
+
+- **Owner action:** `BROKER_GH_MCP_TOKEN` replaced with a new fine-grained token (secret updated 2026-10-06T17:45:55Z).
+- **Ran:** CI job `real-mcp` (job 112415202044, run 37124888034): `get_me`, `issue_read` #1, the private README and `list_issues` over GraphQL succeed through the broker; the unapproved manifest is refused until approved; `merge_pull_request` refused (`mcp_tool_not_allowed`); the token appears in no reply and no audit row; the GraphQL transfer check passes. [[M3 CI Identity and MCP]] D3 passes against the real server again, now on the code with ADR-041 to ADR-045.
+- **Note:** the job fails closed (401) whenever the token expires; it needs renewing before its expiry date.
