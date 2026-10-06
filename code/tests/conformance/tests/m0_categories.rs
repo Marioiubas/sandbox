@@ -357,7 +357,7 @@ fn cat10_git_cannot_be_pointed_at_agent_written_config() {
             .flatten()
             .any(|e| e.file_name().to_string_lossy().starts_with(".git.broker-quarantine-"));
         assert!(moved, "it is renamed aside, not deleted");
-        let stop = h.events().into_iter().filter(|e| e.kind == audit::EventKind::SessionStop).last().unwrap();
+        let stop = h.events().into_iter().rev().find(|e| e.kind == audit::EventKind::SessionStop).unwrap();
         assert!(stop.detail.contains_key("quarantined_git"), "{:?}", stop.detail);
     }
     // Linux placeholders are gone after the session; nothing was left behind.
