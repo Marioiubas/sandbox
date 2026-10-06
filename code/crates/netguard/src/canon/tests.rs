@@ -206,3 +206,51 @@ fn paths() {
     assert_eq!(p("http://x/a"), Err(Reject::NonCanonicalPath));
     assert_eq!(p("/a b"), Err(Reject::ForbiddenByte(b' ')));
 }
+
+// --- Adversarial review (review-tls): address classes -----------------------
+
+/// Cloud credential and metadata endpoints must be `Metadata` (denied unless a
+/// grant names that class), like the ECS endpoint 169.254.170.2 already is.
+/// These are classified `Private` or `LinkLocal` instead, so a grant that
+/// allows `private` (the documented way to reach intranet hosts) also admits
+/// the EKS Pod Identity credential endpoint over IPv6 and the GCP metadata
+/// server on IPv6-only VMs, for any admitted name that resolves to them.
+/// Sources: AWS EKS docs (Pod Identity Agent on 169.254.170.23 and
+/// [fd00:ec2::23]); GCP docs (metadata server at fd20:ce::254 on IPv6-only
+/// instances).
+#[test]
+fn review_cloud_credential_endpoints_are_metadata() {
+    let endpoints = [
+        "fd00:ec2::23",   // AWS EKS Pod Identity Agent (IPv6): serves AWS credentials
+        "169.254.170.23", // AWS EKS Pod Identity Agent (IPv4)
+        "fd20:ce::254",   // GCP metadata server (IPv6-only VMs)
+    ];
+    let wrong: Vec<String> = endpoints
+        .iter()
+        .map(|s| (s, classify_addr(s.parse().unwrap())))
+        .filter(|(_, c)| *c != AddrClass::Metadata)
+        .map(|(s, c)| format!("{s} => {}", c.as_str()))
+        .collect();
+    assert!(wrong.is_empty(), "credential endpoints not classified as metadata: {wrong:?}");
+}
+
+/// RFC 8215 reserves 64:ff9b:1::/48 for local-use IPv4/IPv6 translation: a
+/// translator maps these addresses to an embedded IPv4 address exactly as it
+/// does for the well-known prefix 64:ff9b::/96, which `classify_addr` already
+/// classifies by the embedded address. The local-use prefix is classified
+/// `Public`, so an address that a local NAT64/CLAT translates to
+/// 169.254.169.254, loopback or RFC 1918 passes as public. Where the IPv4
+/// address sits depends on the prefix length the operator chose, so the safe
+/// answer is "not public" (std's unstable `Ipv6Addr::is_global` also
+/// excludes 64:ff9b:1::/48).
+#[test]
+fn review_local_use_nat64_prefix_is_not_public() {
+    let addrs = [
+        "64:ff9b:1::a9fe:a9fe", // /96 inside the local-use prefix: 169.254.169.254
+        "64:ff9b:1::7f00:1",    // 127.0.0.1
+        "64:ff9b:1::a00:1",     // 10.0.0.1
+    ];
+    let public: Vec<&str> =
+        addrs.iter().copied().filter(|s| classify_addr(s.parse().unwrap()) == AddrClass::Public).collect();
+    assert!(public.is_empty(), "local-use NAT64 addresses classified public: {public:?}");
+}
