@@ -1,9 +1,11 @@
 //! The MCP relay (MCP Guard): the daemon pins the server's manifest before
 //! relaying anything, answers `initialize` and `tools/list` itself from the
-//! pinned state, authorizes each `tools/call` (write-ahead audit, then
-//! labels, then forward), and refuses what it does not relay: other
-//! methods, server-to-client requests (sampling, roots, elicitation) and
-//! any frame that is not strict JSON-RPC 2.0 on one line.
+//! pinned state (ADR-047: the `initialize` answer is a fixed projection of
+//! the server's, and part of the pin), authorizes each `tools/call`
+//! (write-ahead audit, then labels, then forward), and refuses what it does
+//! not relay: other methods, server-to-client requests (sampling, roots,
+//! elicitation), and any frame that is not strict JSON-RPC 2.0 on one line.
+//! What the server sends back is handled in `from_server`.
 
 use super::pin::{self, Manifest};
 use crate::pipeline::PipelineCtx;
@@ -12,7 +14,7 @@ use mcpguard::frame::{Frame, Kind, Lines, classify};
 use policy::github::Label;
 use policy::mcp::McpServerConfig;
 use serde_json::{Value, json};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -26,17 +28,25 @@ const DENIED: i64 = -32020;
 pub(super) enum Pin {
     Pinned(Manifest),
     Unapproved(Manifest),
-    Changed { expected: String, got: Manifest, diff: Vec<String> },
+    Changed {
+        expected: String,
+        got: Manifest,
+        diff: Vec<String>,
+    },
     Failed(String),
+    /// The server was not started: its command names a path inside a
+    /// writable mount of the agent session (ADR-047).
+    Writable(String),
 }
 
 impl Pin {
-    fn reason(&self) -> Option<Reason> {
+    pub(super) fn reason(&self) -> Option<Reason> {
         match self {
             Pin::Pinned(_) => None,
             Pin::Unapproved(_) => Some(Reason::McpManifestUnapproved),
             Pin::Changed { .. } => Some(Reason::McpManifestChanged),
             Pin::Failed(_) => Some(Reason::McpLaunchFailed),
+            Pin::Writable(_) => Some(Reason::McpCommandWritable),
         }
     }
 }
@@ -91,9 +101,11 @@ fn parse(bytes: &[u8]) -> Option<Value> {
 }
 
 /// Initialize the server and read its tools (every page) before anything
-/// from the agent is relayed. Server requests during the handshake are
-/// refused (their methods are returned for the audit); notifications are
-/// dropped.
+/// from the agent is relayed. Returns the `initialize` result as it will be
+/// forwarded to the agent (`forwarded_init`) and the manifest pinning it
+/// with the tools (the daemon attaches the command). Server requests during
+/// the handshake are refused (their methods are returned for the audit);
+/// notifications are dropped.
 pub(super) async fn handshake<R, W>(r: &mut FrameReader<R>, w: &mut W) -> Result<(Value, Manifest, Vec<String>), String>
 where
     R: AsyncBufRead + Unpin,
@@ -140,6 +152,7 @@ where
         &mut refused,
     )
     .await?;
+    let init = pin::forwarded_init(&init)?;
     send(w, &json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).await.map_err(|e| e.to_string())?;
     let mut tools = Vec::new();
     let mut cursor: Option<Value> = None;
@@ -152,13 +165,14 @@ where
         tools.extend(res.get("tools").and_then(|t| t.as_array()).cloned().ok_or("tools/list: no tools array")?);
         cursor = res.get("nextCursor").filter(|c| !c.is_null()).cloned();
         if cursor.is_none() {
-            return Ok((init, pin::manifest(tools)?, refused));
+            let man = pin::build(Value::Null, init.clone(), tools)?;
+            return Ok((init, man, refused));
         }
     }
     Err("tools/list has more than 20 pages".into())
 }
 
-fn refusal(id: Value) -> Value {
+pub(super) fn refusal(id: Value) -> Value {
     json!({"jsonrpc": "2.0", "id": id,
            "error": {"code": -32601, "message": "broker: server-to-client requests are not relayed"}})
 }
@@ -172,9 +186,41 @@ pub(super) struct Relay<'a> {
     pub server_session: String,
     pub pin: Pin,
     pub init: Value,
+    /// Requests forwarded to the server whose replies the agent awaits.
     pub pending: HashSet<String>,
+    /// Progress tokens of pending calls (canonical JSON) → their request.
+    pub progress: HashMap<String, String>,
+    /// Server notification methods already logged as dropped.
+    pub dropped: HashSet<String>,
     pub relist: Option<(u32, Vec<Value>)>,
     pub relists: u32,
+}
+
+impl<'a> Relay<'a> {
+    pub fn new(
+        ctx: &'a Arc<PipelineCtx>,
+        name: &'a str,
+        cfg: &'a McpServerConfig,
+        dest: Dest,
+        server_session: String,
+        pin: Pin,
+        init: Value,
+    ) -> Self {
+        Relay {
+            ctx,
+            name,
+            cfg,
+            dest,
+            server_session,
+            pin,
+            init,
+            pending: HashSet::new(),
+            progress: HashMap::new(),
+            dropped: HashSet::new(),
+            relist: None,
+            relists: 0,
+        }
+    }
 }
 
 impl Relay<'_> {
@@ -252,6 +298,9 @@ impl Relay<'_> {
                 .detail("manifest", got.sha256.as_str())
                 .detail("diff", diff.clone()),
             Pin::Failed(m) => self.event(&rid, verb).deny(Reason::McpLaunchFailed, vec![]).detail("error", m.as_str()),
+            Pin::Writable(m) => {
+                self.event(&rid, verb).deny(Reason::McpCommandWritable, vec![]).detail("error", m.as_str())
+            }
         };
         if let Err(e) = self.ctx.recorder.append(&ev) {
             eprintln!("brokerd: audit append failed for mcp connect: {e:#}");
@@ -351,84 +400,16 @@ impl Relay<'_> {
                         self.ctx.raise_label(&rid, &self.dest, l, verb.clone());
                     }
                 }
-                self.pending.insert(id.to_string());
+                let key = id.to_string();
+                if let Some(t) =
+                    params.and_then(|p| p.pointer("/_meta/progressToken")).filter(|t| t.is_string() || t.is_number())
+                {
+                    self.progress.insert(t.to_string(), key.clone());
+                }
+                self.pending.insert(key);
                 (None, Some(v))
             }
         }
-    }
-
-    /// Handle one server frame: `(frame for the agent, reply to the server)`.
-    pub fn on_server(&mut self, bytes: &[u8]) -> (Option<Value>, Option<Value>) {
-        match classify(bytes) {
-            (Kind::Request { id, method }, _) => {
-                let _ =
-                    self.deny(None, Reason::McpMethodNotAllowed, format!("mcp.server.{method} {}", self.name), vec![]);
-                (None, Some(refusal(id)))
-            }
-            (Kind::Notification { method }, Some(v)) => {
-                if method == "notifications/tools/list_changed" {
-                    (None, self.start_relist())
-                } else {
-                    (Some(v), None)
-                }
-            }
-            (Kind::Response { id }, Some(v)) => {
-                if let Some(s) = id.as_str().filter(|s| s.starts_with("broker-relist-")) {
-                    let s = s.to_string();
-                    return (None, self.on_relist(&s, &v));
-                }
-                (self.pending.remove(&id.to_string()).then_some(v), None)
-            }
-            _ => (None, None),
-        }
-    }
-
-    fn start_relist(&mut self) -> Option<Value> {
-        if !matches!(self.pin, Pin::Pinned(_)) {
-            return None;
-        }
-        self.relists += 1;
-        self.relist = Some((0, Vec::new()));
-        Some(
-            json!({"jsonrpc": "2.0", "id": format!("broker-relist-{}-0", self.relists), "method": "tools/list", "params": {}}),
-        )
-    }
-
-    /// A page of a re-listing: fetch the next page, or compare the whole.
-    fn on_relist(&mut self, id: &str, v: &Value) -> Option<Value> {
-        let expected_prefix = format!("broker-relist-{}-", self.relists);
-        let (page, mut acc) = self.relist.take().filter(|_| id.starts_with(&expected_prefix))?;
-        let res = v.get("result");
-        let tools = res.and_then(|r| r.get("tools")).and_then(|t| t.as_array());
-        let next = res.and_then(|r| r.get("nextCursor")).filter(|c| !c.is_null()).cloned();
-        let revoke = |this: &mut Self, got: Result<Manifest, String>| {
-            let Pin::Pinned(old) = &this.pin else { return };
-            let (got, diff) = match got {
-                Ok(m) if m.sha256 == old.sha256 => return,
-                Ok(m) => {
-                    let d = pin::diff(&old.tools, &m.tools);
-                    (m, d)
-                }
-                Err(e) => (Manifest { sha256: "unpinnable".into(), tools: vec![] }, vec![e]),
-            };
-            this.pin = Pin::Changed { expected: old.sha256.clone(), got, diff };
-            this.record_connect();
-        };
-        match (tools, next) {
-            (None, _) => revoke(self, Err("tools/list failed while re-listing".into())),
-            (Some(t), Some(c)) if page < 19 => {
-                acc.extend(t.iter().cloned());
-                self.relist = Some((page + 1, acc));
-                return Some(json!({"jsonrpc": "2.0", "id": format!("{expected_prefix}{}", page + 1),
-                                   "method": "tools/list", "params": {"cursor": c}}));
-            }
-            (Some(_), Some(_)) => revoke(self, Err("tools/list has more than 20 pages".into())),
-            (Some(t), None) => {
-                acc.extend(t.iter().cloned());
-                revoke(self, pin::manifest(acc));
-            }
-        }
-        None
     }
 }
 

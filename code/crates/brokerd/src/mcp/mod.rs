@@ -4,9 +4,13 @@
 //! the command pinned for that name in user or org policy, in its own
 //! sandbox with its own egress grants, pins its manifest and relays
 //! JSON-RPC with every `tools/call` authorized. The agent can name a
-//! server; it cannot choose its command (I5).
+//! server; it cannot choose its command (I5), change what it runs (the
+//! command is pinned by content and refused inside the agent's writable
+//! mounts) or what it says at `initialize` (pinned too: ADR-047).
 
 mod approval;
+pub mod command;
+mod from_server;
 pub mod pin;
 mod relay;
 
@@ -14,13 +18,13 @@ use crate::dirs::BrokerDirs;
 use crate::labels::LabelOwner;
 use crate::pipeline::{Outcome, PipelineCtx};
 use crate::proto::Exited;
-use crate::session::Daemon;
+use crate::session::{Daemon, McpStartError};
 use audit::{Dest, Reason, RequestId};
+use command::{Gate, Refusal};
 use netguard::CanonicalHost;
 use netguard::ingress::IngressKind;
 use policy::PolicyFile;
 use relay::{FrameReader, Pin, Relay, send};
-use std::collections::HashSet;
 use std::sync::{Arc, Weak};
 use tokio::io::{AsyncRead, AsyncWrite, BufReader};
 
@@ -35,6 +39,9 @@ pub struct McpCtx {
     pub daemon: Weak<Daemon>,
     pub user: PolicyFile,
     pub dirs: BrokerDirs,
+    /// The agent session's filesystem policy: a server whose command names
+    /// a path writable in it is never started (ADR-047).
+    pub agent_fs: Arc<launcher::fs_compile::CompiledFsPolicy>,
 }
 
 /// The server a reserved host names, if it is one and it is defined.
@@ -67,19 +74,28 @@ where
     let mut agent_r = FrameReader::new(BufReader::new(agent_r));
 
     // Start and pin the server before anything from the agent is relayed.
+    // The approved manifest's command pin gates the start (ADR-047).
+    let approved = pin::approved(&m.dirs, &name)
+        .and_then(|sha| pin::approved_manifest(&m.dirs, &name).filter(|a| a.sha256 == sha));
+    let gate = Gate {
+        agent_fs: m.agent_fs.clone(),
+        approved: approved.as_ref().map(|a| a.command.clone()).filter(|c| !c.is_null()),
+    };
     let started = match m.daemon.upgrade() {
         // The server's session carries this agent session's labels (ADR-038).
-        Some(d) => {
-            d.start_mcp_server(&name, &cfg, &m.user, LabelOwner::of(&ctx)).await.map_err(|f| f.message).map(|p| (d, p))
-        }
-        None => Err("the daemon is shutting down".into()),
+        Some(d) => d.start_mcp_server(&name, &cfg, &m.user, LabelOwner::of(&ctx), gate).await.map(|p| (d, p)),
+        None => Err(McpStartError::Failed("the daemon is shutting down".into())),
     };
     let mut server = None;
     let mut refused_early: Vec<String> = Vec::new();
     let (pin, init, server_session) = match started {
-        Err(e) => (Pin::Failed(e), serde_json::Value::Null, String::new()),
+        Err(McpStartError::Failed(f)) => (Pin::Failed(f.message), serde_json::Value::Null, String::new()),
+        Err(McpStartError::Refused(why)) => {
+            (refused_pin(&m.dirs, &name, approved, why), serde_json::Value::Null, String::new())
+        }
         Ok((d, mut p)) => {
             let sid = p.running.id.to_string();
+            let command = std::mem::take(&mut p.command);
             let io = (
                 tokio::net::unix::pipe::Sender::from_owned_fd(p.stdin.into()),
                 tokio::net::unix::pipe::Receiver::from_owned_fd(p.stdout.into()),
@@ -91,14 +107,14 @@ where
                     let (pin, init) = match pinned {
                         Ok(Ok((init, man, refused))) => {
                             refused_early = refused;
+                            let man = man.with_command(command);
                             let _ = pin::record_seen(&m.dirs, &name, &man);
                             let pin = match pin::approved(&m.dirs, &name) {
                                 None => Pin::Unapproved(man),
                                 Some(sha) if sha == man.sha256 => Pin::Pinned(man),
                                 Some(expected) => {
-                                    let old =
-                                        pin::approved_manifest(&m.dirs, &name).map(|a| a.tools).unwrap_or_default();
-                                    Pin::Changed { diff: pin::diff(&old, &man.tools), expected, got: man }
+                                    let old = pin::approved_manifest(&m.dirs, &name).unwrap_or_else(pin::empty);
+                                    Pin::Changed { diff: pin::changes(&old, &man), expected, got: man }
                                 }
                             };
                             (pin, init)
@@ -121,18 +137,7 @@ where
             }
         }
     };
-    let mut relay = Relay {
-        ctx: &ctx,
-        name: &name,
-        cfg: &cfg,
-        dest,
-        server_session,
-        pin,
-        init,
-        pending: HashSet::new(),
-        relist: None,
-        relists: 0,
-    };
+    let mut relay = Relay::new(&ctx, &name, &cfg, dest, server_session, pin, init);
     relay.record_connect();
     for m in refused_early {
         let _ = relay.deny(None, Reason::McpMethodNotAllowed, format!("mcp.server.{m} {name}"), vec![]);
@@ -200,4 +205,21 @@ where
         let _ = std::fs::remove_dir_all(workdir);
     }
     Outcome::Terminated { request_id: rid, requests: frames }
+}
+
+/// The pin of a server the command gate refused before it ran. A changed
+/// command is recorded as seen with the server and tools approved before
+/// (the new code did not run, so they are unknown): approving it lets the
+/// new command start, and anything else it then serves is a change again.
+fn refused_pin(dirs: &BrokerDirs, name: &str, approved: Option<pin::Manifest>, why: Refusal) -> Pin {
+    match (why, approved) {
+        (Refusal::Writable(e), _) => Pin::Writable(e),
+        (Refusal::Unpinnable(e), _) => Pin::Failed(e),
+        (Refusal::Changed(now), Some(a)) => {
+            let got = a.with_command(now);
+            let _ = pin::record_seen(dirs, name, &got);
+            Pin::Changed { diff: pin::changes(&a, &got), expected: a.sha256, got }
+        }
+        (Refusal::Changed(_), None) => Pin::Failed("the server's command changed and no approval is on record".into()),
+    }
 }

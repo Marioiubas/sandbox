@@ -4724,5 +4724,31 @@
       "https://man7.org/linux/man-pages/man2/seccomp_unotify.2.html",
       "https://man7.org/linux/man-pages/man7/unix.7.html"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-047 MCP Pin Covers What Reaches the Agent.md",
+    "title": "ADR-047 MCP Pin Covers What Reaches the Agent",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "A pinned MCP server's manifest digest covers its command by content (executable, a script's interpreter, every file argument), the fixed projection of its initialize result the relay forwards (protocolVersion, serverInfo name/title/version, instructions; capabilities fixed to tools), and every tool object; a changed command refuses the start, a command naming a path the agent can write is never started, nothing reaches the agent from an unpinned server, only progress for the agent's own calls is forwarded, and broker mcp approve shows all of it in full, escaped.",
+    "links_to": [
+      "ADR-030 MCP Guard as Built",
+      "MCP Guard",
+      "ADR-012 MCP Servers as Pinned Sandboxed Principals",
+      "ADR-037 Step-Up Approvals as Built",
+      "I5 Config Outside Writable Mounts",
+      "I9 Hash-Chained Audit Outside the Sandbox",
+      "postmark-mcp Rug Pull",
+      "Cursor CurXecute and MCPoison",
+      "Fatigue-Resistant Approval Interfaces",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-10-06) from a configuration-trust review of MCP Guard (findings F7 to F10), the MCP 2025-06-18 schema and the reviewer's failing tests in brokerd::mcp::relay::tests.",
+    "aliases": [
+      "ADR-047"
+    ],
+    "sources": [
+      "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2025-06-18/schema.ts"
+    ]
   }
 ]

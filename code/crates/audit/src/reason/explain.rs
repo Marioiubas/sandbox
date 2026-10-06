@@ -70,13 +70,20 @@ impl Reason {
             }
             S3PrefixNotAllowed => "the S3 operation is not granted on this bucket and key prefix",
             McpServerUnknown => "no pinned MCP server by that name is defined in user or org policy",
-            McpManifestUnapproved => "the MCP server's tool manifest has not been approved (`broker mcp approve`)",
-            McpManifestChanged => "the MCP server's tool manifest changed since approval; its grants are revoked",
+            McpManifestUnapproved => {
+                "the MCP server's manifest (its command's content, what it tells the agent at initialize, its tools) has not been approved (`broker mcp approve`)"
+            }
+            McpManifestChanged => {
+                "the MCP server's manifest (its command's content, what it tells the agent at initialize, or its tools) changed since approval; its grants are revoked"
+            }
             McpToolUnknown => "the tool is not in the MCP server's pinned manifest",
             McpToolNotAllowed => "policy does not allow this MCP tool",
             McpMethodNotAllowed => "the MCP method is not relayed by the broker",
             McpMalformed => "the MCP message is not strict JSON-RPC 2.0 or is too large",
             McpLaunchFailed => "the pinned MCP server could not be started or pinned",
+            McpCommandWritable => {
+                "the pinned MCP server's command names a path the agent can write (its project or temp area), so it was not started; install the server outside the agent's writable mounts"
+            }
             ForeignCredential => "the request carried a credential the broker did not issue",
             SentinelWrongHost => "a broker sentinel was sent to a host it is not bound to",
             AmbiguousCredential => "more than one credential rule allowed the request",

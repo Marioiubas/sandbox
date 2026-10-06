@@ -1,10 +1,12 @@
-//! Manifest pinning (MCP Guard): a server's `tools/list` hashed over
-//! canonical JSON (every tool object, keys sorted, tools sorted by name);
-//! approvals bind a server name to that hash and live in the daemon's state
-//! directory, outside every sandbox (I5). Any change revokes the server.
+//! Manifest pinning (MCP Guard): everything a server puts in front of the
+//! agent (its command by content, what the relay forwards from its
+//! `initialize` result, and every tool object: ADR-047) hashed over
+//! canonical JSON; approvals bind a server name to that hash and live in
+//! the daemon's state directory, outside every sandbox (I5). Any change
+//! revokes the server.
 
 use crate::dirs::BrokerDirs;
-pub use mcpguard::manifest::{Manifest, canonical, diff, digest, manifest};
+pub use mcpguard::manifest::{Manifest, build, canonical, changes, diff, digest, forwarded_init, manifest};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -28,6 +30,11 @@ fn write_atomic(p: &std::path::Path, bytes: &[u8]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A manifest with nothing in it (what a first approval is compared with).
+pub fn empty() -> Manifest {
+    Manifest { sha256: String::new(), command: Value::Null, server: Value::Null, tools: vec![] }
+}
+
 /// The approved digest for a server, if any.
 pub fn approved(dirs: &BrokerDirs, name: &str) -> Option<String> {
     let b = std::fs::read(approvals_file(dirs)).ok()?;
@@ -35,13 +42,21 @@ pub fn approved(dirs: &BrokerDirs, name: &str) -> Option<String> {
     m.get(name).cloned()
 }
 
+/// A stored manifest; files written before ADR-047 have no `command` or
+/// `server` (null), so their digest never matches a server's now.
 fn load(p: PathBuf) -> Option<Manifest> {
     let v: Value = serde_json::from_slice(&std::fs::read(p).ok()?).ok()?;
-    Some(Manifest { sha256: v.get("sha256")?.as_str()?.to_string(), tools: v.get("tools")?.as_array()?.clone() })
+    Some(Manifest {
+        sha256: v.get("sha256")?.as_str()?.to_string(),
+        command: v.get("command").cloned().unwrap_or(Value::Null),
+        server: v.get("server").cloned().unwrap_or(Value::Null),
+        tools: v.get("tools")?.as_array()?.clone(),
+    })
 }
 
 fn save(p: PathBuf, m: &Manifest) -> anyhow::Result<()> {
-    write_atomic(&p, &serde_json::to_vec_pretty(&json!({ "sha256": m.sha256, "tools": m.tools }))?)
+    let v = json!({ "sha256": m.sha256, "command": m.command, "server": m.server, "tools": m.tools });
+    write_atomic(&p, &serde_json::to_vec_pretty(&v)?)
 }
 
 /// The manifest the daemon last saw for a server (what `approve` shows).
@@ -75,11 +90,21 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         let dirs = BrokerDirs::rooted(home.path());
         dirs.ensure().unwrap();
-        let m = manifest(vec![json!({"name": "t"})]).unwrap();
+        let m = build(
+            json!({"argv": ["/usr/bin/true"], "files": {"/usr/bin/true": "sha256:00"}}),
+            json!({"protocolVersion": "2025-06-18", "capabilities": {"tools": {}}, "instructions": "Be brief."}),
+            vec![json!({"name": "t"})],
+        )
+        .unwrap();
         assert_eq!(approved(&dirs, "gh"), None);
         approve(&dirs, "gh", &m).unwrap();
         assert_eq!(approved(&dirs, "gh"), Some(m.sha256.clone()));
-        assert_eq!(approved_manifest(&dirs, "gh"), Some(m));
+        assert_eq!(approved_manifest(&dirs, "gh"), Some(m.clone()), "the command and server parts are stored");
         assert_eq!(approved(&dirs, "other"), None);
+        // A manifest stored before ADR-047 loads with null parts.
+        let old = manifest(vec![json!({"name": "t"})]).unwrap();
+        let legacy = json!({"sha256": old.sha256, "tools": old.tools});
+        std::fs::write(manifest_file(&dirs, "legacy", "approved"), serde_json::to_vec(&legacy).unwrap()).unwrap();
+        assert_eq!(approved_manifest(&dirs, "legacy"), Some(old));
     }
 }

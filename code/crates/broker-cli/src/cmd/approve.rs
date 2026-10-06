@@ -6,6 +6,7 @@
 //! the agent's account, and grant it. They run on the host: the control
 //! socket is not reachable from any sandbox.
 
+use super::term::terminal_safe;
 use super::{EXIT_BROKER, ctl};
 use serde_json::{Value, json};
 use std::io::{BufRead, IsTerminal, Write};
@@ -13,22 +14,6 @@ use std::io::{BufRead, IsTerminal, Write};
 /// Bytes of tool arguments the `approvals` list shows (all of them with
 /// `--json`); `broker approve` always shows every argument it asks about.
 const SHOW_ARGS: usize = 4096;
-
-/// What reaches the terminal: the agent's bytes (tool arguments, paths,
-/// causes) with every control the terminal could act on escaped: C0/DEL
-/// (serde_json escapes these inside strings only), C1 (e.g. U+009B, CSI),
-/// bidi embeddings, overrides and isolates, zero-width and line separators.
-fn terminal_safe(s: &str) -> String {
-    s.chars()
-        .map(|c| match c as u32 {
-            0x0a => c.to_string(),
-            0x00..=0x1f | 0x7f..=0x9f | 0x061c | 0x200b..=0x200f | 0x2028..=0x202e | 0x2060..=0x2069 | 0xfeff => {
-                format!("\\u{{{:04x}}}", c as u32)
-            }
-            _ => c.to_string(),
-        })
-        .collect()
-}
 
 /// The approve view: everything the approval would allow, every argument.
 fn render(p: &Value) -> String {

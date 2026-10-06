@@ -193,6 +193,7 @@ impl Daemon {
                     daemon: Arc::downgrade(self),
                     user: user_policy.clone(),
                     dirs: self.dirs.clone(),
+                    agent_fs: Arc::new(fs.clone()),
                 })
             }),
             approvals: self.approvals.clone(),

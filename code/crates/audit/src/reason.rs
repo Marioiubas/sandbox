@@ -133,6 +133,9 @@ pub enum Reason {
     McpMalformed,
     /// MCP: the pinned server could not be started or pinned.
     McpLaunchFailed,
+    /// MCP: the server's command names a path inside a writable mount of
+    /// the agent session, so it is not started (ADR-047).
+    McpCommandWritable,
 
     // ---- credentials (M1, I1/I7) ----
     /// A credential the broker did not issue (I7).
@@ -253,6 +256,7 @@ impl Reason {
         Reason::McpMethodNotAllowed,
         Reason::McpMalformed,
         Reason::McpLaunchFailed,
+        Reason::McpCommandWritable,
         Reason::ForeignCredential,
         Reason::SentinelWrongHost,
         Reason::AmbiguousCredential,
@@ -339,6 +343,7 @@ impl Reason {
             Reason::McpMethodNotAllowed => "mcp_method_not_allowed",
             Reason::McpMalformed => "mcp_malformed",
             Reason::McpLaunchFailed => "mcp_launch_failed",
+            Reason::McpCommandWritable => "mcp_command_writable",
             Reason::ForeignCredential => "foreign_credential",
             Reason::SentinelWrongHost => "sentinel_wrong_host",
             Reason::AmbiguousCredential => "ambiguous_credential",
@@ -409,7 +414,8 @@ impl Reason {
             | McpToolNotAllowed
             | McpMethodNotAllowed
             | McpMalformed
-            | McpLaunchFailed => "mcp",
+            | McpLaunchFailed
+            | McpCommandWritable => "mcp",
             PolicyDenied
             | RepoPolicyDenied
             | PolicyError
