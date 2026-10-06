@@ -47,7 +47,7 @@ fn prefixes() {
 
 fn rules(read: &[&str], write: &[&str], delete: &[&str]) -> S3Rules {
     let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect();
-    S3Rules { bucket: "acme-data".into(), read: v(read), write: v(write), delete: v(delete) }
+    S3Rules { bucket: "acme-data".into(), partition: "aws".into(), read: v(read), write: v(write), delete: v(delete) }
 }
 
 #[test]
@@ -119,7 +119,7 @@ proptest! {
     #[test]
     fn broker_and_aws_agree(read in prefix_strategy(), write in prefix_strategy(), delete in prefix_strategy(),
                             key in "[ab/]{0,6}", other in any::<bool>()) {
-        let r = S3Rules { bucket: "acme-data".into(), read, write, delete };
+        let r = S3Rules { bucket: "acme-data".into(), partition: "aws".into(), read, write, delete };
         let Ok(policy) = session_policy(&r) else { return Ok(()) };
         let bucket = if other { "acme-other" } else { "acme-data" };
         for op in OPS {
@@ -127,4 +127,17 @@ proptest! {
                             "{} {}/{} under {}", op, bucket, key, policy);
         }
     }
+}
+
+/// GovCloud endpoints sign for the `aws-us-gov` partition; a session policy
+/// naming `arn:aws:` resources there would deny every call.
+#[test]
+fn session_policies_name_the_endpoints_partition() {
+    assert_eq!(partition("us-gov-west-1"), "aws-us-gov");
+    assert_eq!(partition("us-east-1"), "aws");
+    let gov = endpoint(&netguard::canon_host(b"acme-data.s3.us-gov-west-1.amazonaws.com").unwrap()).unwrap();
+    let mut r = rules(&["tasks/"], &[], &[]);
+    r.partition = partition(&gov.region).to_string();
+    let p = session_policy(&r).unwrap();
+    assert!(p.contains("arn:aws-us-gov:s3:::acme-data/tasks/*") && !p.contains("arn:aws:s3"), "{p}");
 }

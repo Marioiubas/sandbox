@@ -50,6 +50,30 @@ pub const CREDENTIAL_PARAMS: &[&str] = &[
     "signature",
 ];
 
+/// A header name as servers commonly read it: lower case, `_` as `-`
+/// (CGI and WSGI servers fold `-` into `_`, so `x_api_key` reaches them as
+/// the `x-api-key` header).
+pub fn norm_header(name: &str) -> String {
+    name.to_ascii_lowercase().replace('_', "-")
+}
+
+/// A decoded, lower-case query parameter name as PHP reads it: `.`, space
+/// and `[` become `_` (so `api.key` reaches PHP as `api_key`).
+fn norm_param(k: &str) -> String {
+    k.chars().map(|c| if matches!(c, '.' | ' ' | '[') { '_' } else { c }).collect()
+}
+
+fn credential_param(k: &str) -> bool {
+    CREDENTIAL_PARAMS.contains(&k) || CREDENTIAL_PARAMS.contains(&norm_param(k).as_str())
+}
+
+/// The credential header a name stands for, if any: a listed one or one a
+/// credential of this session is declared with.
+fn credential_header(name: &str, declared: &[String]) -> Option<String> {
+    let n = norm_header(name);
+    (CREDENTIAL_HEADERS.contains(&n.as_str()) || declared.contains(&n)).then_some(n)
+}
+
 /// A sentinel the client presented (by credential ID).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CredentialUse {
@@ -118,64 +142,64 @@ pub fn inspect(
     channel_sentinel: Option<&[u8]>,
 ) -> Result<Vec<CredentialUse>, Rejected> {
     let mut uses = Vec::new();
-    for name in CREDENTIAL_HEADERS {
-        for value in headers.get_all(*name) {
-            let v = value.as_bytes();
-            if v.iter().all(|b| b.is_ascii_whitespace()) {
-                continue;
-            }
-            match *name {
-                "cookie" => return Err(Rejected { reason: Reason::ForeignCredential, location: "cookie".into() }),
-                "authorization" | "proxy-authorization" => {
-                    let s = std::str::from_utf8(v)
-                        .map_err(|_| Rejected { reason: Reason::ForeignCredential, location: name.to_string() })?;
-                    let (scheme, rest) = s.trim().split_once(' ').unwrap_or((s.trim(), ""));
-                    let rest = rest.trim();
-                    match scheme.to_ascii_lowercase().as_str() {
-                        "bearer" | "token" => verdict(rest.as_bytes(), name, sentinels, dest, &mut uses)?,
-                        "basic" => {
-                            let raw = base64::engine::general_purpose::STANDARD.decode(rest).map_err(|_| Rejected {
+    let declared = sentinels.declared_headers();
+    for (header, value) in headers.iter() {
+        let Some(canon) = credential_header(header.as_str(), &declared) else { continue };
+        let name = &canon.as_str();
+        let v = value.as_bytes();
+        if v.iter().all(|b| b.is_ascii_whitespace()) {
+            continue;
+        }
+        match *name {
+            "cookie" => return Err(Rejected { reason: Reason::ForeignCredential, location: "cookie".into() }),
+            "authorization" | "proxy-authorization" => {
+                let s = std::str::from_utf8(v)
+                    .map_err(|_| Rejected { reason: Reason::ForeignCredential, location: name.to_string() })?;
+                let (scheme, rest) = s.trim().split_once(' ').unwrap_or((s.trim(), ""));
+                let rest = rest.trim();
+                match scheme.to_ascii_lowercase().as_str() {
+                    "bearer" | "token" => verdict(rest.as_bytes(), name, sentinels, dest, &mut uses)?,
+                    "basic" => {
+                        let raw = base64::engine::general_purpose::STANDARD
+                            .decode(rest)
+                            .map_err(|_| Rejected { reason: Reason::ForeignCredential, location: name.to_string() })?;
+                        let pass = match raw.iter().position(|&b| b == b':') {
+                            Some(i) => &raw[i + 1..],
+                            None => &raw[..],
+                        };
+                        if *name == "proxy-authorization" && channel_sentinel.is_some_and(|c| c == pass) {
+                            continue;
+                        }
+                        verdict(pass, name, sentinels, dest, &mut uses)?
+                    }
+                    // A SigV4 signature made with an access key ID: only
+                    // this session's sentinel is acceptable (the broker
+                    // re-signs); the signature itself is discarded.
+                    "aws4-hmac-sha256" => {
+                        let akid = rest
+                            .split(',')
+                            .find_map(|p| p.trim().strip_prefix("Credential="))
+                            .and_then(|c| c.split('/').next())
+                            .filter(|a| !a.is_empty())
+                            .ok_or_else(|| Rejected {
                                 reason: Reason::ForeignCredential,
                                 location: name.to_string(),
                             })?;
-                            let pass = match raw.iter().position(|&b| b == b':') {
-                                Some(i) => &raw[i + 1..],
-                                None => &raw[..],
-                            };
-                            if *name == "proxy-authorization" && channel_sentinel.is_some_and(|c| c == pass) {
-                                continue;
-                            }
-                            verdict(pass, name, sentinels, dest, &mut uses)?
-                        }
-                        // A SigV4 signature made with an access key ID: only
-                        // this session's sentinel is acceptable (the broker
-                        // re-signs); the signature itself is discarded.
-                        "aws4-hmac-sha256" => {
-                            let akid = rest
-                                .split(',')
-                                .find_map(|p| p.trim().strip_prefix("Credential="))
-                                .and_then(|c| c.split('/').next())
-                                .filter(|a| !a.is_empty())
-                                .ok_or_else(|| Rejected {
-                                    reason: Reason::ForeignCredential,
-                                    location: name.to_string(),
-                                })?;
-                            verdict(akid.as_bytes(), name, sentinels, dest, &mut uses)?
-                        }
-                        _ => {
-                            return Err(Rejected { reason: Reason::ForeignCredential, location: name.to_string() });
-                        }
+                        verdict(akid.as_bytes(), name, sentinels, dest, &mut uses)?
+                    }
+                    _ => {
+                        return Err(Rejected { reason: Reason::ForeignCredential, location: name.to_string() });
                     }
                 }
-                _ => verdict(v, name, sentinels, dest, &mut uses)?,
             }
+            _ => verdict(v, name, sentinels, dest, &mut uses)?,
         }
     }
     if let Some(q) = query {
         for pair in q.split('&') {
             let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
             let k = percent_decode(k).map(|k| String::from_utf8_lossy(&k).to_ascii_lowercase()).unwrap_or_default();
-            if !CREDENTIAL_PARAMS.contains(&k.as_str()) || v.is_empty() {
+            if !credential_param(&k) || v.is_empty() {
                 continue;
             }
             let v = percent_decode(v)
@@ -189,8 +213,10 @@ pub fn inspect(
 /// Remove every credential header, and return the query with credential
 /// parameters removed (the attached credential is the only one that leaves).
 pub fn strip(headers: &mut HeaderMap, query: Option<&str>) -> Option<String> {
-    for name in CREDENTIAL_HEADERS {
-        headers.remove(*name);
+    let names: Vec<http::HeaderName> =
+        headers.keys().filter(|n| credential_header(n.as_str(), &[]).is_some()).cloned().collect();
+    for name in names {
+        headers.remove(name);
     }
     let q = query?;
     let kept: Vec<&str> = q
@@ -198,10 +224,23 @@ pub fn strip(headers: &mut HeaderMap, query: Option<&str>) -> Option<String> {
         .filter(|pair| {
             let k = pair.split_once('=').map(|(k, _)| k).unwrap_or(pair);
             let k = percent_decode(k).map(|k| String::from_utf8_lossy(&k).to_ascii_lowercase()).unwrap_or_default();
-            !CREDENTIAL_PARAMS.contains(&k.as_str())
+            !credential_param(&k)
         })
         .collect();
     if kept.is_empty() { None } else { Some(kept.join("&")) }
+}
+
+/// Also remove the custom headers this session's credentials are declared
+/// with (a sentinel presented there for another credential is not
+/// forwarded); the attached credential is set afterwards.
+pub fn strip_declared(headers: &mut HeaderMap, sentinels: &Sentinels) {
+    for name in sentinels.declared_headers() {
+        let names: Vec<http::HeaderName> =
+            headers.keys().filter(|n| norm_header(n.as_str()) == name).cloned().collect();
+        for n in names {
+            headers.remove(n);
+        }
+    }
 }
 
 #[cfg(test)]

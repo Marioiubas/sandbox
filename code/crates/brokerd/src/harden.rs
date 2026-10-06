@@ -5,8 +5,27 @@
 //! keeps a crash, or another process on the host, from copying its secrets.
 //! Applied before anything is loaded; if it fails, the daemon does not start.
 
-/// Disable core dumps and (Linux) make the process non-dumpable.
+/// Programs the daemon runs come from here, never from the `PATH` of the
+/// shell that started it (which may hold a directory a sandbox can write).
+pub const SAFE_PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+/// Drop the inherited `PATH` and working directory, then disable core dumps
+/// and (Linux) make the process non-dumpable. Call before any thread starts.
 pub fn process() -> std::io::Result<()> {
+    environment()?;
+    limits()
+}
+
+/// `PATH` becomes [`SAFE_PATH`] and the working directory `/`.
+pub fn environment() -> std::io::Result<()> {
+    // SAFETY: called first thing in `main` (and alone in its own test
+    // binary), before any other thread exists to read the environment.
+    unsafe { std::env::set_var("PATH", SAFE_PATH) };
+    std::env::set_current_dir("/")
+}
+
+/// No core dumps; on Linux, not dumpable.
+pub fn limits() -> std::io::Result<()> {
     let zero = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
     // SAFETY: plain syscall with a valid pointer to a local.
     if unsafe { libc::setrlimit(libc::RLIMIT_CORE, &zero) } != 0 {
@@ -24,7 +43,7 @@ pub fn process() -> std::io::Result<()> {
 mod tests {
     #[test]
     fn no_core_dumps_and_not_dumpable() {
-        super::process().unwrap();
+        super::limits().unwrap();
         let mut r = libc::rlimit { rlim_cur: 1, rlim_max: 1 };
         // SAFETY: valid pointer to a local.
         assert_eq!(unsafe { libc::getrlimit(libc::RLIMIT_CORE, &mut r) }, 0);

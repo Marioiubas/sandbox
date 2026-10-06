@@ -103,9 +103,23 @@ fn keychain(service: &str, account: Option<&str>) -> anyhow::Result<Vec<u8>> {
     Ok(trim_newline(out.stdout))
 }
 
+/// Where `secret-tool` may come from: fixed system paths, root-owned and
+/// writable by root only. Never through `PATH`: brokerd inherits the
+/// environment of the shell that first started it, whose `PATH` may hold a
+/// directory a sandbox can write (an in-repo virtualenv), and the helper
+/// runs outside every sandbox.
+#[cfg(not(target_os = "macos"))]
+fn secret_tool() -> anyhow::Result<&'static str> {
+    use std::os::unix::fs::MetadataExt;
+    ["/usr/bin/secret-tool", "/usr/local/bin/secret-tool"]
+        .into_iter()
+        .find(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file() && m.uid() == 0 && m.mode() & 0o022 == 0))
+        .ok_or_else(|| anyhow::anyhow!("secret-tool not found as a root-owned file in /usr/bin or /usr/local/bin"))
+}
+
 #[cfg(not(target_os = "macos"))]
 fn keychain(service: &str, account: Option<&str>) -> anyhow::Result<Vec<u8>> {
-    let mut c = Command::new("secret-tool");
+    let mut c = Command::new(secret_tool().map_err(|e| anyhow::anyhow!("keychain:{service}: {e}"))?);
     c.args(["lookup", "service", service]);
     if let Some(a) = account {
         c.args(["account", a]);

@@ -66,17 +66,22 @@ fn body_always_names_repositories_and_permissions() {
 #[test]
 fn responses_beyond_the_request_are_refused() {
     let p = perms(&[("contents", "write")]);
-    let ok = br#"{"token":"ghs_CANARYTOKEN","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write","metadata":"read"},"repository_selection":"selected","repositories":[{"name":"web"}]}"#;
+    let ok = br#"{"token":"ghs_CANARYTOKEN","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write","metadata":"read"},"repository_selection":"selected","repositories":[{"name":"web","full_name":"acme/web"}]}"#;
     let (tok, exp) = verify_response(201, ok, &p, &repos()).unwrap();
     assert_eq!(tok.expose(), b"ghs_CANARYTOKEN");
     assert_eq!(exp.duration_since(UNIX_EPOCH).unwrap().as_secs(), 1_790_251_200);
-    let lower = br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"read"}}"#;
+    let lower = br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"read"},"repository_selection":"selected","repositories":[{"name":"web","full_name":"Acme/Web"}]}"#;
     assert!(verify_response(201, lower, &p, &repos()).is_ok(), "narrower than requested is fine");
     for bad in [
         &br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"admin"}}"#[..],
         br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write","issues":"write"}}"#,
         br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write"},"repository_selection":"all"}"#,
         br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write"},"repositories":[{"name":"other"}]}"#,
+        // Another owner's repository of the same name; no stated scope.
+        br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write"},"repository_selection":"selected","repositories":[{"name":"web","full_name":"evil/web"}]}"#,
+        br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write"},"repository_selection":"selected","repositories":[{"name":"web"}]}"#,
+        br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write"},"repository_selection":"selected","repositories":[]}"#,
+        br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z","permissions":{"contents":"write"},"repositories":[{"name":"web","full_name":"acme/web"}]}"#,
         br#"{"token":"t","expires_at":"2026-09-24T12:00:00Z"}"#,
         br#"{"token":"","expires_at":"2026-09-24T12:00:00Z","permissions":{}}"#,
         br#"{"token":"t","permissions":{}}"#,
@@ -108,7 +113,7 @@ impl Transport for FakeTransport {
         self.calls.lock().unwrap().push((api.authority(), path.to_string(), body));
         Ok((
             201,
-            br#"{"token":"ghs_x","expires_at":"2099-01-01T00:00:00Z","permissions":{"contents":"write"}}"#.to_vec(),
+            br#"{"token":"ghs_x","expires_at":"2099-01-01T00:00:00Z","permissions":{"contents":"write"},"repository_selection":"selected","repositories":[{"name":"web","full_name":"acme/web"}]}"#.to_vec(),
         ))
     }
 }

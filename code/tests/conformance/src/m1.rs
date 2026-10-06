@@ -368,7 +368,11 @@ impl FakeGitHub {
                     "expires_at": exp.format(&time::format_description::well_known::Rfc3339).unwrap(),
                     "permissions": req["permissions"],
                     "repository_selection": "selected",
-                    "repositories": repos.iter().map(|r| serde_json::json!({"name": r})).collect::<Vec<_>>(),
+                    // Like GitHub: names are resolved in the installation's account.
+                    "repositories": repos
+                        .iter()
+                        .map(|r| serde_json::json!({"name": r, "full_name": format!("acme/{r}")}))
+                        .collect::<Vec<_>>(),
                 });
                 return Reply::new(201, body.to_string()).header("content-type", "application/json");
             }

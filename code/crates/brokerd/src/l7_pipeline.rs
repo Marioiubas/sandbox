@@ -381,6 +381,7 @@ impl Conn {
 
         // 5b. Strip client credentials and hop-by-hop headers; attach ours.
         let query = creds::strip(&mut parts.headers, path.query());
+        creds::foreign::strip_declared(&mut parts.headers, sentinels);
         l7::head::strip_hop_by_hop(&mut parts.headers);
         parts.headers.remove(http::header::EXPECT);
         parts.headers.remove(http::header::HOST);

@@ -121,6 +121,9 @@ pub fn prefix_ok(p: &str) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct S3Rules {
     pub bucket: String,
+    /// The AWS partition of the grant's endpoint (`aws`, or `aws-us-gov`
+    /// for GovCloud regions): ARNs in the session policy must name it.
+    pub partition: String,
     pub read: Vec<String>,
     pub write: Vec<String>,
     pub delete: Vec<String>,
@@ -180,6 +183,7 @@ pub(crate) fn compile(
     }
     Ok(Some(S3Rules {
         bucket: a.bucket.clone(),
+        partition: partition(&ep.region).to_string(),
         read: a.read.clone(),
         write: a.write.clone(),
         delete: a.delete.clone(),
@@ -195,15 +199,22 @@ pub(crate) fn rule_allows(r: &S3Rules, op: &str, bucket: &str, key: &str) -> Res
     }
 }
 
+/// The AWS partition a region belongs to. Only `*.amazonaws.com` endpoints
+/// are S3 endpoints here ([`endpoint`]), so the China partition never occurs.
+pub fn partition(region: &str) -> &'static str {
+    if region.starts_with("us-gov-") { "aws-us-gov" } else { "aws" }
+}
+
 /// The inline session policy for credentials minted for this grant:
 /// exactly the grant's bucket and prefixes, minified, within the STS limit.
 pub fn session_policy(r: &S3Rules) -> Result<String, String> {
-    let objects =
-        |ps: &[String]| -> Vec<String> { ps.iter().map(|p| format!("arn:aws:s3:::{}/{}*", r.bucket, p)).collect() };
+    let objects = |ps: &[String]| -> Vec<String> {
+        ps.iter().map(|p| format!("arn:{}:s3:::{}/{}*", r.partition, r.bucket, p)).collect()
+    };
     let mut st = Vec::new();
     if !r.read.is_empty() {
         st.push(json!({ "Effect": "Allow", "Action": ["s3:GetObject"], "Resource": objects(&r.read) }));
-        let bucket = format!("arn:aws:s3:::{}", r.bucket);
+        let bucket = format!("arn:{}:s3:::{}", r.partition, r.bucket);
         st.push(if r.read.iter().any(|p| p.is_empty()) {
             // The whole bucket: also listings that name no prefix.
             json!({ "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": [bucket] })

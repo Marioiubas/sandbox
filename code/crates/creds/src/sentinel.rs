@@ -21,6 +21,9 @@ struct Entry {
     hosts: Vec<HostPattern>,
     /// A second, non-secret variable the credential needs in the sandbox.
     companion: Option<(&'static str, &'static str)>,
+    /// The header the credential is attached in, if a custom one
+    /// (normalised: lower case, `_` as `-`).
+    header: Option<String>,
 }
 
 /// The sentinels of one session.
@@ -64,6 +67,10 @@ impl Sentinels {
                     hosts: c.hosts.clone(),
                     companion: matches!(c.kind, CredKind::AwsSts { .. })
                         .then_some(("AWS_SECRET_ACCESS_KEY", AWS_SECRET_PLACEHOLDER)),
+                    header: match &c.attach {
+                        policy::AttachSpec::Header { name } => Some(crate::foreign::norm_header(name)),
+                        _ => None,
+                    },
                 })
                 .collect(),
         }
@@ -75,6 +82,12 @@ impl Sentinels {
             self.entries.iter().filter_map(|e| e.env.as_ref().map(|v| (v.clone(), e.value.clone()))).collect();
         out.extend(self.entries.iter().filter_map(|e| e.companion).map(|(k, v)| (k.to_string(), v.to_string())));
         out
+    }
+
+    /// The custom headers this session's credentials are attached in: a
+    /// client value there is inspected and stripped like any credential.
+    pub fn declared_headers(&self) -> Vec<String> {
+        self.entries.iter().filter_map(|e| e.header.clone()).collect()
     }
 
     /// The sentinel issued for a credential (tests and body swap).

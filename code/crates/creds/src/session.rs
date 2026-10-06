@@ -224,10 +224,19 @@ mod tests {
             let n = self.0.fetch_add(1, Ordering::Relaxed);
             let v: serde_json::Value = serde_json::from_slice(&body)?;
             let perms = v["permissions"].clone();
+            // Like GitHub: names resolve in the installation's account (acme).
+            let repos: Vec<serde_json::Value> = v["repositories"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|r| r.as_str())
+                .map(|r| serde_json::json!({ "name": r, "full_name": format!("acme/{r}") }))
+                .collect();
             Ok((
                 201,
                 serde_json::to_vec(&serde_json::json!({
                     "token": format!("ghs_tok{n}"), "expires_at": "2099-01-01T00:00:00Z", "permissions": perms,
+                    "repository_selection": "selected", "repositories": repos,
                 }))?,
             ))
         }

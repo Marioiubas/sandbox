@@ -157,7 +157,7 @@ proptest! {
         static P: OnceLock<EgressPolicy> = OnceLock::new();
         let p = P.get_or_init(|| compile(&grant(HOST,
             "protocol = \"s3\"\ns3 = { bucket = \"acme-data\", read = [\"a/\", \"b\"], write = [\"a/b/\"], delete = [\"\"] }")).unwrap());
-        let r = crate::s3::S3Rules { bucket: "acme-data".into(), read: vec!["a/".into(), "b".into()],
+        let r = crate::s3::S3Rules { bucket: "acme-data".into(), partition: "aws".into(), read: vec!["a/".into(), "b".into()],
                                      write: vec!["a/b/".into()], delete: vec!["".into()] };
         let bucket = if other { "acme-other" } else { "acme-data" };
         for op in crate::s3::OPS {

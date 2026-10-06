@@ -7,7 +7,7 @@ tags: [sandbox/architecture, concept, invariant/i7, topic/credentials, topic/tls
 status: built
 confidence: high
 created: 2026-09-24
-updated: 2026-09-25
+updated: 2026-10-06
 summary: "The proxy strips every client-supplied Authorization, x-api-key, cookie and Proxy-Authorization header and rejects any credential it did not issue."
 related: ["[[Claude Cowork Allowed-Domain Abuse]]", "[[TLS Termination and Per-Session CA]]", "[[Credential Injector and Issuers]]", "[[Conformance Probe Matrix]]", "[[M1 Secrets Outside]]", "[[Policy Miner Safeguards]]", "[[I1 No Secrets in the Sandbox]]", "[[Sentinel Swap Pattern]]", "[[Registry and LLM API Adapters]]", "[[Audit Recorder and Event Schema]]", "[[Vercel Sandbox]]", "[[L1 Conformance Suite]]", "[[ADR-004 Selective TLS Termination with Per-Session CA]]"]
 sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://vercel.com/docs/sandbox/concepts/firewall"]
@@ -102,3 +102,4 @@ This is the [[M1 Secrets Outside]] acceptance criterion "an attacker-planted API
 
 - 2026-09-24: built in `creds::foreign` (called before authorization on every terminated request). Canonical test `b4_i7_planted_key_to_allowed_host_is_rejected` (planted `x-api-key`, Bearer, Basic and cookie to the allowed host: 403 `foreign_credential`, nothing reaches the upstream, `broker why` explains); property tests `random_values_are_foreign`, `strip_removes_every_credential_header`; fuzz target `foreign`.
 - 2026-09-25 (M3): SigV4 `Authorization` headers are inspected for their access key ID (only this session's sentinel for the host is accepted); `m3_s3::d6_a_planted_aws_key_is_rejected` (planted AWS key: 403 `foreign_credential`, nothing minted, nothing forwarded) ([[ADR-032 AWS STS and S3 Adapter as Built]]).
+- 2026-10-06: **review findings fixed.** Header names are matched as servers read them (`_` as `-`: `x_api_key` reaches CGI/WSGI servers as `x-api-key`), query parameter names as PHP reads them (`.`, space and `[` as `_`: `api.key` is `api_key`), and the custom header each of the session's credentials is declared with is inspected and stripped like the listed ones (`creds::foreign::{norm_header, strip_declared}`). Tests: `creds/tests/review_creds.rs::i7_*` (three, from the credential review).

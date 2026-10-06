@@ -147,15 +147,19 @@ pub fn verify_response(
     } else {
         anyhow::bail!("response does not state the token's permissions");
     }
-    if v.get("repository_selection").and_then(|s| s.as_str()) == Some("all") {
-        anyhow::bail!("token covers all repositories of the installation");
+    // The request names repositories, which GitHub resolves inside the
+    // installation's account: a name alone could stand for another owner's
+    // repository. The token must say it covers selected repositories, list
+    // them, and every one must be a requested owner/name.
+    if v.get("repository_selection").and_then(|s| s.as_str()) != Some("selected") {
+        anyhow::bail!("token does not state that it covers selected repositories only");
     }
-    if let Some(list) = v.get("repositories").and_then(|r| r.as_array()) {
-        for r in list {
-            let name = r.get("name").and_then(|n| n.as_str()).unwrap_or("").to_ascii_lowercase();
-            if !repos.iter().any(|x| x.name() == name) {
-                anyhow::bail!("token covers an unrequested repository");
-            }
+    let list = v.get("repositories").and_then(|r| r.as_array()).filter(|l| !l.is_empty());
+    let list = list.ok_or_else(|| anyhow::anyhow!("response does not list the token's repositories"))?;
+    for r in list {
+        let full = r.get("full_name").and_then(|n| n.as_str()).unwrap_or("").to_ascii_lowercase();
+        if !repos.iter().any(|x| full == format!("{}/{}", x.owner(), x.name())) {
+            anyhow::bail!("token covers a repository that was not requested (owner and name must match)");
         }
     }
     Ok((Secret::new(token.as_bytes().to_vec()), exp))
