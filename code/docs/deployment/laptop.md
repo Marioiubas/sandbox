@@ -67,10 +67,34 @@ and CI). None of these paths is readable or writable from inside a session.
    `[identity.login]`), so sessions and audit rows carry your IdP identity
    and groups.
 
-Useful commands: `broker audit verify` checks the hash chain,
-`broker audit tail` shows recent rows, `broker learn -- <agent>` records a
+Useful commands: `broker learn -- <agent>` records a
 session for `broker suggest`, and `broker daemon stop` stops the daemon
 (it also exits on its own when idle and nobody is signed in).
+
+## Reading the record
+
+Every decision is a row in the hash-chained audit log, attributed to you,
+the agent (with its binary's hash), the task and the session.
+
+- `broker why <request-id>`: why one request was allowed or denied.
+- `broker audit tail` and `broker audit query --session <id> --decision deny`:
+  rows; `--json` for scripts.
+- `broker audit stats`: per session, allows, denies by reason, approval
+  prompts and grants, and refusals by the sandbox itself.
+- `broker approvals`, then `broker approve <id>`: a write held back for your
+  approval (the Rule of Two, merges, an MCP write tool), with exactly what
+  would be allowed and, for an MCP call, every argument. Approve once, or
+  for the rest of the session with `--for-session`.
+- `broker audit verify`: checks the chain; `broker audit export` sends rows
+  to a SIEM as OCSF.
+
+Refusals by the sandbox itself (a blocked file write, a direct connection,
+a forbidden system call) appear as `kernel.denied` rows: on macOS from the
+kernel's own reports, on Linux for the system calls seccomp refuses.
+Landlock and mount refusals on Linux are enforced but not recorded there
+(with host audit enabled they reach the host's audit log). `broker doctor`
+says which applies on your machine. A missing row proves nothing: the
+kernel refuses either way.
 
 ## Known limitation: Go programs on macOS
 
