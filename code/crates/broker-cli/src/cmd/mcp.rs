@@ -1,8 +1,10 @@
 //! `broker mcp connect|approve|list` (MCP Guard). `connect` is the stub an
 //! agent's MCP configuration runs inside the sandbox: it reaches the daemon
 //! only through the session's own proxy and can name a pinned server, not
-//! choose its command. `approve` and `list` run on the host.
+//! choose its command. `approve` and `list` run on the host; `approve`
+//! shows everything it pins, in full (`mcp_view`, ADR-047).
 
+use super::mcp_view::render;
 use super::{EXIT_BROKER, ctl};
 use base64::Engine;
 use brokerd::mcp::pin;
@@ -92,22 +94,11 @@ pub fn approve(name: &str, sha: Option<String>) -> i32 {
         if !user.mcp.contains_key(name) {
             eprintln!("broker: warning: {name:?} is not defined in your broker.toml");
         }
-        println!("mcp server {name}: approving manifest {} ({} tools)", seen.sha256, seen.tools.len());
-        match pin::approved_manifest(&dirs, name) {
-            Some(old) => {
-                for d in pin::diff(&old.tools, &seen.tools) {
-                    println!("  {d}");
-                }
-            }
-            None => println!("  (first approval)"),
-        }
-        for t in &seen.tools {
-            let n = t.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-            let d: String = t.get("description").and_then(|v| v.as_str()).unwrap_or("").chars().take(300).collect();
-            println!("  tool {n}: {d}");
-        }
+        print!("{}", render(name, &seen, pin::approved_manifest(&dirs, name).as_ref()));
         pin::approve(&dirs, name, &seen)?;
-        println!("approved; any change to these tools revokes {name} until approved again");
+        println!(
+            "approved; any change to its command, what it tells the agent at initialize or its tools revokes {name} until approved again"
+        );
         Ok(())
     };
     match run() {

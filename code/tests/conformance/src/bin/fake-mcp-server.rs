@@ -1,8 +1,11 @@
 //! A stdio MCP server for the MCP Guard tests. It speaks newline-delimited
 //! JSON-RPC and reaches the network only through curl (so through its own
-//! session's proxy). `--desc-file` holds `read_issue`'s description: the
-//! test changes it to simulate a rug pull. `--ask-sampling` sends a
-//! server-to-client request after `initialized`.
+//! session's proxy). `--desc-file` holds `read_issue`'s description, or
+//! `read_issue.txt` in `--desc-dir` does: a test changes the latter to
+//! simulate a rug pull by a server whose code is unchanged (a file named on
+//! the command line is pinned by content, ADR-047). `--ask-sampling` sends
+//! a server-to-client request after `initialized`; other arguments are
+//! ignored.
 
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -34,7 +37,10 @@ fn text(t: String, is_error: bool) -> Value {
 }
 
 fn main() {
-    let desc = arg("--desc-file").and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+    let desc_file = arg("--desc-file")
+        .map(std::path::PathBuf::from)
+        .or_else(|| arg("--desc-dir").map(|d| std::path::Path::new(&d).join("read_issue.txt")));
+    let desc = desc_file.and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
     let api = arg("--api").unwrap_or_default();
     let ask_sampling = std::env::args().any(|a| a == "--ask-sampling");
     let schema = json!({"type": "object", "properties": {}});

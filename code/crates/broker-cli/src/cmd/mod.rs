@@ -7,10 +7,12 @@ pub mod doctor;
 pub mod export;
 pub mod login;
 pub mod mcp;
+mod mcp_view;
 pub mod policy;
 pub mod run;
 pub mod shadow;
 pub mod suggest;
+pub mod term;
 pub mod why;
 
 /// Exit code when the broker itself refuses or fails (not the agent's code).

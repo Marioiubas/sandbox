@@ -23,7 +23,7 @@ mod launch;
 mod mcp_launch;
 mod running;
 
-pub use mcp_launch::McpProcess;
+pub use mcp_launch::{McpProcess, McpStartError};
 
 use assemble::{Assembled, SessionKind};
 use running::{Listener, accept_loop};

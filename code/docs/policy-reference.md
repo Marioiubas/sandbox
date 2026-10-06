@@ -302,11 +302,31 @@ credential = { kind = "static", ref = "keychain:broker-github-mcp", env = "GITHU
 Point the agent's MCP configuration at the stub, never at the server:
 `{"command": "broker", "args": ["mcp", "connect", "github"]}`. On first
 use the server is refused until you run `broker mcp approve github` on
-the host, which shows every tool and what changed since the last approval.
-Any later change to the server's tools revokes it until you approve again.
+the host, which shows, in full, everything the approval pins and what
+changed since the last approval:
+
+- the command by content: the executable (and a `#!` script's
+  interpreter) and every argument that names an existing file, by SHA-256;
+- what the agent is told when it connects: the server's protocol version,
+  `serverInfo` (name, title, version) and `instructions`. Nothing else from
+  the server's `initialize` reply reaches the agent;
+- every tool: its description, title, schemas and annotations.
+
+Any later change to any of these revokes the server until you approve
+again. A changed file on the command line stops the server from starting
+at all (`mcp_manifest_changed`), so rewritten code never runs with the
+server's grants. A command that names a path the agent can write (its
+project, its temp area, any writable state directory) is never started
+(`mcp_command_writable`): install servers outside the project. The broker
+cannot see what an interpreter imports or what lies under a directory
+argument, so keep those outside the agent's reach too.
+
 The server runs in its own sandbox, and its token reaches it only as a
-sentinel. Every tool call is authorized and logged. Resources, prompts and
-the server's own requests (such as sampling) are not relayed.
+sentinel. Every tool call is authorized and logged. Resources, prompts,
+the server's own requests (such as sampling) and its notifications (such
+as log messages) are not relayed; only progress updates for a call the
+agent made are, without their free text. An unapproved or revoked server
+sends the agent nothing.
 Only your own or your org's policy can define servers; a repository cannot.
 
 A server works for the agent session that connected to it and shares that

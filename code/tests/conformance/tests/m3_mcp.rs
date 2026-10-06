@@ -14,7 +14,11 @@ const MCP_TOKEN: &str = "ghp_TEST-MCP-NOT-A-REAL-TOKEN-00000000";
 
 struct Fx {
     h: Harness,
+    /// `read_issue`'s description, in a directory the command names (its
+    /// contents are not pinned: the server's code stays the same).
     desc: std::path::PathBuf,
+    /// A file the command names, so pinned by content (ADR-047).
+    note: std::path::PathBuf,
     _ca_dir: tempfile::TempDir,
     _api: HttpsServer,
 }
@@ -36,29 +40,34 @@ fn setup() -> Fx {
     let api = HttpsServer::start(&ca, "api.test", fake);
     let h = Harness::new("version = 1\n");
     h.write_secret("mcp-token", MCP_TOKEN.as_bytes());
-    // The server's own sandbox must see this file: on Linux it gets a
-    // private /tmp, so it lives under the target directory (like the binary).
-    let desc = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("mcp-desc-{}.txt", h.home.path().file_name().unwrap().to_string_lossy()));
+    // The server's own sandbox must see these files: on Linux it gets a
+    // private /tmp, so they live under the target directory (like the binary).
+    let tag = h.home.path().file_name().unwrap().to_string_lossy().to_string();
+    let desc_dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("mcp-desc-{tag}"));
+    std::fs::create_dir_all(&desc_dir).unwrap();
+    let desc = desc_dir.join("read_issue.txt");
     std::fs::write(&desc, "Read an issue from the tracker.").unwrap();
+    let note = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("mcp-note-{tag}.txt"));
+    std::fs::write(&note, "pinned by content").unwrap();
     let server = h.bins.broker.parent().unwrap().join("fake-mcp-server");
     // The fake API's data is this test's public fixture: `sensitive = false`
     // keeps its credentialed reads (ADR-040) from raising `sensitive_read` in
     // the agent's session (ADR-038), which would otherwise hold `post_comment`
     // depending on whether the read's label lands first.
     h.set_config(&format!(
-        "version = 1\n[tls]\nextra_roots = [\"{}\"]\n\n[mcp.gh]\ncommand = [\"{}\", \"--desc-file\", \"{}\", \"--api\", \"https://api.test:{}\", \"--ask-sampling\"]\n\
+        "version = 1\n[tls]\nextra_roots = [\"{}\"]\n\n[mcp.gh]\ncommand = [\"{}\", \"--desc-dir\", \"{}\", \"--api\", \"https://api.test:{}\", \"--ask-sampling\", \"--note\", \"{}\"]\n\
          tools.write = [\"post_comment\"]\ntools.untrusted = [\"read_issue\"]\n\n\
          [[mcp.gh.egress]]\nid = \"api\"\nhost = \"api.test\"\nports = [{}]\naddrs = [\"127.0.0.1\"]\nallow_addr_classes = [\"loopback\"]\nmethods = [\"GET\", \"POST\"]\n\
          sensitive = false\n\
          credential = {{ kind = \"static\", ref = \"file:mcp-token\", env = \"GITHUB_TOKEN\" }}\n",
         ca.pem_path.display(),
         server.display(),
-        desc.display(),
+        desc_dir.display(),
         api.port,
+        note.display(),
         api.port
     ));
-    Fx { h, desc, _ca_dir: ca_dir, _api: api }
+    Fx { h, desc, note, _ca_dir: ca_dir, _api: api }
 }
 
 fn req(id: u64, method: &str, params: Value) -> Value {
@@ -201,6 +210,16 @@ fn d3_d4_pinned_server_is_approved_confined_and_revoked_on_change() {
     assert_eq!(changed.detail["diff"], json!(["~ tool read_issue: description changed"]));
     let (_, list) = f.broker(&["mcp", "list"]);
     assert!(list.contains("CHANGED since approval"), "{list}");
+
+    // Session 4: a file the command names was rewritten (ADR-047). The
+    // server is not started at all, and the change is named.
+    std::fs::write(&f.note, "rewritten by whoever could write it").unwrap();
+    let (code, r, evs) = f.connect("gh", &[call(1, "read_issue")]);
+    assert_eq!(code, 0);
+    assert_eq!(reason(&r[&1]), Some("mcp_manifest_changed"), "{r:?}");
+    let changed = evs.iter().find(|e| e.reason == Some(Reason::McpManifestChanged)).expect("refusal logged");
+    assert_eq!(changed.detail["diff"], json!([format!("~ command file {}: content changed", f.note.display())]));
+    assert_eq!(changed.detail["server_session"], "", "the changed command never ran");
 
     // A repository cannot define MCP servers (I5).
     let dot = f.h.repo.path().join(".broker");
