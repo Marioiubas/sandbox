@@ -49,6 +49,14 @@ class the grant lists: `loopback`, `link_local`, `private`, `reserved`,
 `metadata`. One disallowed address denies the whole name. IP-literal
 destinations are denied unless a grant names the literal.
 
+`metadata` is cloud instance metadata and credential endpoints, never part
+of `link_local` or `private`: IMDS (`169.254.169.254`, `fd00:ec2::254`), ECS
+and EKS Pod Identity credentials (`169.254.170.2`, `169.254.170.23`,
+`fd00:ec2::23`), GCP on IPv6 (`fd20:ce::254`), Alibaba (`100.100.100.200`),
+Oracle (`192.0.0.192`) and Azure WireServer (`168.63.129.16`), also through
+NAT64. Addresses in the local-use NAT64 prefix `64:ff9b:1::/48` are
+`reserved`.
+
 ## Terminated hosts (L7, M1)
 
 A grant with any of `protocol`, `methods`, `paths`, `allow` or `credential`

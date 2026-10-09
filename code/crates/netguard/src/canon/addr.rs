@@ -55,12 +55,27 @@ impl AddrClass {
 /// Well-known cloud metadata endpoints (AWS/GCP/Azure 169.254.169.254, AWS
 /// ECS 169.254.170.2, Alibaba 100.100.100.200, Oracle 192.0.0.192, AWS IMDS
 /// IPv6 fd00:ec2::254).
+/// Cloud instance metadata and credential endpoints: never reachable through
+/// an address class, only as `metadata` (which no grant allows).
 fn is_metadata(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(a) => {
-            matches!(a.octets(), [169, 254, 169, 254] | [169, 254, 170, 2] | [100, 100, 100, 200] | [192, 0, 0, 192])
-        }
-        IpAddr::V6(a) => a == Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254),
+        IpAddr::V4(a) => matches!(
+            a.octets(),
+            // IMDS (AWS, Azure, GCP, ...); ECS task and EKS Pod Identity
+            // credentials; Alibaba; Oracle; Azure WireServer.
+            [169, 254, 169, 254]
+                | [169, 254, 170, 2]
+                | [169, 254, 170, 23]
+                | [100, 100, 100, 200]
+                | [192, 0, 0, 192]
+                | [168, 63, 129, 16]
+        ),
+        IpAddr::V6(a) => [
+            Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0254), // AWS IMDS
+            Ipv6Addr::new(0xfd00, 0x0ec2, 0, 0, 0, 0, 0, 0x0023), // EKS Pod Identity
+            Ipv6Addr::new(0xfd20, 0x00ce, 0, 0, 0, 0, 0, 0x0254), // GCP (IPv6-only VMs)
+        ]
+        .contains(&a),
     }
 }
 
@@ -79,6 +94,12 @@ pub fn classify_addr(ip: IpAddr) -> AddrClass {
             if seg[0] == 0x64 && seg[1] == 0xff9b && seg[2..6].iter().all(|s| *s == 0) {
                 let v4 = Ipv4Addr::new((seg[6] >> 8) as u8, seg[6] as u8, (seg[7] >> 8) as u8, seg[7] as u8);
                 return classify_addr(IpAddr::V4(v4));
+            }
+            // NAT64 local-use prefix 64:ff9b:1::/48 (RFC 8215): where the
+            // IPv4 address sits depends on the operator's prefix length, so
+            // it cannot be classified by it; refused (fail closed).
+            if seg[0] == 0x64 && seg[1] == 0xff9b && seg[2] == 0x0001 {
+                return AddrClass::Reserved;
             }
             if a.is_loopback() {
                 AddrClass::Loopback
