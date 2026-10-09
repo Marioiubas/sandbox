@@ -69,6 +69,12 @@ pub struct CompiledFsPolicy {
     /// ones that exist at launch are protected (ADR-046).
     #[serde(default)]
     pub nested_git: Vec<PathBuf>,
+    /// A directory every session may write (macOS: `DARWIN_USER_TEMP_DIR`)
+    /// with the session's own writable roots in it: no `.git` anywhere in it
+    /// outside those, or a repository planted there would choose the task
+    /// repository of a later session started in or below it (ADR-048).
+    #[serde(default)]
+    pub scratch_git: Vec<(PathBuf, Vec<PathBuf>)>,
     /// Writable directories where existing files must not change (see
     /// `FsInputs::create_only`).
     #[serde(default)]
@@ -418,6 +424,15 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
             deny_write.insert(r);
         }
     }
+    let scratch_git = i
+        .platform_tmp
+        .iter()
+        .filter_map(|p| resolve(p).ok())
+        .map(|t| {
+            let own = writable.iter().filter(|w| w.starts_with(&t) && **w != t).cloned().collect();
+            (t, own)
+        })
+        .collect();
     Ok(CompiledFsPolicy {
         read_only_root: true,
         writable: writable.into_iter().collect(),
@@ -427,6 +442,7 @@ pub fn compile(i: &FsInputs) -> Result<CompiledFsPolicy, FsError> {
         missing_protected: missing.into_iter().collect(),
         shared_scratch: i.platform_tmp.iter().filter_map(|p| resolve(p).ok()).map(|p| p.join("broker-")).collect(),
         nested_git: vec![repo],
+        scratch_git,
         create_only: i.create_only.iter().filter_map(|p| resolve(p).ok()).collect(),
     })
 }
@@ -453,15 +469,21 @@ impl CompiledFsPolicy {
             && !self.deny_entry.iter().any(|d| p == d)
             && !self.deny_read.iter().any(|d| p.starts_with(d))
             && !self.create_only.iter().any(|c| p.starts_with(c) && p != c)
-            && !self
-                .nested_git
-                .iter()
-                .any(|r| p.strip_prefix(r).is_ok_and(|rel| rel.components().skip(1).any(|c| c.as_os_str() == ".git")))
+            && !self.nested_git.iter().any(|r| below_top_git(p, r))
+            && !self.scratch_git.iter().any(|(t, own)| {
+                p.strip_prefix(t).is_ok_and(|rel| rel.components().any(|c| c.as_os_str() == ".git"))
+                    && !own.iter().any(|w| p.starts_with(w))
+            })
             && !self
                 .shared_scratch
                 .iter()
                 .any(|s| text_prefix(p, s) && !self.writable.iter().any(|w| text_prefix(w, s) && p.starts_with(w)))
     }
+}
+
+/// `p` is or is inside a `.git` below the top level of `root`.
+fn below_top_git(p: &Path, root: &Path) -> bool {
+    p.strip_prefix(root).is_ok_and(|rel| rel.components().skip(1).any(|c| c.as_os_str() == ".git"))
 }
 
 /// `p` starts with `prefix` as text (`/T/broker-` covers `/T/broker-abc`).

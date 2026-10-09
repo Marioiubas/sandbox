@@ -175,6 +175,33 @@ fn other_sessions_scratch_in_the_shared_temp_dir_is_not_writable() {
     assert!(c.is_writable(&pt.join("xcrun_db")), "the rest of the shared dir (ADR-016)");
 }
 
+/// ADR-048 (macOS): no `.git` anywhere in the shared temp dir, where a later
+/// session started in or below it would take its task repository from it;
+/// except in this session's own roots there, where the repository's own
+/// rule still applies.
+#[test]
+fn no_repository_in_the_shared_temp_dir_outside_own_roots() {
+    let f = fixture();
+    let pt = f._d.path().join("T");
+    let (own, repo) = (pt.join("broker-S1"), pt.join("proj"));
+    for d in [&own, &repo.join(".git")] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    let mut i = inputs(&f);
+    i.session_tmp = own;
+    i.repo = repo;
+    i.platform_tmp = Some(pt.clone());
+    let c = compile(&i).unwrap();
+    let pt = pt.canonicalize().unwrap();
+    assert!(!c.is_writable(&pt.join("tmp.Qx81/.git/config")), "a scratch dir's repository");
+    assert!(!c.is_writable(&pt.join("tmp.Qx81/.git")), "a gitdir file");
+    assert!(!c.is_writable(&pt.join(".git")), "one at the top level");
+    assert!(c.is_writable(&pt.join("tmp.Qx81/notes.txt")), "the rest of the shared dir (ADR-016)");
+    assert!(c.is_writable(&pt.join("broker-S1/t/.git/config")), "own TMPDIR: git init works");
+    assert!(c.is_writable(&pt.join("proj/.git/index")), "the repository's own git state");
+    assert!(!c.is_writable(&pt.join("proj/sub/.git")), "the repository's own rule still holds");
+}
+
 // ---- Review (configuration trust, I5): git control files outside the two
 // protected names. Each test names the exact file a session can write and
 // the user's next unsandboxed git command then trusts.

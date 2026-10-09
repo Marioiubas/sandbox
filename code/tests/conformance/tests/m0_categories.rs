@@ -331,6 +331,25 @@ fn cat10_other_sessions_scratch_is_not_writable() {
     let _ = std::fs::remove_file(shared.join(&name));
 }
 
+/// ADR-048 (macOS): no repository can be planted in the shared temp dir,
+/// where a later session the user starts there would take its task
+/// repository from it; `git init` in the session's own TMPDIR still works.
+#[cfg(target_os = "macos")]
+#[test]
+fn cat10_no_repository_in_the_shared_temp_dir() {
+    let out = std::process::Command::new("/usr/bin/getconf").arg("DARWIN_USER_TEMP_DIR").output().unwrap();
+    let shared = std::path::PathBuf::from(String::from_utf8(out.stdout).unwrap().trim()).canonicalize().unwrap();
+    let scratch = tempfile::Builder::new().prefix("scratch-").tempdir_in(&shared).unwrap();
+    std::fs::create_dir(scratch.path().join("sub")).unwrap();
+    let h = Harness::new("version = 1\n");
+    let s = |p: &std::path::Path| p.display().to_string();
+    assert_fs_denied(&h.probe(&["mkdir", &s(&scratch.path().join(".git"))]), "a repository in a scratch dir");
+    assert_fs_denied(&h.probe(&["write-new", &s(&scratch.path().join("sub/.git"))]), "a gitdir file below it");
+    assert!(!scratch.path().join(".git").exists() && !scratch.path().join("sub/.git").exists());
+    let r = h.sh("git init -q \"$TMPDIR/r\" && echo MADE");
+    assert!(r.stdout.contains("MADE"), "own TMPDIR: {r:?}");
+}
+
 /// ADR-046: nothing the session writes can repoint git's config or hooks:
 /// `commondir`, `config.worktree`, submodule and linked-worktree git
 /// directories are refused; a nested repository is refused (macOS) or

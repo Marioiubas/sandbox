@@ -162,6 +162,7 @@ mod tests {
             missing_protected: vec!["/home/dev/src/web/.claude".into()],
             shared_scratch: vec![],
             nested_git: vec![],
+            scratch_git: vec![],
             create_only: vec![],
         };
         let dirs: BTreeSet<&str> = [

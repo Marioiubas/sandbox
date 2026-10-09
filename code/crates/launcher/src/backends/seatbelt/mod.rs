@@ -12,6 +12,44 @@ use std::time::Duration;
 
 pub const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
+/// In the session directory, which no sandbox can write: the profile lets
+/// the session read the marker and never the canary.
+pub(crate) const MARKER: &str = "sandbox.mark";
+pub(crate) const CANARY: &str = "canary";
+
+/// Whether `pid` runs under the Seatbelt profile of the session whose
+/// directory is `session_dir`: a sandboxed process that may read the
+/// session's marker and may not read its canary. Only that profile has
+/// a rule telling the two apart (another session denies both; a profile
+/// that allows reading everything allows both). The sandbox is inherited
+/// and cannot be left, so this holds after `setsid()`, a double fork or
+/// reparenting to launchd. Asked without producing a denial report.
+#[cfg(target_os = "macos")]
+pub fn in_session_sandbox(pid: i32, session_dir: &Path) -> bool {
+    use std::ffi::{CString, c_char, c_int};
+    use std::os::unix::ffi::OsStrExt;
+    unsafe extern "C" {
+        fn sandbox_check(pid: libc::pid_t, operation: *const c_char, filter: c_int, ...) -> c_int;
+    }
+    const FILTER_PATH: c_int = 1;
+    const NO_REPORT: c_int = 0x4000_0000;
+    let path = |name: &str| {
+        let p = session_dir.join(name).canonicalize().ok()?;
+        CString::new(p.as_os_str().as_bytes()).ok()
+    };
+    let (Some(marker), Some(canary)) = (path(MARKER), path(CANARY)) else {
+        return false;
+    };
+    let op = c"file-read-data";
+    // SAFETY: sandbox_check(3) only reads its arguments; the path filter
+    // takes one NUL-terminated string.
+    unsafe {
+        sandbox_check(pid, std::ptr::null(), 0) == 1
+            && sandbox_check(pid, op.as_ptr(), FILTER_PATH | NO_REPORT, marker.as_ptr()) == 0
+            && sandbox_check(pid, op.as_ptr(), FILTER_PATH | NO_REPORT, canary.as_ptr()) == 1
+    }
+}
+
 pub struct SeatbeltBackend {
     /// Pinned absolute path; never looked up on PATH.
     pub sandbox_exec: PathBuf,
@@ -102,11 +140,15 @@ impl SandboxBackend for SeatbeltBackend {
             anyhow::bail!("macos-seatbelt requires a loopback egress endpoint");
         };
         check_outside_writable(&spec.shim, &spec.fs.writable)?;
+        let marker = spec.session_dir.join(MARKER);
+        std::fs::write(&marker, b"")?;
+        let marker = marker.canonicalize()?;
         let profile = sbpl::generate(&sbpl::SbplInputs {
             fs: &spec.fs,
             broker_port: port,
             tty: spec.tty_path.as_deref(),
             tag: sbpl::session_tag(&spec.session).as_deref(),
+            marker: Some(&marker),
         })
         .map_err(|e| anyhow::anyhow!("cannot generate SBPL: {e}"))?;
         let profile_path = spec.session_dir.join("sandbox.sb");
@@ -115,7 +157,7 @@ impl SandboxBackend for SeatbeltBackend {
         // Verification from inside: the session canary and ~/.ssh must be
         // unreadable, protected dirs uncreatable, and any address other
         // than the broker port refused by Seatbelt itself (EPERM), not by a peer.
-        let canary = spec.session_dir.join("canary");
+        let canary = spec.session_dir.join(CANARY);
         std::fs::write(&canary, "broker-canary")?;
         let mut deny_read = vec![canary];
         deny_read.extend(spec.fs.deny_read.iter().filter(|p| p.is_file()).take(4).cloned());

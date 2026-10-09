@@ -4774,5 +4774,53 @@
     "sources": [
       "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2025-06-18/schema.ts"
     ]
+  },
+  {
+    "file": "95-decisions/ADR-048 No Repositories in the Shared Temp Dir.md",
+    "title": "ADR-048 No Repositories in the Shared Temp Dir",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "On macOS a session may not create a .git anywhere in the per-user temp dir (writable to every session under ADR-016) outside its own roots there, so a later session the user starts in a scratch directory cannot take its task repository (push rules, GitHub verbs, App token scope) from a file an earlier agent wrote; repo_root ignores a .git another user owns.",
+    "links_to": [
+      "ADR-046 Git Redirection and Shared Agent State Are Not Writable",
+      "ADR-016 macOS M0 Compatibility Exceptions",
+      "I5 Config Outside Writable Mounts",
+      "I4 Repo Policy Only Narrows",
+      "Sandbox Launcher",
+      "Seatbelt",
+      "Broker CLI and Daemon",
+      "Risk Register",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-10-09) from the host-side review's finding and its failing test brokerd::session_util::tests::review_a_gitdir_planted_in_the_shared_temp_dir_does_not_choose_the_task_repository.",
+    "aliases": [
+      "ADR-048"
+    ],
+    "sources": [
+      "https://github.blog/2022-04-12-git-security-vulnerability-announced/"
+    ]
+  },
+  {
+    "file": "95-decisions/ADR-049 Teardown Finds Session Processes by Seatbelt Profile.md",
+    "title": "ADR-049 Teardown Finds Session Processes by Seatbelt Profile",
+    "type": "decision",
+    "section": "decisions",
+    "summary": "On macOS a sandboxed process can leave the session's process group with setsid() and outlive the session; teardown now finds the session's processes by its own Seatbelt profile (a per-session marker only that profile may read, checked with sandbox_check) and by ancestry, stops them all, then kills them, so nothing of the session runs after session.stop.",
+    "links_to": [
+      "Broker CLI and Daemon",
+      "Sandbox Launcher",
+      "Seatbelt",
+      "Request and Session Lifecycle",
+      "I9 Hash-Chained Audit Outside the Sandbox",
+      "I2 Fail-Closed Launch",
+      "Trust Boundaries",
+      "ADR-013 Seatbelt for macOS MVP with VZ Hedge",
+      "MOC Decisions"
+    ],
+    "source_hints": "Written during the M4 build (2026-10-09) from the host-side review's finding, its failing test brokerd::session::running::review_tests::review_teardown_kills_sandboxed_processes_that_left_the_group, and sandbox_check behaviour measured on macOS 26.5.",
+    "aliases": [
+      "ADR-049"
+    ],
+    "sources": []
   }
 ]

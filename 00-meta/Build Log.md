@@ -7,7 +7,7 @@ tags: [sandbox/meta, meta, topic/build]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-10-01
+updated: 2026-10-09
 summary: "Chronological, append-only log Claude Code writes while building: date, milestone, what changed, notes updated, ADRs created, test status."
 related: ["[[CLAUDE]]", "[[MVP Plan]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[M4 Harden and Ship]]", "[[Dashboard]]"]
 sources: []
@@ -441,3 +441,21 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 
 - **Reviewed** (agent): TLS termination and the per-session CA, splice/terminate choice, ClientHello parsing, HTTP/1.1 re-serialisation (no HTTP/2 surface), upstream verification, CONNECT/SOCKS5 ingress, resolver and address classes. No path to an unauthorised address and no way across the splice/terminate boundary. **Fixed (low):** EKS Pod Identity (`169.254.170.23`, `fd00:ec2::23`), GCP IPv6 metadata (`fd20:ce::254`) and Azure WireServer were classed `link_local`/`private`/`public` instead of `metadata`; the local-use NAT64 prefix `64:ff9b:1::/48` was `public` and is now `reserved` (tests `canon::tests::review_*`, `azure_wireserver_is_metadata`). **Open (low):** splice-path SNI checks see only the first, unencrypted ClientHello (ECH, HelloRetryRequest); the leaf and resolver caches are unbounded; leaves last 24 h without refresh; the CA key is not zeroised as the TLS note says.
 - **Also fixed (low):** the per-session leaf cache is bounded and leaves are re-minted before expiry; the resolver cache is bounded; the TLS note no longer claims the CA key is zeroised ([[TLS Termination and Per-Session CA]]).
+
+### 2026-10-09: host-side review fixes
+
+- **Fixed** (five findings of a review of the daemon, CLI and launcher host side; each reviewer test failed before and passes after):
+  - **Teardown** ([[ADR-049 Teardown Finds Session Processes by Seatbelt Profile]]): on macOS a sandboxed process that called `setsid()` outlived its session, holding the user's terminal and repository write access after `session.stop`. Teardown now stops, then kills, every process under the session's own Seatbelt profile (a per-session marker checked with `sandbox_check`) or descended from a member.
+  - **Planted repository** ([[ADR-048 No Repositories in the Shared Temp Dir]]): a session could create `<T>/<dir>/.git` in the shared per-user temp dir, choosing the task repository of a later session started there. That is now refused outside the session's own roots, and `repo_root` ignores a `.git` another user owns.
+  - **`broker why`** escapes terminal control characters in its output.
+  - **`audit verify`** checks the indexed columns (`ts`, `kind`, `session`, `request_id`) against the hashed body.
+  - **A malformed `session.start`** is recorded as `launch.refused`.
+- **Tests:** `launcher::reap::tests::a_daemonised_process_of_the_session_is_killed_and_no_other` and the end-to-end `m4_teardown::a_daemonised_process_does_not_outlive_its_session` both fail when teardown runs without the profile fingerprint. Category 10 also passes with the fixture repository inside the per-user temp dir (`TMPDIR` set to it).
+- **Full suite:** 428 passed, 7 failed (macOS 26). The 7 failures are the formal-gate tests (`policy::gates::tests`, `m2_gates`, `m2_learn`), which need cvc5; the local copy had been removed and `BROKER_REQUIRE_SOLVER` was set. This change touches none of them, and CI installs cvc5.
+- **Lint:** clippy clean on macOS; launcher also linted for Linux.
+- **Not addressed (lower severity, from the same review):**
+  - the CLI does not check the owner of the daemon socket it connects to;
+  - a daemon shutdown with sessions running can leave a sandbox behind;
+  - rejected control connections are logged to stderr only;
+  - control requests after the first have no size cap;
+  - `--die-with-parent` follows the spawning thread, not the daemon process.

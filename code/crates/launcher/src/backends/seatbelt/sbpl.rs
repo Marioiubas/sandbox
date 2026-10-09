@@ -22,6 +22,10 @@ pub struct SbplInputs<'a> {
     /// reports carry it, so the broker can attribute them to the session
     /// and put them on the audit record (ADR-041).
     pub tag: Option<&'a str>,
+    /// A file in the session directory that only this profile may read:
+    /// how the daemon recognises the session's processes at teardown,
+    /// including those that left its process group (`reap`).
+    pub marker: Option<&'a Path>,
 }
 
 pub use super::super::seatbelt_session_tag as session_tag;
@@ -113,14 +117,19 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
     if !i.fs.writable.is_empty() {
         let _ = writeln!(s, "; writable roots\n(allow file-write*{})", path_rules("subpath", &i.fs.writable)?);
     }
-    if !i.fs.create_only.is_empty() {
-        // Files may be added, never changed or removed: other sessions run
-        // what is in these directories (ADR-046).
+    for (root, own) in &i.fs.scratch_git {
+        // No `.git` in the shared temp dir outside this session's own roots
+        // there (ADR-048): a later session started in it would take its task
+        // repository from that file. Before the repository's own rule, which
+        // still applies when the repository lies in it.
+        let re = regex_prefix(root).ok_or_else(|| format!("unrepresentable path {}", root.display()))?;
         let _ = writeln!(
             s,
-            "; add-only state shared with other sessions (ADR-046)\n(deny file-write-data file-write-unlink file-write-mode file-write-flags file-write-xattr{}{wm})",
-            path_rules("subpath", &i.fs.create_only)?
+            "; no repositories in shared scratch (ADR-048)\n(deny file-write* (regex #\"{re}/(.+/)?\\.git(/|$)\"){wm})"
         );
+        if !own.is_empty() {
+            let _ = writeln!(s, "(allow file-write*{})", path_rules("subpath", own)?);
+        }
     }
     for root in &i.fs.nested_git {
         // No `.git` below the repository root (ADR-046): a nested repository's
@@ -128,6 +137,15 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
         let re = regex_prefix(root).ok_or_else(|| format!("unrepresentable path {}", root.display()))?;
         let _ =
             writeln!(s, "; no nested repositories (ADR-046)\n(deny file-write* (regex #\"{re}/.+/\\.git(/|$)\"){wm})");
+    }
+    if !i.fs.create_only.is_empty() {
+        // Files may be added, never changed or removed: other sessions run
+        // what is in these directories (ADR-046). After every allow above.
+        let _ = writeln!(
+            s,
+            "; add-only state shared with other sessions (ADR-046)\n(deny file-write-data file-write-unlink file-write-mode file-write-flags file-write-xattr{}{wm})",
+            path_rules("subpath", &i.fs.create_only)?
+        );
     }
     for prefix in &i.fs.shared_scratch {
         // Other sessions' scratch in the shared temp dir (R16): denied, then
@@ -162,6 +180,13 @@ pub fn generate(i: &SbplInputs) -> Result<String, String> {
         let _ = write!(s, " (global-name \"{m}\")");
     }
     let _ = write!(s, "{wm})\n(deny appleevent-send{wm})\n(deny network-bind network-inbound{wm})\n");
+    if let Some(m) = i.marker {
+        let q = quote(m).ok_or("unrepresentable marker path")?;
+        let _ = writeln!(
+            s,
+            "; the session's marker, readable under this profile only (teardown)\n(allow file-read-data (literal {q}))"
+        );
+    }
     Ok(s)
 }
 
@@ -179,6 +204,7 @@ mod tests {
             missing_protected: vec![],
             shared_scratch: vec![],
             nested_git: vec![],
+            scratch_git: vec![],
             create_only: vec![],
         }
     }
@@ -188,8 +214,35 @@ mod tests {
     fn nested_repositories_are_denied_by_pattern() {
         let mut f = fs();
         f.nested_git = vec!["/Users/dev/src/web".into()];
-        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).unwrap();
+        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: None }).unwrap();
         assert!(p.contains(r#"(deny file-write* (regex #"^/Users/dev/src/web/.+/\.git(/|$)"))"#), "{p}");
+    }
+
+    /// ADR-048: the shared temp dir's rule, then the session's own roots
+    /// there, then the repository's rule, then the add-only state: each
+    /// later rule wins where they overlap.
+    #[test]
+    fn shared_scratch_repositories_are_denied_before_the_repository_rule() {
+        let mut f = fs();
+        f.scratch_git = vec![("/private/var/folders/x1/T".into(), vec!["/private/var/folders/x1/T/broker-S1".into()])];
+        f.nested_git = vec!["/Users/dev/src/web".into()];
+        f.create_only = vec!["/private/var/folders/x1/T/broker-S1/state".into()];
+        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: None }).unwrap();
+        let at = |needle: &str| p.find(needle).unwrap_or_else(|| panic!("{needle} missing:\n{p}"));
+        let scratch = at(r#"(deny file-write* (regex #"^/private/var/folders/x1/T/(.+/)?\.git(/|$)"))"#);
+        let own = at(r#"(allow file-write* (subpath "/private/var/folders/x1/T/broker-S1"))"#);
+        let repo = at(r#"(deny file-write* (regex #"^/Users/dev/src/web/.+/\.git(/|$)"))"#);
+        let add_only = at("(deny file-write-data file-write-unlink");
+        assert!(scratch < own && own < repo && repo < add_only, "{p}");
+    }
+
+    /// The marker is readable under this profile only, as a literal.
+    #[test]
+    fn marker_is_a_literal_read_allow() {
+        let f = fs();
+        let m = Path::new("/Users/dev/.local/state/broker/sessions/S1/sandbox.mark");
+        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: Some(m) }).unwrap();
+        assert!(p.ends_with(&format!("(allow file-read-data (literal \"{}\"))\n", m.display())), "{p}");
     }
 
     /// R16: another session's scratch in the shared temp dir is not
@@ -200,7 +253,7 @@ mod tests {
         f.writable.push("/private/var/folders/x1/T/broker-S1".into());
         f.writable.push("/private/var/folders/x1/T/broker-mcp-gh-S1".into());
         f.shared_scratch = vec!["/private/var/folders/x1/T/broker-".into()];
-        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).unwrap();
+        let p = generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: None }).unwrap();
         let deny = p.find("(deny file-write* (regex #\"^/private/var/folders/x1/T/broker-\"))").expect(&p);
         let own = p
             .find("(allow file-write* (subpath \"/private/var/folders/x1/T/broker-S1\") (subpath \"/private/var/folders/x1/T/broker-mcp-gh-S1\"))")
@@ -211,30 +264,39 @@ mod tests {
         // A dot is escaped; anything a temp dir does not use is refused.
         f.shared_scratch = vec!["/private/var/f.x/T/broker-".into()];
         assert!(
-            generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None })
+            generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: None })
                 .unwrap()
                 .contains(r#"^/private/var/f\.x/T/broker-"#)
         );
         f.shared_scratch = vec!["/private/var/f x/T/broker-".into()];
-        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).is_err());
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: None }).is_err());
         f.shared_scratch = vec!["/private/var/(x)/T/broker-".into()];
-        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).is_err());
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: None }).is_err());
     }
 
     #[test]
     fn golden_shape() {
         let f = fs();
-        let p = generate(&SbplInputs { fs: &f, broker_port: 54017, tty: Some(Path::new("/dev/ttys003")), tag: None })
-            .unwrap();
+        let p = generate(&SbplInputs {
+            fs: &f,
+            broker_port: 54017,
+            tty: Some(Path::new("/dev/ttys003")),
+            tag: None,
+            marker: None,
+        })
+        .unwrap();
         assert!(p.starts_with("(version 1)\n(deny default)\n"));
         // With a session tag, every deny rule carries it (ADR-041).
         let tag = session_tag("01M3S0E43XS2PKE5QME2ETACHQ").unwrap();
-        let t = generate(&SbplInputs { fs: &f, broker_port: 54017, tty: None, tag: Some(&tag) }).unwrap();
+        let t = generate(&SbplInputs { fs: &f, broker_port: 54017, tty: None, tag: Some(&tag), marker: None }).unwrap();
         let denies = t.lines().filter(|l| l.starts_with("(deny")).count();
         assert!(denies >= 6);
         assert_eq!(t.matches("(with message \"broker:01M3S0E43XS2PKE5QME2ETACHQ\")").count(), denies);
         assert_eq!(session_tag("a\"b"), None);
-        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: Some("x\") (allow default") }).is_err());
+        assert!(
+            generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: Some("x\") (allow default"), marker: None })
+                .is_err()
+        );
         assert!(p.contains("(deny file-read* (subpath \"/Users/dev/.ssh\"))"));
         assert!(p.contains("(allow network-outbound (remote ip \"localhost:54017\"))"));
         assert!(p.contains("(literal \"/dev/ttys003\")"));
@@ -253,13 +315,13 @@ mod tests {
         assert!(quote(Path::new("/a\nb")).is_none());
         let mut f = fs();
         f.writable.push("/x\n(allow default)".into());
-        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None }).is_err());
+        assert!(generate(&SbplInputs { fs: &f, broker_port: 1, tty: None, tag: None, marker: None }).is_err());
     }
 
     #[test]
     fn only_one_network_allow() {
         let f = fs();
-        let p = generate(&SbplInputs { fs: &f, broker_port: 4242, tty: None, tag: None }).unwrap();
+        let p = generate(&SbplInputs { fs: &f, broker_port: 4242, tty: None, tag: None, marker: None }).unwrap();
         assert_eq!(p.matches("(allow network").count(), 1);
     }
 }

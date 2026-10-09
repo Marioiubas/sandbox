@@ -287,7 +287,7 @@ impl Daemon {
         if self.recorder.append(&ready).is_err() {
             // I9: no audit, no session.
             let mut child = handle.child;
-            unsafe { libc::kill(-(handle.pid as i32), libc::SIGKILL) };
+            launcher::reap::kill_session(handle.pid, Some(session_dir));
             let _ = child.kill();
             let _ = child.wait();
             accept.abort();

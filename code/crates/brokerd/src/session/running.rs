@@ -60,6 +60,11 @@ impl Running {
         unsafe { libc::kill(target as i32, sig) };
     }
 
+    /// Kill every process of the session now (see [`launcher::reap`]).
+    pub fn kill_all(&self) {
+        launcher::reap::kill_session(self.pid, Some(&self.session_dir));
+    }
+
     pub fn take_child(&mut self) -> Option<std::process::Child> {
         self.child.take()
     }
@@ -68,8 +73,10 @@ impl Running {
     /// write `session.stop`.
     pub fn teardown(mut self, daemon: &Daemon, exited: &Exited) {
         self.accept.abort();
-        // SAFETY: the sandbox leads its own process group (setsid).
-        unsafe { libc::kill(-(self.pid as i32), libc::SIGKILL) };
+        // The group the sandbox leads, and on macOS every process that left
+        // it (setsid) yet runs under this session's profile or descends
+        // from a member: stopped first, then killed.
+        self.kill_all();
         for p in &self.placeholders {
             launcher::fs_compile::remove_placeholder(p);
         }
@@ -101,5 +108,108 @@ impl Running {
             ev.detail("quarantined_git", quarantined.iter().map(|p| p.display().to_string()).collect::<Vec<_>>())
         };
         let _ = self.recorder.append(&ev);
+    }
+}
+
+/// macOS only: on Linux the sandbox is a PID namespace whose init dies with
+/// bwrap (`--unshare-pid --die-with-parent`), which this unit test does not
+/// model; Seatbelt has no such container.
+#[cfg(all(test, target_os = "macos"))]
+mod review_tests {
+    use super::*;
+    use std::os::unix::process::CommandExt;
+
+    struct NoBackend;
+    impl launcher::SandboxBackend for NoBackend {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        fn probe(&self) -> anyhow::Result<launcher::BackendReport> {
+            Ok(Default::default())
+        }
+        fn launch(&self, _: launcher::SandboxSpec) -> anyhow::Result<launcher::SandboxHandle> {
+            anyhow::bail!("no backend in this test")
+        }
+    }
+
+    /// Review (TB2, I9, Broker CLI and Daemon "Supervisor: on session.stop
+    /// or agent exit it kills the tree"): teardown, and the CLI-gone path in
+    /// `Server::session`, kill only the sandbox's process group
+    /// (`kill(-pid)`). Nothing stops a sandboxed process from calling
+    /// `setsid()` (Seatbelt does not mediate it; checked with
+    /// `sandbox-exec` and a deny-default profile allowing only
+    /// process-fork/exec, file-read, signal and process-info within the
+    /// sandbox). Such a process outlives its session on macOS: still holding
+    /// the user's terminal (fds 0-2, readable because it is not its
+    /// controlling terminal) and write access to the repository and agent
+    /// state, after `session.stop` is on record and the kernel-denial
+    /// collector has stopped. Here the agent is started as
+    /// `spawn_with_status` starts it (leader of its own session), forks a
+    /// child that calls `setsid()`, and the session is torn down.
+    #[tokio::test]
+    async fn review_teardown_kills_sandboxed_processes_that_left_the_group() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        let dirs = crate::dirs::BrokerDirs::rooted(&root.join("broker"));
+        dirs.ensure().unwrap();
+        std::fs::create_dir_all(root.join("repo")).unwrap();
+        let rec = Arc::new(audit::SqliteRecorder::open(&dirs.audit_db()).unwrap());
+        let daemon = Daemon::new(
+            dirs,
+            rec.clone(),
+            Arc::new(NoBackend),
+            Arc::new(netguard::resolver::SystemResolver::new()),
+            "/nonexistent/broker-sandbox-shim".into(),
+        );
+        let pidfile = root.join("escaped.pid");
+        let script = format!(
+            "use POSIX; if (fork() == 0) {{ POSIX::setsid(); open(my $f, '>', '{}.tmp'); print $f $$; close $f; \
+             rename('{0}.tmp', '{0}'); sleep 30; exit 0 }} sleep 30;",
+            pidfile.display()
+        );
+        let mut cmd = std::process::Command::new("/usr/bin/perl");
+        cmd.arg("-e").arg(script);
+        // SAFETY: setsid is async-signal-safe (as in launcher's spawn_with_status).
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+        let child = cmd.spawn().unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !pidfile.exists() && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let escaped: i32 = std::fs::read_to_string(&pidfile).unwrap().trim().parse().unwrap();
+        let id = audit::SessionId::new();
+        let mut running = Running {
+            id: id.clone(),
+            result: Default::default(),
+            pid: child.id(),
+            child: Some(child),
+            accept: tokio::spawn(async {}),
+            session_dir: root.join("session"),
+            session_tmp: root.join("tmp"),
+            placeholders: vec![],
+            stats: Default::default(),
+            recorder: rec.clone(),
+            attribution: AuditEvent::new(EventKind::SessionStart).session(&id),
+            collector: None,
+            nested_git: (root.join("repo"), vec![]),
+        };
+        let mut child = running.take_child().unwrap();
+        running.teardown(&daemon, &Exited::default());
+        let _ = child.wait();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        // SAFETY: plain kill(2) probes and cleanup.
+        let alive = unsafe { libc::kill(escaped, 0) } == 0;
+        if alive {
+            unsafe { libc::kill(escaped, libc::SIGKILL) };
+        }
+        assert!(
+            !alive,
+            "process {escaped} of session {id} called setsid() and is still running after teardown wrote session.stop"
+        );
     }
 }

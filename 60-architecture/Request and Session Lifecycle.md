@@ -7,7 +7,7 @@ tags: [sandbox/architecture, concept, topic/egress, topic/credentials, topic/pol
 status: proposal
 confidence: medium
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-09
 summary: "The six-step life of a session and its requests: session.start resolves user, agent hash and repo into a Task entity; CA, sentinels and sandbox rules are compiled; each request is canonicalised, resolved, optionally terminated and classified; all Cedar requests must allow before minting and attach; response filter and audit append; teardown destroys the CA and cached tokens."
 related: ["[[Broker CLI and Daemon]]", "[[Sandbox Launcher]]", "[[Netguard Ingress]]", "[[TLS Termination and Per-Session CA]]", "[[Policy Engine and Entity Builder]]", "[[Credential Injector and Issuers]]", "[[Audit Recorder and Event Schema]]", "[[Just-in-Time Credential Minting]]", "[[Architecture Overview]]", "[[I4 Repo Policy Only Narrows]]", "[[Hostname Canonicaliser]]", "[[Broker DNS Resolver]]", "[[Git Smart-HTTP Adapter]]", "[[GitHub API Adapter]]", "[[MCP Guard]]", "[[Policy Learning Loop]]", "[[SymCC CI Gates]]", "[[Trifecta Session Labels]]", "[[Internal Grant JWT]]", "[[Core Trait Contracts]]", "[[I1 No Secrets in the Sandbox]]", "[[I2 Fail-Closed Launch]]", "[[I5 Config Outside Writable Mounts]]", "[[I6 Single Canonicaliser]]", "[[I7 Reject Foreign Credentials]]", "[[I9 Hash-Chained Audit Outside the Sandbox]]", "[[Conformance Probe Matrix]]", "[[L4 Product Metrics]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[Fatigue-Resistant Approval Interfaces]]", "[[Open Questions and Unverified Claims]]"]
 sources: ["https://www.anthropic.com/engineering/how-we-contain-claude", "https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app", "https://modelcontextprotocol.io/specification/latest/basic/authorization", "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks", "https://vercel.com/docs/sandbox/concepts/firewall", "https://docs.rs/cedar-policy-symcc"]
@@ -320,3 +320,7 @@ Steps 1–3 and a minimal step 5 in M0; L7, minting and step 4 in M1; Cedar, cha
 - https://vercel.com/docs/sandbox/concepts/firewall
 - https://docs.rs/cedar-policy-symcc
 - Report: "A request's life runs as follows" (six steps, verbatim), "Interfaces", "Deployment modes", "MCP guard", "Least-privilege learning"; research note 05 §3.1 diagram flow and §3.4.
+
+## Build log
+
+- 2026-10-09: teardown kills every process of the session before `session.stop`: the sandbox's process group and, on macOS, every process under the session's Seatbelt profile or descended from a member, stopped first and then killed ([[ADR-049 Teardown Finds Session Processes by Seatbelt Profile]]). The task repository is never taken from a `.git` in the shared temp dir that a session created, or from one another user owns ([[ADR-048 No Repositories in the Shared Temp Dir]]).

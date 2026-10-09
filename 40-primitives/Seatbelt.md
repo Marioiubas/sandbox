@@ -9,7 +9,7 @@ status: verified
 confidence: high
 milestone: M0
 created: 2026-09-24
-updated: 2026-09-24
+updated: 2026-10-09
 related: ["[[Apple Virtualization Framework]]", "[[ADR-013 Seatbelt for macOS MVP with VZ Hedge]]", "[[Sandbox Launcher]]", "[[Topology-Forced Egress]]", "[[Two-Tier Isolation Design]]", "[[Risk Register]]", "[[Claude Code and sandbox-runtime]]", "[[Netguard Ingress]]", "[[Sentinel Swap Pattern]]", "[[Open Questions and Unverified Claims]]", "[[I5 Config Outside Writable Mounts]]", "[[M0 Contained Run]]"]
 ---
 
@@ -117,3 +117,4 @@ See `sources:` in the frontmatter; every URL is cited inline above.
 ## Build log
 
 - 2026-09-24: the `macos-seatbelt` backend is built ([[Sandbox Launcher]]).
+- 2026-10-09: measured on macOS 26.5: Seatbelt does not mediate `setsid()`, so a sandboxed process can leave the process group the sandbox leads. `sandbox_check(pid, NULL, 0)` tells whether another process is sandboxed; `sandbox_check(pid, "file-read-data", SANDBOX_FILTER_PATH | SANDBOX_CHECK_NO_REPORT, path)` answers for that process's own profile (0 allowed, 1 denied; 1 for a path that does not exist) without a denial report. The broker uses both to find a session's processes at teardown ([[ADR-049 Teardown Finds Session Processes by Seatbelt Profile]]).

@@ -195,6 +195,9 @@ impl Server {
         let params: StartParams = match serde_json::from_value(params) {
             Ok(p) => p,
             Err(e) => {
+                // A refused start is on record however it was refused (I9).
+                let message = format!("invalid session.start parameters: {e}");
+                self.daemon.refuse(&audit::SessionId::new(), "", &message, &[]);
                 wr.write_all(&proto::to_line(&proto::err(id, codes::INVALID_PARAMS, e.to_string(), None))).await?;
                 return Ok(());
             }
@@ -242,7 +245,7 @@ impl Server {
                     _ => {
                         // The CLI went away: the session goes with it.
                         client_gone = true;
-                        unsafe { libc::kill(-(running.pid as i32), libc::SIGKILL) };
+                        running.kill_all();
                     }
                 },
             }
@@ -285,5 +288,68 @@ async fn read_first(stream: &UnixStream) -> anyhow::Result<(Vec<u8>, Vec<OwnedFd
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
             Err(e) => return Err(e.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    use tokio::io::AsyncReadExt;
+
+    struct NoBackend;
+    impl launcher::SandboxBackend for NoBackend {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        fn probe(&self) -> anyhow::Result<launcher::BackendReport> {
+            Ok(Default::default())
+        }
+        fn launch(&self, _: launcher::SandboxSpec) -> anyhow::Result<launcher::SandboxHandle> {
+            anyhow::bail!("no backend in this test")
+        }
+    }
+
+    async fn send(server: &Arc<Server>, line: &str) -> String {
+        let (mut client, conn) = UnixStream::pair().unwrap();
+        client.write_all(line.as_bytes()).await.unwrap();
+        server.clone().handle(conn).await.unwrap();
+        let mut out = String::new();
+        client.read_to_string(&mut out).await.unwrap();
+        out
+    }
+
+    /// Review (I9 "launch refusal", Broker CLI and Daemon: "any error in
+    /// Starting goes straight to Closed with a `launch_refused` audit
+    /// event"; I2): a `session.start` the daemon refuses is on the record
+    /// when its parameters parse (here: no stdio descriptors), but one
+    /// whose parameters do not parse is answered INVALID_PARAMS in
+    /// `Server::session` before `Daemon::start`, and no row records that a
+    /// launch was asked for and refused.
+    #[tokio::test]
+    async fn review_every_refused_session_start_is_logged() {
+        let d = tempfile::tempdir().unwrap();
+        let dirs = crate::dirs::BrokerDirs::rooted(&d.path().canonicalize().unwrap());
+        dirs.ensure().unwrap();
+        let rec = Arc::new(audit::SqliteRecorder::open(&dirs.audit_db()).unwrap());
+        let daemon = Arc::new(Daemon::new(
+            dirs,
+            rec.clone(),
+            Arc::new(NoBackend),
+            Arc::new(netguard::resolver::SystemResolver::new()),
+            "/nonexistent/broker-sandbox-shim".into(),
+        ));
+        let server = Server::new(daemon, Duration::from_secs(60));
+        let a = send(&server, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{\"argv\":[\"claude\"],\"cwd\":\"/\"}}\n").await;
+        let b = send(&server, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{\"argv\":\"claude\",\"cwd\":\"/\"}}\n").await;
+        assert!(a.contains("\"error\"") && b.contains("\"error\""), "both refused: {a} {b}");
+        let q = audit::Query { kind: Some(audit::EventKind::LaunchRefused), limit: 10, ..Default::default() };
+        let rows = rec.query_filtered(&q).unwrap();
+        assert_eq!(
+            rows.len(),
+            2,
+            "two session.start requests were refused, {} launch_refused row(s) on record; the unrecorded refusal \
+             answered: {b}",
+            rows.len()
+        );
     }
 }

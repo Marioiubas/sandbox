@@ -9,6 +9,7 @@
 
 pub mod backends;
 pub mod fs_compile;
+pub mod reap;
 pub mod shim;
 
 use serde::{Deserialize, Serialize};

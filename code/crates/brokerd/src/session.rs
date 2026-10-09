@@ -128,7 +128,7 @@ impl Daemon {
 }
 
 impl Daemon {
-    fn refuse(&self, id: &SessionId, agent: &str, message: &str, layers: &[LayerStatus]) {
+    pub(crate) fn refuse(&self, id: &SessionId, agent: &str, message: &str, layers: &[LayerStatus]) {
         let mut ev = AuditEvent::new(EventKind::LaunchRefused)
             .session(id)
             .deny(Reason::LaunchRefused, vec![])
