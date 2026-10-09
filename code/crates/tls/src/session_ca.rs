@@ -17,8 +17,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-/// Leaf certificates live no longer than this (sessions renew by restarting).
+/// Leaf certificates live no longer than this; a cached leaf is re-minted
+/// [`LEAF_REFRESH`] before it expires. The CA itself lasts [`CA_LIFETIME`]:
+/// a session longer than that must restart.
 const LEAF_LIFETIME: Duration = Duration::from_secs(24 * 3600);
+const LEAF_REFRESH: Duration = Duration::from_secs(3600);
+/// Most leaves cached per session (a wildcard grant can name any number of
+/// hosts); the one closest to expiry is dropped first.
+const MAX_LEAVES: usize = 1024;
 const CA_LIFETIME: Duration = Duration::from_secs(48 * 3600);
 
 pub fn provider() -> Arc<CryptoProvider> {
@@ -29,7 +35,7 @@ pub struct SessionCa {
     issuer: Issuer<'static, KeyPair>,
     ca_der: CertificateDer<'static>,
     ca_pem: String,
-    leaves: Mutex<HashMap<String, Arc<ServerConfig>>>,
+    leaves: Mutex<HashMap<String, (Arc<ServerConfig>, SystemTime)>>,
     provider: Arc<CryptoProvider>,
 }
 
@@ -83,7 +89,14 @@ impl SessionCa {
     /// A rustls server config presenting a leaf for exactly `host`, cached
     /// for the session. ALPN offers only HTTP/1.1 (h2 is not parsed yet).
     pub fn server_config(&self, host: &CanonicalHost) -> anyhow::Result<Arc<ServerConfig>> {
-        if let Some(c) = self.leaves.lock().map_err(|_| anyhow::anyhow!("leaf cache poisoned"))?.get(host.as_str()) {
+        let fresh = |not_after: &SystemTime| SystemTime::now() + LEAF_REFRESH < *not_after;
+        if let Some((c, _)) = self
+            .leaves
+            .lock()
+            .map_err(|_| anyhow::anyhow!("leaf cache poisoned"))?
+            .get(host.as_str())
+            .filter(|(_, na)| fresh(na))
+        {
             return Ok(c.clone());
         }
         let key = KeyPair::generate()?;
@@ -101,6 +114,7 @@ impl SessionCa {
         params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
         params.use_authority_key_identifier_extension = true;
         (params.not_before, params.not_after) = window(LEAF_LIFETIME);
+        let not_after = SystemTime::from(params.not_after);
         let leaf = params.signed_by(&key, &self.issuer)?;
         let chain = vec![leaf.der().clone(), self.ca_der.clone()];
         let pk = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.serialize_der()));
@@ -110,10 +124,14 @@ impl SessionCa {
             .with_single_cert(chain, pk)?;
         cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
         let cfg = Arc::new(cfg);
-        self.leaves
-            .lock()
-            .map_err(|_| anyhow::anyhow!("leaf cache poisoned"))?
-            .insert(host.as_str().to_string(), cfg.clone());
+        let mut leaves = self.leaves.lock().map_err(|_| anyhow::anyhow!("leaf cache poisoned"))?;
+        if leaves.len() >= MAX_LEAVES && !leaves.contains_key(host.as_str()) {
+            let oldest = leaves.iter().min_by_key(|(_, (_, na))| *na).map(|(k, _)| k.clone());
+            if let Some(k) = oldest {
+                leaves.remove(&k);
+            }
+        }
+        leaves.insert(host.as_str().to_string(), (cfg.clone(), not_after));
         Ok(cfg)
     }
 }
@@ -121,6 +139,22 @@ impl SessionCa {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The leaf cache is bounded, and a leaf close to expiry is re-minted.
+    #[test]
+    fn leaves_are_bounded_and_refreshed() {
+        let ca = SessionCa::new("t").unwrap();
+        let h = |i: usize| netguard::canon_host(format!("h{i}.example.com").as_bytes()).unwrap();
+        for i in 0..MAX_LEAVES + 10 {
+            ca.server_config(&h(i)).unwrap();
+        }
+        assert_eq!(ca.leaves.lock().unwrap().len(), MAX_LEAVES, "bounded");
+        let a = ca.server_config(&h(MAX_LEAVES + 9)).unwrap();
+        assert!(Arc::ptr_eq(&a, &ca.server_config(&h(MAX_LEAVES + 9)).unwrap()), "cached while fresh");
+        // Age it to within the refresh margin: the next call mints anew.
+        ca.leaves.lock().unwrap().get_mut(h(MAX_LEAVES + 9).as_str()).unwrap().1 = SystemTime::now() + LEAF_REFRESH / 2;
+        assert!(!Arc::ptr_eq(&a, &ca.server_config(&h(MAX_LEAVES + 9)).unwrap()), "re-minted near expiry");
+    }
     use rustls::pki_types::ServerName;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

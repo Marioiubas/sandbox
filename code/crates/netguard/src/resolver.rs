@@ -11,6 +11,9 @@
 use crate::canon::{CanonicalHost, HostKind};
 use audit::Reason;
 use std::collections::HashMap;
+
+/// Most names the system resolver caches.
+const MAX_CACHED: usize = 4096;
 use std::net::IpAddr;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -76,6 +79,15 @@ impl PolicyResolver for SystemResolver {
             return Err(Reason::NoAddresses);
         }
         if let Ok(mut cache) = self.cache.lock() {
+            // Bounded: expired entries go first, then the cache starts over
+            // (the daemon is shared by every session; names are only ones
+            // policy admitted, but a wildcard grant admits any number).
+            if cache.len() >= MAX_CACHED {
+                cache.retain(|_, (at, _)| at.elapsed() < self.max_ttl);
+                if cache.len() >= MAX_CACHED {
+                    cache.clear();
+                }
+            }
             cache.insert(host.as_str().to_string(), (Instant::now(), addrs.clone()));
         }
         Ok(addrs)
