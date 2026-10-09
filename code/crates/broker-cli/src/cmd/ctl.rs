@@ -20,8 +20,40 @@ fn brokerd_path() -> anyhow::Result<PathBuf> {
     Ok(p)
 }
 
+/// Connect to brokerd, only if the socket's server runs as this user: a
+/// socket another user put in a shared `XDG_RUNTIME_DIR` or `BROKER_HOME`
+/// would otherwise receive the terminal and the environment.
 pub fn connect(d: &BrokerDirs) -> Option<UnixStream> {
-    UnixStream::connect(d.ctl_sock()).ok()
+    let s = UnixStream::connect(d.ctl_sock()).ok()?;
+    if peer_is_me(&s) {
+        Some(s)
+    } else {
+        eprintln!("broker: {} is served by another user's process; not using it", d.ctl_sock().display());
+        None
+    }
+}
+
+/// The peer of `s` runs with this process's user ID.
+fn peer_is_me(s: &UnixStream) -> bool {
+    use std::os::fd::AsRawFd;
+    // SAFETY: getuid(2) cannot fail.
+    let me = unsafe { libc::getuid() };
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: a ucred-sized buffer for SO_PEERCRED.
+        let mut c: libc::ucred = unsafe { std::mem::zeroed() };
+        let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+        let r = unsafe {
+            libc::getsockopt(s.as_raw_fd(), libc::SOL_SOCKET, libc::SO_PEERCRED, (&raw mut c).cast(), &mut len)
+        };
+        r == 0 && c.uid == me
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let (mut uid, mut gid) = (0, 0);
+        // SAFETY: getpeereid(3) writes two ids.
+        unsafe { libc::getpeereid(s.as_raw_fd(), &mut uid, &mut gid) == 0 && uid == me }
+    }
 }
 
 /// Connect, starting brokerd in the background if it is not running.
@@ -66,4 +98,19 @@ pub fn call(d: &BrokerDirs, method: &str, params: serde_json::Value) -> anyhow::
     let mut line = String::new();
     BufReader::new(s).read_line(&mut line)?;
     Ok(serde_json::from_str(&line)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The CLI accepts a server of its own user (another user's needs a
+    /// second account; the check is `peer_is_me`).
+    #[test]
+    fn a_server_of_this_user_is_accepted() {
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("s.sock");
+        let _l = std::os::unix::net::UnixListener::bind(&p).unwrap();
+        assert!(peer_is_me(&UnixStream::connect(&p).unwrap()));
+    }
 }

@@ -453,9 +453,14 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
 - **Tests:** `launcher::reap::tests::a_daemonised_process_of_the_session_is_killed_and_no_other` and the end-to-end `m4_teardown::a_daemonised_process_does_not_outlive_its_session` both fail when teardown runs without the profile fingerprint. Category 10 also passes with the fixture repository inside the per-user temp dir (`TMPDIR` set to it).
 - **Full suite:** 428 passed, 7 failed (macOS 26). The 7 failures are the formal-gate tests (`policy::gates::tests`, `m2_gates`, `m2_learn`), which need cvc5; the local copy had been removed and `BROKER_REQUIRE_SOLVER` was set. This change touches none of them, and CI installs cvc5.
 - **Lint:** clippy clean on macOS; launcher also linted for Linux.
-- **Not addressed (lower severity, from the same review):**
-  - the CLI does not check the owner of the daemon socket it connects to;
-  - a daemon shutdown with sessions running can leave a sandbox behind;
-  - rejected control connections are logged to stderr only;
-  - control requests after the first have no size cap;
-  - `--die-with-parent` follows the spawning thread, not the daemon process.
+- **Lower-severity notes from the same review:** fixed in the follow-up below, except one: a control connection refused for a wrong peer UID is still reported on stderr only. Only root can reach the 0600 socket, and putting it on the record needs a new event kind.
+
+### 2026-10-09: host review, lower-severity notes
+
+- **Fixed** (each with a test that fails without the fix):
+  - **CLI:** connects only to a daemon running as its own user (`getpeereid`; `SO_PEERCRED` on Linux). A socket in a shared `XDG_RUNTIME_DIR` or `BROKER_HOME` no longer receives the terminal and environment (`broker::cmd::ctl::tests::a_server_of_this_user_is_accepted`; the other-user case needs a second account).
+  - **Daemon shutdown:** sessions still starting count as busy, so `daemon.shutdown` waits for them. On SIGTERM or idle exit the daemon kills every session and gives its teardown up to 10 s to write `session.stop` (`server::review_tests::{shutdown_waits_for_a_starting_session, the_daemon_ends_its_sessions_when_it_stops}`).
+  - **Message size:** messages after `session.start` are capped at 64 KiB; a longer one ends the session as if the client had gone (`control_messages_are_bounded`).
+  - **Linux `--die-with-parent`:** the sandbox is forked from a thread of its own that lives until teardown, not from a tokio blocking thread that retires after 10 s idle (`session::running::tests::the_launch_thread_lives_until_the_session_lets_go`).
+  - **Approvals:** concurrent grants of one approval are serialised. Without the lock, 8 concurrent grants wrote 8 `approval.granted` rows for 1 effective grant (`approvals::tests::concurrent_grants_of_one_approval_write_one_row`).
+- **Tests:** full suite 441 passed, 0 failed (macOS 26; the formal-gate tests skipped without cvc5). Clippy is clean. CI for the previous commit (`ea4c01d`) passed every non-fuzz job on macOS 15 and 26 and Ubuntu 22.04 and 24.04, including `m4_teardown` on Linux.

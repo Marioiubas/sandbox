@@ -7,6 +7,7 @@ use crate::proto::Exited;
 use crate::session_util::signal_target;
 use audit::{AuditEvent, EventKind, Recorder};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 pub(super) enum Listener {
@@ -40,6 +41,71 @@ pub(super) async fn accept_loop(l: Listener, ctx: Arc<PipelineCtx>) {
                 }
                 Err(_) => tokio::time::sleep(Duration::from_millis(50)).await,
             },
+        }
+    }
+}
+
+/// Counts a session as starting until dropped (also when its start is
+/// cancelled), so the daemon does not exit under it.
+pub(super) struct Starting<'a>(&'a AtomicUsize);
+
+impl<'a> Starting<'a> {
+    pub(super) fn new(n: &'a AtomicUsize) -> Self {
+        n.fetch_add(1, Ordering::SeqCst);
+        Starting(n)
+    }
+}
+
+impl Drop for Starting<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+/// Keeps the thread that forked a session's sandbox alive until the session
+/// is torn down. On Linux bwrap's `--die-with-parent` (`PR_SET_PDEATHSIG`)
+/// fires when that *thread* exits, and tokio retires idle blocking threads
+/// after 10 s; so the sandbox is forked from a thread of its own that waits
+/// here, and dies with the daemon, not with a pool thread.
+#[derive(Default)]
+pub(super) struct LaunchThread {
+    _hold: Option<std::sync::mpsc::Sender<()>>,
+}
+
+/// Run `launch` on a new thread that stays alive while the returned
+/// [`LaunchThread`] is held.
+pub(super) async fn launch_on_own_thread<T: Send + 'static>(
+    launch: impl FnOnce() -> anyhow::Result<T> + Send + 'static,
+) -> (anyhow::Result<T>, LaunchThread) {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let (hold, held) = std::sync::mpsc::channel::<()>();
+    let spawned = std::thread::Builder::new().name("brokerd-sandbox".into()).spawn(move || {
+        let _ = tx.send(launch());
+        // Returns when the session drops its LaunchThread.
+        let _ = held.recv();
+    });
+    if let Err(e) = spawned {
+        return (Err(e.into()), LaunchThread::default());
+    }
+    match rx.await {
+        Ok(r) => (r, LaunchThread { _hold: Some(hold) }),
+        Err(_) => (Err(anyhow::anyhow!("the launch thread died")), LaunchThread::default()),
+    }
+}
+
+impl Daemon {
+    /// Sessions starting or running. The daemon exits only when there are none.
+    pub fn busy_sessions(&self) -> usize {
+        self.active_sessions() + self.starting.load(Ordering::SeqCst)
+    }
+
+    /// Kill the processes of every running session; each session's own
+    /// task then tears it down and writes `session.stop`.
+    pub fn kill_all_sessions(&self) {
+        let running: Vec<(u32, std::path::PathBuf)> =
+            self.sessions.lock().map(|s| s.values().cloned().collect()).unwrap_or_default();
+        for (pid, dir) in running {
+            launcher::reap::kill_session(pid, Some(&dir));
         }
     }
 }
@@ -108,6 +174,41 @@ impl Running {
             ev.detail("quarantined_git", quarantined.iter().map(|p| p.display().to_string()).collect::<Vec<_>>())
         };
         let _ = self.recorder.append(&ev);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Review note (Linux `--die-with-parent` follows the forking thread):
+    /// the thread that forked the sandbox outlives tokio's idle blocking
+    /// threads and ends only when the session lets go of it.
+    #[test]
+    fn the_launch_thread_lives_until_the_session_lets_go() {
+        struct OnExit(std::sync::mpsc::Sender<()>);
+        impl Drop for OnExit {
+            fn drop(&mut self) {
+                let _ = self.0.send(());
+            }
+        }
+        thread_local! {
+            static GUARD: std::cell::RefCell<Option<OnExit>> = const { std::cell::RefCell::new(None) };
+        }
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .thread_keep_alive(Duration::from_millis(20))
+            .enable_all()
+            .build()
+            .unwrap();
+        let (tx, exited) = std::sync::mpsc::channel();
+        let (r, keep) = rt.block_on(launch_on_own_thread(move || {
+            GUARD.with(|g| *g.borrow_mut() = Some(OnExit(tx)));
+            Ok(7)
+        }));
+        assert_eq!(r.unwrap(), 7);
+        assert!(exited.recv_timeout(Duration::from_millis(300)).is_err(), "the launch thread ended mid-session");
+        drop(keep);
+        assert!(exited.recv_timeout(Duration::from_secs(5)).is_ok(), "the launch thread outlived its session");
     }
 }
 
@@ -197,6 +298,7 @@ mod review_tests {
             attribution: AuditEvent::new(EventKind::SessionStart).session(&id),
             collector: None,
             nested_git: (root.join("repo"), vec![]),
+            _launch_thread: Default::default(),
         };
         let mut child = running.take_child().unwrap();
         running.teardown(&daemon, &Exited::default());

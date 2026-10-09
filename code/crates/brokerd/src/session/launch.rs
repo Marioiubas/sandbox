@@ -258,20 +258,18 @@ impl Daemon {
         let mut collector =
             crate::kernel_denials::Collector::start(attribution.clone(), self.recorder.clone() as Arc<dyn Recorder>)
                 .await;
-        let launched = tokio::task::spawn_blocking(move || backend.launch(spec)).await;
+        // Forked from a thread that lives as long as the session (Linux
+        // `--die-with-parent` follows the forking thread).
+        let (launched, launch_thread) = super::running::launch_on_own_thread(move || backend.launch(spec)).await;
         let mut handle = match launched {
-            Ok(Ok(h)) => h,
-            Ok(Err(e)) => {
+            Ok(h) => h,
+            Err(e) => {
                 accept.abort();
                 let layers = match e.downcast_ref::<launcher::LaunchError>() {
                     Some(le) if !le.layers.is_empty() => le.layers.clone(),
                     _ => self.backend.probe().map(|r| r.layers).unwrap_or_default(),
                 };
                 return Err(StartFailure { message: format!("{e:#}"), layers });
-            }
-            Err(e) => {
-                accept.abort();
-                return Err(StartFailure { message: format!("launcher task failed: {e}"), layers: vec![] });
             }
         };
         // Linux: the syscalls seccomp refused so far (the shim's own check
@@ -295,7 +293,7 @@ impl Daemon {
         }
         self.approvals.register(id.as_str(), policy, attribution.clone());
         if let Ok(mut s) = self.sessions.lock() {
-            s.insert(id.to_string(), handle.pid);
+            s.insert(id.to_string(), (handle.pid, session_dir.to_path_buf()));
         }
         let result = StartResult {
             session_id: id.to_string(),
@@ -320,6 +318,7 @@ impl Daemon {
             attribution,
             collector: Some(collector),
             nested_git,
+            _launch_thread: launch_thread,
         })
     }
 }

@@ -37,7 +37,12 @@ pub struct Daemon {
     pub backend: Arc<dyn SandboxBackend>,
     pub resolver: Arc<dyn PolicyResolver>,
     pub shim: PathBuf,
-    pub sessions: Mutex<HashMap<String, u32>>,
+    /// Running sessions: the sandbox's pid and the session directory (by
+    /// which teardown recognises its processes, ADR-049).
+    pub sessions: Mutex<HashMap<String, (u32, PathBuf)>>,
+    /// Sessions between `session.start` and registration: the daemon may
+    /// not exit while one is starting (it would leave the sandbox behind).
+    pub(crate) starting: std::sync::atomic::AtomicUsize,
     hash_cache: Mutex<HashMap<(PathBuf, u64, i64, u64), String>>,
     /// Identity token issuers' key sets (M3 CI identity).
     pub jwks: crate::identity::JwksCache,
@@ -62,6 +67,7 @@ impl Daemon {
             resolver,
             shim,
             sessions: Mutex::new(HashMap::new()),
+            starting: Default::default(),
             hash_cache: Mutex::new(HashMap::new()),
             jwks: Default::default(),
             logins: Default::default(),
@@ -105,6 +111,8 @@ pub struct Running {
     /// The repository root and the nested `.git` entries it had at launch:
     /// new ones are quarantined at teardown (ADR-046).
     nested_git: (PathBuf, Vec<PathBuf>),
+    /// Held until teardown has killed the session (dropped with `Running`).
+    _launch_thread: running::LaunchThread,
 }
 
 impl Daemon {
@@ -140,6 +148,7 @@ impl Daemon {
     }
 
     pub async fn start(self: &Arc<Self>, params: StartParams, fds: Vec<OwnedFd>) -> Result<Running, StartFailure> {
+        let _starting = running::Starting::new(&self.starting);
         let id = SessionId::new();
         let argv0 = params.argv.first().cloned().unwrap_or_default();
         let r = self.start_inner(&id, params, fds).await;

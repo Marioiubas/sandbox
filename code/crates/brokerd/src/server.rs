@@ -69,7 +69,7 @@ impl Server {
                 }
                 _ = tick.tick() => {
                     // A held login keeps the daemon (and so the login) alive.
-                    if self.daemon.active_sessions() > 0
+                    if self.daemon.busy_sessions() > 0
                         || self.open_conns.load(Ordering::SeqCst) > 0
                         || self.daemon.logins.held()
                     {
@@ -84,7 +84,21 @@ impl Server {
         }
         let _ = std::fs::remove_file(self.daemon.dirs.ctl_sock());
         let _ = std::fs::remove_file(self.daemon.dirs.run_dir.join("brokerd.pid"));
+        // Sessions end with the daemon, on the record: never a sandbox left
+        // running without its proxy and without `session.stop`.
+        self.end_sessions(Duration::from_secs(10)).await;
         Ok(())
+    }
+
+    /// Kill every running session (again as starting ones register) until
+    /// none is left or `grace` has passed; each session's task writes its
+    /// `session.stop` as it tears down.
+    async fn end_sessions(&self, grace: Duration) {
+        let deadline = Instant::now() + grace;
+        while self.daemon.busy_sessions() > 0 && Instant::now() < deadline {
+            self.daemon.kill_all_sessions();
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
     }
 
     async fn handle(self: Arc<Self>, stream: UnixStream) -> anyhow::Result<()> {
@@ -118,7 +132,7 @@ impl Server {
                        "backend": d.backend.name(), "audit_db": d.dirs.audit_db()}),
             ),
             "daemon.shutdown" => {
-                if d.active_sessions() > 0 {
+                if d.busy_sessions() > 0 {
                     proto::err(id, codes::BUSY, "sessions are running", None)
                 } else {
                     self.shutdown.notify_one();
@@ -223,14 +237,15 @@ impl Server {
             let st = child.wait();
             let _ = tx.send(exited_from(st));
         });
-        let mut lines = BufReader::new(tokio::io::AsyncReadExt::chain(std::io::Cursor::new(rest), rd)).lines();
+        let mut input = BufReader::new(tokio::io::AsyncReadExt::chain(std::io::Cursor::new(rest), rd));
+        let mut partial = Vec::new();
         let mut client_gone = false;
         let exited = loop {
             tokio::select! {
                 ex = &mut rx => break ex.unwrap_or_default(),
-                line = lines.next_line(), if !client_gone => match line {
-                    Ok(Some(l)) => {
-                        if let Ok(r) = serde_json::from_str::<Request>(&l) {
+                line = next_message(&mut input, &mut partial), if !client_gone => match line {
+                    Some(l) => {
+                        if let Ok(r) = serde_json::from_slice::<Request>(&l) {
                             match r.method.as_str() {
                                 "session.signal" => {
                                     if let Some(sig) = r.params.get("signal").and_then(Value::as_str) {
@@ -242,8 +257,9 @@ impl Server {
                             }
                         }
                     }
-                    _ => {
-                        // The CLI went away: the session goes with it.
+                    None => {
+                        // The CLI went away (or broke the protocol): the
+                        // session goes with it.
                         client_gone = true;
                         running.kill_all();
                     }
@@ -257,6 +273,27 @@ impl Server {
             let _ = wr.write_all(&proto::to_line(&proto::notification("session.exited", &exited))).await;
         }
         Ok(())
+    }
+}
+
+/// Most bytes in one control message after `session.start` (signals and
+/// `session.stop` are tiny); the first is bounded by `read_first`.
+const MAX_MESSAGE: u64 = 64 * 1024;
+
+/// The next newline-terminated message from the session's client, or `None`
+/// at end of input, on an error, or past [`MAX_MESSAGE`]. Cancel-safe: a
+/// message read in part stays in `partial` for the next call.
+async fn next_message<R: tokio::io::AsyncBufRead + Unpin>(r: &mut R, partial: &mut Vec<u8>) -> Option<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+    loop {
+        let budget = (MAX_MESSAGE + 1).saturating_sub(partial.len() as u64);
+        let n = (&mut *r).take(budget).read_until(b'\n', partial).await.ok()?;
+        if partial.last() == Some(&b'\n') {
+            return Some(std::mem::take(partial));
+        }
+        if n == 0 || partial.len() as u64 > MAX_MESSAGE {
+            return None;
+        }
     }
 }
 
@@ -351,5 +388,73 @@ mod review_tests {
              answered: {b}",
             rows.len()
         );
+    }
+
+    fn server() -> (tempfile::TempDir, Arc<Server>) {
+        let d = tempfile::tempdir().unwrap();
+        let dirs = crate::dirs::BrokerDirs::rooted(&d.path().canonicalize().unwrap());
+        dirs.ensure().unwrap();
+        let rec = Arc::new(audit::SqliteRecorder::open(&dirs.audit_db()).unwrap());
+        let daemon = Arc::new(Daemon::new(
+            dirs,
+            rec,
+            Arc::new(NoBackend),
+            Arc::new(netguard::resolver::SystemResolver::new()),
+            "/nonexistent/broker-sandbox-shim".into(),
+        ));
+        (d, Server::new(daemon, Duration::from_secs(60)))
+    }
+
+    /// Review note: `daemon.shutdown` raced a session still starting (only
+    /// registered sessions were counted) and left its sandbox behind.
+    #[tokio::test]
+    async fn shutdown_waits_for_a_starting_session() {
+        let (_d, server) = server();
+        server.daemon.starting.fetch_add(1, Ordering::SeqCst);
+        let r = send(&server, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"daemon.shutdown\"}\n").await;
+        assert!(r.contains("sessions are running"), "{r}");
+        server.daemon.starting.fetch_sub(1, Ordering::SeqCst);
+        let r = send(&server, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"daemon.shutdown\"}\n").await;
+        assert!(r.contains("stopping"), "{r}");
+    }
+
+    /// Review note: a daemon stopped by SIGTERM left running sandboxes
+    /// without a proxy. On the way out it kills every session.
+    #[tokio::test]
+    async fn the_daemon_ends_its_sessions_when_it_stops() {
+        use std::os::unix::process::CommandExt;
+        let (d, server) = server();
+        let mut c = std::process::Command::new("/bin/sleep");
+        c.arg("30");
+        // SAFETY: setsid is async-signal-safe (as the launcher starts a sandbox).
+        unsafe {
+            c.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+        let mut child = c.spawn().unwrap();
+        server.daemon.sessions.lock().unwrap().insert("s1".into(), (child.id(), d.path().to_path_buf()));
+        server.end_sessions(Duration::from_millis(300)).await;
+        let ended = child.try_wait().unwrap().is_some() || {
+            std::thread::sleep(Duration::from_millis(200));
+            child.try_wait().unwrap().is_some()
+        };
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(ended, "a session's sandbox outlived the daemon");
+    }
+
+    /// Review note: messages after `session.start` had no size limit.
+    #[tokio::test]
+    async fn control_messages_are_bounded() {
+        let mut big = vec![b'x'; MAX_MESSAGE as usize + 10];
+        big.push(b'\n');
+        let input = [b"{\"a\":1}\n".as_slice(), &big, b"{\"b\":2}\n"].concat();
+        let mut r = BufReader::new(std::io::Cursor::new(input));
+        let mut partial = Vec::new();
+        assert_eq!(next_message(&mut r, &mut partial).await.as_deref(), Some(b"{\"a\":1}\n".as_slice()));
+        assert_eq!(next_message(&mut r, &mut partial).await, None, "an oversized message ends the conversation");
+        assert!(partial.len() as u64 <= MAX_MESSAGE + 1, "and was never buffered whole");
     }
 }

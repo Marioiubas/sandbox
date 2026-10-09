@@ -42,6 +42,9 @@ pub struct Registry {
     /// attribution their `approval.granted` rows carry (I9).
     sessions: Mutex<HashMap<String, (Arc<EgressPolicy>, audit::AuditEvent)>>,
     pending: Mutex<HashMap<String, Pending>>,
+    /// Held from the check to the grant in `grant_json`, so two concurrent
+    /// grants of one approval write one `approval.granted` row, not two.
+    granting: Mutex<()>,
 }
 
 fn now() -> i64 {
@@ -209,6 +212,7 @@ pub fn grant_json(d: &crate::session::Daemon, params: &serde_json::Value) -> Res
         "session" => Scope::Session,
         other => return Err(format!("scope must be once or session, not {other:?}")),
     };
+    let _one_at_a_time = d.approvals.granting.lock().unwrap_or_else(|p| p.into_inner());
     let p = d
         .approvals
         .get(id)
@@ -237,6 +241,58 @@ pub fn grant_json(d: &crate::session::Daemon, params: &serde_json::Value) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct NoBackend;
+    impl launcher::SandboxBackend for NoBackend {
+        fn name(&self) -> &'static str {
+            "test"
+        }
+        fn probe(&self) -> anyhow::Result<launcher::BackendReport> {
+            Ok(Default::default())
+        }
+        fn launch(&self, _: launcher::SandboxSpec) -> anyhow::Result<launcher::SandboxHandle> {
+            anyhow::bail!("no backend in this test")
+        }
+    }
+
+    /// Review note (I9): two concurrent grants of one approval wrote two
+    /// `approval.granted` rows with different scopes when one took effect.
+    #[test]
+    fn concurrent_grants_of_one_approval_write_one_row() {
+        let d = tempfile::tempdir().unwrap();
+        let dirs = crate::dirs::BrokerDirs::rooted(&d.path().canonicalize().unwrap());
+        dirs.ensure().unwrap();
+        let rec = Arc::new(audit::SqliteRecorder::open(&dirs.audit_db()).unwrap());
+        let daemon = Arc::new(crate::session::Daemon::new(
+            dirs,
+            rec.clone(),
+            Arc::new(NoBackend),
+            Arc::new(netguard::resolver::SystemResolver::new()),
+            "/nonexistent/broker-sandbox-shim".into(),
+        ));
+        let s = audit::SessionId::new().to_string();
+        let policy = Arc::new(EgressPolicy::default());
+        daemon.approvals.register(&s, policy, audit::AuditEvent::new(audit::EventKind::SessionStart));
+        let k = vec!["github pr.create github.com/acme/web".to_string()];
+        let a = daemon.approvals.request(&s, &s, "req-1", Reason::RuleOfTwo, k, None).unwrap();
+        let start = Arc::new(std::sync::Barrier::new(8));
+        let granted = (0..8)
+            .map(|i| {
+                let (d, start, a) = (daemon.clone(), start.clone(), a.clone());
+                std::thread::spawn(move || {
+                    start.wait();
+                    let scope = if i % 2 == 0 { "once" } else { "session" };
+                    grant_json(&d, &serde_json::json!({"approval": a, "scope": scope})).is_ok()
+                })
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|h| h.join().unwrap())
+            .filter(|ok| *ok)
+            .count();
+        let q = audit::Query { kind: Some(audit::EventKind::ApprovalGranted), limit: 20, ..Default::default() };
+        assert_eq!((granted, rec.query_filtered(&q).unwrap().len()), (1, 1), "one grant took effect, one row");
+    }
 
     #[test]
     fn requests_are_deduplicated_bounded_and_granted_into_the_session() {
