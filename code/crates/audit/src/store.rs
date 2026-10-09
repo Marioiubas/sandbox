@@ -451,6 +451,36 @@ mod tests {
         assert_eq!(rec.tail(1).unwrap()[0].event.kind, EventKind::SessionStop);
     }
 
+    /// Review (I9 points 3 and 5): every row stores `session`, `request_id`
+    /// and `kind` in columns beside the chained `body`, and those columns
+    /// are what `broker why` (`by_request`), `by_session`, `audit.query`
+    /// (`query_filtered`) and the approval view's provenance select on.
+    /// `verify` never compares them with the body, so editing them hides a
+    /// decision from `broker why <request-id>` (or moves it to another
+    /// session or kind) while `broker audit verify` still reports the chain
+    /// intact, and exported anchors still match.
+    #[test]
+    fn review_query_columns_are_covered_by_verification() {
+        let (_d, path) = fresh(5);
+        let row3 = SqliteRecorder::open_read_only(&path).unwrap().range(2, 3).unwrap().remove(0);
+        let rid = row3.event.request_id.clone().unwrap();
+        let c = Connection::open(&path).unwrap();
+        c.execute(
+            "UPDATE events SET request_id = ?1, session = NULL, kind = 'session.ready' WHERE seq = 3",
+            params![RequestId::new().as_str()],
+        )
+        .unwrap();
+        drop(c);
+        let found = SqliteRecorder::open_read_only(&path).unwrap().by_request(&rid).unwrap();
+        assert!(found.is_empty(), "precondition: the edit hides row 3 from `broker why {rid}`");
+        assert!(
+            SqliteRecorder::verify_path(&path).is_err(),
+            "row 3 no longer answers `broker why {rid}`, `audit.query` by session or kind (its request_id, session and \
+             kind columns were edited), yet the chain verifies: {:?}",
+            SqliteRecorder::verify_path(&path)
+        );
+    }
+
     proptest::proptest! {
         #![proptest_config(proptest::prelude::ProptestConfig::with_cases(24))]
         #[test]

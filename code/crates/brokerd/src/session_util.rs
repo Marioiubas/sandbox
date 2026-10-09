@@ -288,6 +288,50 @@ mod tests {
         );
     }
 
+    /// Review (I5, I4; the planted-gitdir case above, ADR-046): the
+    /// nested-repository rule covers only the session's repository root.
+    /// On macOS the per-user temp dir (`DARWIN_USER_TEMP_DIR`, the `$TMPDIR`
+    /// that `mktemp -d` uses) is a writable root of every session
+    /// (ADR-016), and below its own top level nothing stops a session from
+    /// creating `<T>/<dir>/.git/config`. `repo_root` takes the nearest
+    /// `.git` above the cwd without asking who made it (git itself refuses
+    /// a repository it does not own since CVE-2022-24765), so a later
+    /// session the user starts in that scratch directory gets its task
+    /// repository (`${repo_remote}`: push rules, GitHub verbs, GitHub App
+    /// token repos) from a file an earlier agent wrote.
+    #[test]
+    fn review_a_gitdir_planted_in_the_shared_temp_dir_does_not_choose_the_task_repository() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().canonicalize().unwrap();
+        let (home, tmp, platform_tmp) = (root.join("home"), root.join("T/broker-s1"), root.join("T"));
+        let web = home.join("src/web");
+        std::fs::create_dir_all(web.join(".git")).unwrap();
+        std::fs::create_dir_all(&tmp).unwrap();
+        // The filesystem policy of an earlier session, as `launch` compiles it on macOS.
+        let fs = launcher::fs_compile::compile(&launcher::fs_compile::FsInputs {
+            home: home.clone(),
+            repo: web.clone(),
+            session_tmp: tmp,
+            platform_tmp: Some(platform_tmp.clone()),
+            ..Default::default()
+        })
+        .unwrap();
+        // What that session writes: a user's earlier scratch dir in $TMPDIR gains a gitdir.
+        let scratch = platform_tmp.join("tmp.Qx81");
+        let planted = [scratch.join(".git"), scratch.join(".git/config")];
+        std::fs::create_dir_all(&planted[0]).unwrap();
+        std::fs::write(&planted[1], "[remote \"origin\"]\n\turl = https://github.com/acme/prod-infra.git\n").unwrap();
+        // A later session the user starts there.
+        let task = origin_remote(&repo_root(&scratch.join("proto")));
+        let writable: Vec<&PathBuf> = planted.iter().filter(|p| fs.is_writable(p)).collect();
+        assert!(
+            !(task == RepoId::parse("github.com/acme/prod-infra") && writable.len() == planted.len()),
+            "the task repository of a session started in {} ({task:?}) was chosen by files an earlier session could \
+             write: {writable:?}",
+            scratch.join("proto").display()
+        );
+    }
+
     #[test]
     fn env_allowlist_has_no_secrets() {
         for k in ENV_ALLOW {
