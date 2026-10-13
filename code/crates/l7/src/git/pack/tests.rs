@@ -150,3 +150,75 @@ proptest! {
         let _ = apply_delta(&base, &delta, &Limits::default());
     }
 }
+
+/// Write `content` as a loose object of `ty` without git's format checks.
+fn hash_literally(dir: &Path, ty: &str, content: &[u8]) -> String {
+    use std::io::Write;
+    let mut c = Command::new("git")
+        .args(["hash-object", "-t", ty, "--literally", "-w", "--stdin"])
+        .current_dir(dir)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    c.stdin.take().unwrap().write_all(content).unwrap();
+    let out = c.wait_with_output().unwrap();
+    assert!(out.status.success());
+    String::from_utf8(out.stdout).unwrap().trim().to_string()
+}
+
+/// A pack holding exactly the named objects (no traversal).
+fn pack_exact(dir: &Path, oids: &[&str]) -> Vec<u8> {
+    use std::io::Write;
+    let mut c = Command::new("git")
+        .args(["pack-objects", "--stdout", "-q"])
+        .current_dir(dir)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    c.stdin.take().unwrap().write_all(format!("{}\n", oids.join("\n")).as_bytes()).unwrap();
+    let out = c.wait_with_output().unwrap();
+    assert!(out.status.success());
+    out.stdout
+}
+
+/// Force detection must read a commit's parents as git does. Invariant:
+/// policy fidelity of `git.push` (a grant with `force = false`), and the
+/// audit row's `update` (I9).
+///
+/// Attacker input: a push of `old -> new` to an allowed ref where `new` is
+/// the commit `tree <T>\nparent <old>` with no trailing newline. The
+/// broker's `commit_parents` reads `old` as a parent and classifies the
+/// update as `fast_forward`; git stops parsing parents unless a line ends
+/// in `\n`, so for git the commit has no parents and the update replaces
+/// the branch's history. A server without `receive.fsckObjects` (git's
+/// default) accepts the push and reports `(forced update)` (checked by
+/// hand with git 2.50 against a default bare repository).
+#[test]
+fn review_force_detection_reads_parents_as_git_does() {
+    let d = repo();
+    let old = commit(d.path(), "f", "1\n", "a");
+    let tree = git(d.path(), &["rev-parse", &format!("{old}^{{tree}}")]);
+    let new = hash_literally(d.path(), "commit", format!("tree {tree}\nparent {old}").as_bytes());
+    let git_says_ancestor = Command::new("git")
+        .args(["merge-base", "--is-ancestor", &old, &new])
+        .current_dir(d.path())
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .status()
+        .unwrap()
+        .success();
+    assert!(!git_says_ancestor, "fixture: git reads no parent in this commit");
+    let g = commit_graph(&pack_exact(d.path(), &[&new]), &Limits::default()).unwrap();
+    let kind = classify(&old, &new, Some(&g));
+    assert!(
+        kind.is_force(),
+        "git does not see {old} as an ancestor of {new}, so the update rewrites history, \
+         but the broker classified it as {kind:?} (force = false)"
+    );
+}

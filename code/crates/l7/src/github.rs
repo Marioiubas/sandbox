@@ -211,6 +211,37 @@ mod tests {
         canon_host(s.as_bytes()).unwrap()
     }
 
+    /// ADR-040: files read at a pull request's ref or by commit hash, and
+    /// commit comments, are attacker-writable text (`bodies`, which raises
+    /// `untrusted_input` on a repository not known to be private).
+    ///
+    /// Attacker input: the same reads in forms `ref_is_untrusted` and
+    /// `BODY_ROUTES` do not recognise: a `ref` query with a partly
+    /// percent-encoded `refs/pull/` (every server decodes the query), a
+    /// commit hash in the path (`tarball`, `zipball`, `commits/{sha}`), and
+    /// a single commit's comments (`commits/{sha}/comments`). Each returns
+    /// pull-request-authored content with `bodies = false`, so the session
+    /// is not labelled and the audit row says no untrusted text was read.
+    #[test]
+    fn review_reads_by_pull_ref_or_commit_hash_carry_bodies() {
+        let sha = "4f2c1a9e4f2c1a9e4f2c1a9e4f2c1a9e4f2c1a9e";
+        let cases = [
+            ("/repos/acme/web/contents/README.md".to_string(), Some("ref=refs%2Fpull/1/head")),
+            ("/repos/acme/web/contents/README.md".to_string(), Some("ref=refs/pull%2F1%2Fhead")),
+            ("/repos/acme/web/contents/README.md".to_string(), Some("ref=%72efs/pull/1/head")),
+            (format!("/repos/acme/web/tarball/{sha}"), None),
+            (format!("/repos/acme/web/zipball/{sha}"), None),
+            (format!("/repos/acme/web/commits/{sha}"), None),
+            (format!("/repos/acme/web/commits/{sha}/comments"), None),
+        ];
+        let missed: Vec<String> = cases
+            .iter()
+            .filter(|(p, q)| !route(&h("api.github.com"), "GET", p, *q).unwrap().bodies)
+            .map(|(p, q)| format!("GET {p}{}", q.map(|q| format!("?{q}")).unwrap_or_default()))
+            .collect();
+        assert!(missed.is_empty(), "reads of pull-request-authored content without bodies: {missed:#?}");
+    }
+
     fn ok(method: &str, path: &str) -> (String, Option<String>, bool) {
         let r = route(&h("api.github.com"), method, path, None).unwrap();
         (r.verb.to_string(), r.repo.map(|x| x.to_string()), r.bodies)

@@ -251,6 +251,70 @@ mod tests {
         assert!(matches!(actions(&r, Some(&heads)).unwrap().0[..], [Action::GitFetch { pull_refs: false, .. }]));
     }
 
+    /// An `ls-refs` whose prefixes make the server return `refs/pull/*`
+    /// must mark the fetch `pull_refs`, as `ref-prefix refs/pull/` already
+    /// does. Invariant: labels come from what was forwarded (ADR-040; the
+    /// `untrusted_input` label and the audit row's `pull_refs`).
+    ///
+    /// Attacker input: protocol v2 `command=ls-refs` with `ref-prefix
+    /// refs/pull` (no trailing slash), `ref-prefix refs/`, or no
+    /// `ref-prefix` at all. git's `ls-refs` matches each prefix as a plain
+    /// string prefix (and lists every ref when none is given), so each of
+    /// these returns the pull request heads; the broker only recognises the
+    /// literal `ref-prefix refs/pull/`. A later v2 `fetch` of those heads
+    /// names them by object ID only (`want <oid>`), which the broker does
+    /// not flag either, so a pull request's head is read with no
+    /// `untrusted_input` label.
+    #[test]
+    fn review_ls_refs_listing_pull_requests_is_pull_refs() {
+        let cases: [&[&str]; 4] = [
+            &["command=ls-refs", "0001", "ref-prefix refs/pull", "0000"],
+            &["command=ls-refs", "0001", "ref-prefix refs/p", "0000"],
+            &["command=ls-refs", "0001", "peel", "ref-prefix refs/", "0000"],
+            &["command=ls-refs", "0001", "peel", "symrefs", "0000"],
+        ];
+        let missed: Vec<String> =
+            cases.iter().filter(|c| !upload_pack_reads_pull_refs(&pkts(c))).map(|c| c.join(" | ")).collect();
+        assert!(missed.is_empty(), "ls-refs requests that list refs/pull/* but are not marked pull_refs: {missed:#?}");
+    }
+
+    /// Push options must be refused or carried into the decision and audit
+    /// row. Invariant: I9 (the record describes what was forwarded) and
+    /// fail closed on what is not understood.
+    ///
+    /// Attacker input: a push to an allowed ref with the `push-options`
+    /// capability and options after the command list (for example GitLab's
+    /// `merge_request.create`, `merge_request.target=main`,
+    /// `merge_request.merge_when_pipeline_succeeds`, `ci.variable=...`).
+    /// The parser reads them, but `actions` returns only `git.push` per ref
+    /// and `PushInfo` has no field for them: the decision is made, and the
+    /// row written, without them, and the original bytes (options
+    /// included) are forwarded.
+    #[test]
+    fn review_push_options_are_refused_or_recorded() {
+        let r = Route::Rpc { repo: RepoId::parse("github.com/acme/web").unwrap(), service: Service::ReceivePack };
+        let a = "1".repeat(40);
+        let z = "0".repeat(40);
+        let mut body = Vec::new();
+        pktline::write(&mut body, format!("{z} {a} refs/heads/agent/x\0report-status push-options").as_bytes());
+        pktline::flush(&mut body);
+        pktline::write(&mut body, b"merge_request.create");
+        pktline::write(&mut body, b"merge_request.merge_when_pipeline_succeeds");
+        pktline::flush(&mut body);
+        let parsed = receive_pack::parse(&body).unwrap();
+        assert_eq!(parsed.push_options.len(), 2, "fixture: the parser sees both options");
+        match actions(&r, Some(&body)) {
+            Err(_) => {}
+            Ok(described) => {
+                let d = format!("{described:?}");
+                assert!(
+                    d.contains("merge_when_pipeline_succeeds"),
+                    "push options were forwarded but appear nowhere in the actions or PushInfo: {d}"
+                );
+            }
+        }
+    }
+
     proptest::proptest! {
         /// Any body: no panic.
         #[test]

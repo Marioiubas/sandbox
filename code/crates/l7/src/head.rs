@@ -172,6 +172,28 @@ mod tests {
         assert_eq!(h.len(), 1);
     }
 
+    /// Method override in the query string must be refused like the
+    /// override headers are (`MethodOverride`): the decision is made on the
+    /// request's method, and the upstream would run another one.
+    ///
+    /// Attacker input: `POST /items?_method=DELETE` (and `x-http-method-override`
+    /// as a query parameter) to a host whose grant allows `POST` only.
+    /// Symfony and Laravel (`_method`, query or body) and Express's
+    /// `method-override` with a query getter run the named method; the
+    /// broker logs and allows a `POST`, and the upstream performs a
+    /// `DELETE`.
+    #[test]
+    fn review_method_override_in_the_query_is_refused() {
+        let post = |uri: &str| {
+            let mut p = parts(uri, Some("api.github.com"));
+            p.method = Method::POST;
+            p
+        };
+        for uri in ["/items?_method=DELETE", "/items?a=1&_method=PATCH", "/items?X-HTTP-Method-Override=DELETE"] {
+            assert_eq!(check(&post(uri), &api(), 443).map(|_| ()), Err(Reason::MethodOverride), "{uri}");
+        }
+    }
+
     proptest! {
         #[test]
         fn only_the_admitted_host_passes(name in "[a-z]{1,10}\\.[a-z]{2,5}") {
