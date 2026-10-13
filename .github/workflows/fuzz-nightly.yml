@@ -4,9 +4,12 @@ name: fuzz-nightly
 # Each target keeps its corpus between runs (Actions cache), so every
 # night continues where the last one stopped, and a running total of
 # seconds fuzzed (`code/tests/fuzz/fuzzed/<target>`, cached with the
-# corpus) is printed in each run's summary as the E1 evidence. A crash
-# fails the job and its input is uploaded as an artifact for triage (then
-# fixed, with a regression test).
+# corpus) is printed in the job log and the run summary as the E1
+# evidence. Corpus and total are cached as one tar file: the cache action
+# fails ("Maximum call stack size exceeded") on a directory of ~100k
+# corpus files, which silently dropped those nights' totals and corpora.
+# A crash fails the job and its input is uploaded as an artifact for
+# triage (then fixed, with a regression test).
 
 on:
   schedule:
@@ -45,6 +48,14 @@ jobs:
           rustup toolchain install nightly --profile minimal
           cargo +nightly install cargo-fuzz --locked
       - name: Restore this target's corpus and fuzzed-time total
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: code/tests/fuzz/state-${{ matrix.target }}.tar
+          key: fuzz-state-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-state-${{ matrix.target }}-
+      - name: Restore the earlier per-file layout (until a tar exists)
+        if: steps.restore.outputs.cache-matched-key == ''
         uses: actions/cache/restore@v4
         with:
           path: |
@@ -57,6 +68,7 @@ jobs:
           SECONDS_PER_TARGET: ${{ github.event.inputs.seconds || '7200' }}
         run: |
           t="${{ matrix.target }}"
+          if [ -f "tests/fuzz/state-$t.tar" ]; then tar -xf "tests/fuzz/state-$t.tar" -C tests/fuzz; fi
           mkdir -p "tests/fuzz/corpus/$t" tests/fuzz/fuzzed
           before=$(cat "tests/fuzz/fuzzed/$t" 2>/dev/null || echo 0)
           # Build first so the total counts fuzzing time only.
@@ -69,16 +81,21 @@ jobs:
           # Only a clean run counts toward the total.
           if [ "$status" -eq 0 ]; then echo $(( before + ran )) > "tests/fuzz/fuzzed/$t"; fi
           total=$(cat "tests/fuzz/fuzzed/$t" 2>/dev/null || echo 0)
-          echo "$t: ${ran} s this run (exit $status), $(( total / 3600 )) h $(( total % 3600 / 60 )) min in total, corpus $(ls "tests/fuzz/corpus/$t" | wc -l) inputs" >> "$GITHUB_STEP_SUMMARY"
+          echo "$t: ${ran} s this run (exit $status), $(( total / 3600 )) h $(( total % 3600 / 60 )) min in total, corpus $(ls "tests/fuzz/corpus/$t" | wc -l) inputs" | tee -a "$GITHUB_STEP_SUMMARY"
           exit "$status"
+      - name: Pack the corpus and fuzzed-time total
+        if: always()
+        run: |
+          t="${{ matrix.target }}"
+          mkdir -p "tests/fuzz/corpus/$t" tests/fuzz/fuzzed
+          [ -f "tests/fuzz/fuzzed/$t" ] || echo 0 > "tests/fuzz/fuzzed/$t"
+          tar -cf "tests/fuzz/state-$t.tar" -C tests/fuzz "corpus/$t" "fuzzed/$t"
       - name: Save the corpus and fuzzed-time total
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: |
-            code/tests/fuzz/corpus/${{ matrix.target }}
-            code/tests/fuzz/fuzzed/${{ matrix.target }}
-          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          path: code/tests/fuzz/state-${{ matrix.target }}.tar
+          key: fuzz-state-${{ matrix.target }}-${{ github.run_id }}
       - name: Upload crashing inputs
         if: failure()
         uses: actions/upload-artifact@v4

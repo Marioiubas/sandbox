@@ -7,7 +7,7 @@ tags: [sandbox/meta, meta, topic/build]
 status: verified
 confidence: high
 created: 2026-09-24
-updated: 2026-10-09
+updated: 2026-10-13
 summary: "Chronological, append-only log Claude Code writes while building: date, milestone, what changed, notes updated, ADRs created, test status."
 related: ["[[CLAUDE]]", "[[MVP Plan]]", "[[M0 Contained Run]]", "[[M1 Secrets Outside]]", "[[M2 Policy Audit and Learn]]", "[[M3 CI Identity and MCP]]", "[[M4 Harden and Ship]]", "[[Dashboard]]"]
 sources: []
@@ -464,3 +464,8 @@ New tags or link verbs proposed during the build (see [[Vault Conventions]]):
   - **Linux `--die-with-parent`:** the sandbox is forked from a thread of its own that lives until teardown, not from a tokio blocking thread that retires after 10 s idle (`session::running::tests::the_launch_thread_lives_until_the_session_lets_go`).
   - **Approvals:** concurrent grants of one approval are serialised. Without the lock, 8 concurrent grants wrote 8 `approval.granted` rows for 1 effective grant (`approvals::tests::concurrent_grants_of_one_approval_write_one_row`).
 - **Tests:** full suite 441 passed, 0 failed (macOS 26; the formal-gate tests skipped without cvc5). Clippy is clean. CI for the previous commit (`ea4c01d`) passed every non-fuzz job on macOS 15 and 26 and Ubuntu 22.04 and 24.04, including `m4_teardown` on Linux.
+
+### 2026-10-13: E1 fuzzing hours; nightly cache fix
+
+- **E1 evidence:** summed from the job logs over every scheduled nightly run from 2026-09-26 to 10-12, with 0 crashes. 24 of 27 targets have 24 to 34 h each; `kernel_report`, `sentinel` and `shim_spec` have 22 h and reach 24 h with the 2026-10-13 run ([[M4 Harden and Ship]] build log).
+- **Fixed** (`.github/workflows/fuzz-nightly.yml`): the cache action failed on large corpus directories ("Maximum call stack size exceeded"; `canon` had 122,730 files), so some targets lost those nights' corpus growth and running total. Each target's corpus and total are now one tar file in the cache; the old per-file caches are read once as a fallback; the total is also printed in the job log.
